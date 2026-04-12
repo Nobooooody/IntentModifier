@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App name -->
+    <string name="app_name">Intent 修改器</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Intent 修改器</string>
+    <string name="add_rule">添加应用规则</string>
+    <string name="enable_module">启用 Intent 修改器</string>
+
+    <!-- Rule editing -->
+    <string name="delete_rule">删除规则</string>
+    <string name="delete_rule_message">确定删除 %1$s 的规则?</string>
+    <string name="delete">删除</string>
+    <string name="cancel">取消</string>
+    <string name="save">保存</string>
+    <string name="close">关闭</string>
+    <string name="saved">已保存</string>
+    <string name="no_modifications">未配置修改</string>
+
+    <!-- Fields -->
+    <string name="custom_action">自定义 Action</string>
+    <string name="custom_action_hint">例如: android.intent.action.VIEW</string>
+    <string name="custom_data">自定义 Data (URI)</string>
+    <string name="custom_data_hint">例如: content://com.example.app</string>
+    <string name="custom_package">自定义 Package</string>
+    <string name="custom_package_hint">例如: com.custom.package</string>
+    <string name="custom_class">自定义 Class</string>
+    <string name="custom_class_hint">例如: com.custom.package.MainActivity</string>
+    <string name="enabled">启用</string>
+
+    <!-- Extras -->
+    <string name="extra_key">Extra Key</string>
+    <string name="extra_key_hint">例如: custom_param</string>
+    <string name="extra_value">Extra Value</string>
+    <string name="extra_value_hint">例如: value</string>
+    <string name="extra_type">Extra 类型</string>
+    <string name="add_extra">添加 Extra</string>
+    <string name="remove_extra">移除</string>
+
+    <!-- Extra types -->
+    <string name="type_boolean">布尔值</string>
+    <string name="type_integer">整数</string>
+    <string name="type_long">长整数</string>
+    <string name="type_decimal">小数</string>
+    <string name="type_string">字符串</string>
+    <string name="type_uri">URI</string>
+    <string name="type_component">组件名</string>
+    <string name="type_null">空</string>
+
+    <!-- Validation errors -->
+    <string name="error_key_required">需要 Key</string>
+    <string name="error_value_required">需要 Value</string>
+    <string name="error_invalid_integer">无效整数</string>
+    <string name="error_invalid_long">无效长整数</string>
+    <string name="error_invalid_number">无效数字</string>
+    <string name="error_invalid_uri">无效 URI</string>
+
+    <!-- App picker -->
+    <string name="select_app">选择应用</string>
+    <string name="search_apps">搜索应用</string>
+
+    <!-- Summary -->
+    <string name="summary_action">Action: %1$s</string>
+    <string name="summary_to">目标: %1$s</string>
+    <string name="summary_class">/%1$s</string>
+    <string name="summary_extras">Extras: %1$d</string>
+
+    <!-- Added missing -->
+    <string name="edit">编辑</string>
+    <string name="no_rules_configured">未配置应用规则</string>
+    <string name="tap_to_add">点击 + 添加应用规则</string>
+
+    <!-- Export -->
+    <string name="export">导出</string>
+    <string name="export_to_file">导出到文件</string>
+    <string name="export_to_clipboard">导出到剪贴板</string>
+    <string name="exported_to_clipboard">已导出到剪贴板</string>
+    <string name="exported_to_file">已导出到 %1$s</string>
+    <string name="export_success">导出成功</string>
+    <string name="export_failed">导出失败</string>
+
+    <!-- Import -->
+    <string name="import_rules">导入</string>
+    <string name="import_from_file">从文件导入</string>
+    <string name="import_from_clipboard">从剪贴板导入</string>
+    <string name="import_conflict_title">导入冲突</string>
+    <string name="import_conflict_replace">替换全部（删除旧规则）</string>
+    <string name="import_conflict_merge_new">冲突时保留新规则</string>
+    <string name="import_conflict_keep_old">冲突时保留旧规则</string>
+    <string name="import_success">已导入 %1$d 条规则</string>
+    <string name="import_failed">导入失败</string>
+    <string name="action_import">导入</string>
+
+    <string-array name="extra_types">
+        <item>布尔值</item>
+        <item>组件名</item>
+        <item>小数</item>
+        <item>整数</item>
+        <item>长整数</item>
+        <item>空</item>
+        <item>字符串</item>
+        <item>URI</item>
+    </string-array>
+</resources>

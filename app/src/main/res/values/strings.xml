@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App name -->
+    <string name="app_name">Intent Modifier</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Intent Modifier</string>
+    <string name="add_rule">Add App Rule</string>
+    <string name="enable_module">Enable Intent Modifier</string>
+
+    <!-- Rule editing -->
+    <string name="delete_rule">Delete Rule</string>
+    <string name="delete_rule_message">Delete rule for %1$s?</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="close">Close</string>
+    <string name="saved">Saved</string>
+    <string name="no_modifications">No modifications configured</string>
+
+    <!-- Fields -->
+    <string name="custom_action">Custom Action</string>
+    <string name="custom_action_hint">e.g., android.intent.action.VIEW</string>
+    <string name="custom_data">Custom Data (URI)</string>
+    <string name="custom_data_hint">e.g., content://com.example.app</string>
+    <string name="custom_package">Custom Package</string>
+    <string name="custom_package_hint">e.g., com.custom.package</string>
+    <string name="custom_class">Custom Class</string>
+    <string name="custom_class_hint">e.g., com.custom.package.MainActivity</string>
+    <string name="enabled">Enabled</string>
+
+    <!-- Extras -->
+    <string name="extra_key">Extra Key</string>
+    <string name="extra_key_hint">e.g., custom_param</string>
+    <string name="extra_value">Extra Value</string>
+    <string name="extra_value_hint">e.g., value</string>
+    <string name="extra_type">Extra Type</string>
+    <string name="add_extra">Add Extra</string>
+    <string name="remove_extra">Remove</string>
+
+    <!-- Extra types -->
+    <string name="type_boolean">Boolean</string>
+    <string name="type_integer">Integer</string>
+    <string name="type_long">Long</string>
+    <string name="type_decimal">Decimal Number</string>
+    <string name="type_string">String</string>
+    <string name="type_uri">URI</string>
+    <string name="type_component">ComponentName</string>
+    <string name="type_null">Null</string>
+    <string-array name="extra_types">
+        <item>Boolean</item>
+        <item>ComponentName</item>
+        <item>Decimal Number</item>
+        <item>Integer</item>
+        <item>Long</item>
+        <item>Null</item>
+        <item>String</item>
+        <item>URI</item>
+    </string-array>
+
+    <!-- Validation errors -->
+    <string name="error_key_required">Key required</string>
+    <string name="error_value_required">Value required</string>
+    <string name="error_invalid_integer">Invalid integer</string>
+    <string name="error_invalid_long">Invalid long</string>
+    <string name="error_invalid_number">Invalid number</string>
+    <string name="error_invalid_uri">Invalid URI</string>
+
+    <!-- App picker -->
+    <string name="select_app">Select App</string>
+    <string name="search_apps">Search apps</string>
+
+    <!-- Summary -->
+    <string name="summary_action">Action: %1$s</string>
+    <string name="summary_to">To: %1$s</string>
+    <string name="summary_class">/%1$s</string>
+    <string name="summary_extras">Extras: %1$d</string>
+
+    <!-- Added missing -->
+    <string name="edit">Edit</string>
+    <string name="no_rules_configured">No app rules configured</string>
+    <string name="tap_to_add">Tap + to add an app rule</string>
+
+    <!-- Export -->
+    <string name="export">Export</string>
+    <string name="export_to_file">Export to file</string>
+    <string name="export_to_clipboard">Export to clipboard</string>
+    <string name="exported_to_clipboard">Exported to clipboard</string>
+    <string name="exported_to_file">Exported to %1$s</string>
+    <string name="export_success">Exported successfully</string>
+    <string name="export_failed">Export failed</string>
+
+    <!-- Import -->
+    <string name="import_rules">Import</string>
+    <string name="import_from_file">Import from file</string>
+    <string name="import_from_clipboard">Import from clipboard</string>
+    <string name="import_conflict_title">Import conflict</string>
+    <string name="import_conflict_replace">Replace all (delete old rules)</string>
+    <string name="import_conflict_merge_new">Keep new rules on conflict</string>
+    <string name="import_conflict_keep_old">Keep old rules on conflict</string>
+    <string name="import_success">Imported %1$d rules</string>
+    <string name="import_failed">Import failed</string>
+    <string name="action_import">Import</string>
+</resources>

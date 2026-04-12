@@ -1,0 +1,3 @@
+-keep class io.github.nobooooody.intent_modifier.** { *; }
+-keep class com.android.launcher3.** { *; }
+-keep class com.highcapable.yukihookapi.** { *; }
