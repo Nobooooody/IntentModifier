@@ -105,10 +105,16 @@
 
     <!-- Navigation -->
     <string name="nav_rules_title">规则</string>
+    <string name="nav_launchers_title">启动器</string>
     <string name="nav_settings_title">设置</string>
     <string name="settings">设置</string>
     <string name="language">语言</string>
     <string name="language_system">跟随系统</string>
     <string name="language_english">英语</string>
     <string name="language_chinese">中文</string>
+
+    <!-- Hook types -->
+    <string name="hook_instrumentation">Instrumentation (默认)</string>
+    <string name="hook_launcher3">Launcher3 startActivitySafely</string>
+    <string name="delete_launcher_message">删除 %1$s 的Hook设置?</string>
 </resources>

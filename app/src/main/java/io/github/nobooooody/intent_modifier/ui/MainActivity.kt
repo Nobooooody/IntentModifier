@@ -33,8 +33,12 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.github.nobooooody.intent_modifier.R
+import io.github.nobooooody.intent_modifier.HOOK_INSTRUMENTATION
+import io.github.nobooooody.intent_modifier.HOOK_LAUNCHER3
 import io.github.nobooooody.intent_modifier.data.AppIntentRule
 import io.github.nobooooody.intent_modifier.data.ExtraItem
+import io.github.nobooooody.intent_modifier.data.HookType
+import io.github.nobooooody.intent_modifier.data.LauncherHook
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -73,6 +77,7 @@ class MainActivity : AppCompatActivity() {
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_rules -> showFragment(RulesFragment())
+                R.id.nav_launchers -> showFragment(LaunchersFragment())
                 R.id.nav_settings -> showFragment(SettingsFragment())
             }
             true
@@ -84,6 +89,7 @@ class MainActivity : AppCompatActivity() {
     private fun showFragment(fragment: Fragment) {
         currentFragmentTag = when (fragment) {
             is RulesFragment -> "rules"
+            is LaunchersFragment -> "launchers"
             is SettingsFragment -> "settings"
             else -> currentFragmentTag
         }
@@ -130,7 +136,7 @@ class RulesFragment : Fragment() {
         if (uri != null) {
             try {
                 pendingImport = requireContext().contentResolver.openInputStream(uri)?.bufferedReader()?.readText() ?: ""
-                if (pendingImport.isNotEmpty()) {
+                if (pendingImport.isNotEmpty() && validateImportJson(pendingImport)) {
                     showImportDialog()
                 } else {
                     Toast.makeText(requireContext(), R.string.import_failed, Toast.LENGTH_SHORT).show()
@@ -138,6 +144,15 @@ class RulesFragment : Fragment() {
             } catch (e: Exception) {
                 Toast.makeText(requireContext(), R.string.import_failed, Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun validateImportJson(json: String): Boolean {
+        return try {
+            val parsed = repo.parseRulesJson(json)
+            parsed.isNotEmpty()
+        } catch (e: Exception) {
+            false
         }
     }
 
@@ -350,9 +365,11 @@ class RulesFragment : Fragment() {
                     val text = clip.primaryClip?.getItemAt(0)?.text?.toString()
                     if (text.isNullOrEmpty()) {
                         Toast.makeText(requireContext(), R.string.import_failed, Toast.LENGTH_SHORT).show()
-                    } else {
+                    } else if (validateImportJson(text)) {
                         pendingImport = text
                         showImportDialog()
+                    } else {
+                        Toast.makeText(requireContext(), R.string.import_failed, Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
                     Toast.makeText(requireContext(), R.string.import_failed, Toast.LENGTH_SHORT).show()
@@ -506,6 +523,157 @@ class AppRuleAdapter(
             }.ifBlank { noModText }
 
             editButton.setOnClickListener { onEdit(packageName, rule) }
+            deleteButton.setOnClickListener { onDelete(packageName) }
+        }
+    }
+}
+
+class LaunchersFragment : Fragment() {
+    private lateinit var repo: ModifierRepository
+    private lateinit var recycler: RecyclerView
+    private lateinit var adapter: LauncherHookAdapter
+    private lateinit var empty: View
+
+    private val pickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.getStringExtra("package")?.let { pkg ->
+                showHookTypeDialog(pkg, null)
+            }
+        }
+    }
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        return inflater.inflate(R.layout.activity_settings, container, false)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+            v.setPadding(0, insets.getInsets(WindowInsetsCompat.Type.statusBars()).top, 0, insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
+            insets
+        }
+
+        repo = ModifierRepository(requireContext())
+
+        val toolbar = view.findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
+        (requireActivity() as? AppCompatActivity)?.let {
+            it.setSupportActionBar(toolbar)
+            it.supportActionBar?.title = getString(R.string.nav_launchers_title)
+        }
+
+        recycler = view.findViewById(R.id.recyclerView)
+        empty = view.findViewById(R.id.emptyView)
+        recycler.layoutManager = LinearLayoutManager(requireContext())
+
+        adapter = LauncherHookAdapter(
+            onEdit = { pkg, hook -> showHookTypeDialog(pkg, hook) },
+            onDelete = { pkg ->
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle(R.string.delete)
+                    .setMessage(getString(R.string.delete_launcher_message, pkg))
+                    .setPositiveButton(R.string.delete) { _, _ -> repo.removeLauncherHook(pkg); loadHooks() }
+                    .setNegativeButton(R.string.cancel, null).show()
+            }
+        )
+        recycler.adapter = adapter
+
+        view.findViewById<View>(R.id.fabAdd)?.setOnClickListener {
+            pickerLauncher.launch(Intent(requireContext(), AppPickerActivity::class.java))
+        }
+
+        setHasOptionsMenu(true)
+        loadHooks()
+    }
+
+    private fun loadHooks() {
+        val hooks = repo.getLauncherHooks()
+        adapter.submitList(hooks)
+        empty.visibility = if (hooks.isEmpty()) View.VISIBLE else View.GONE
+        recycler.visibility = if (hooks.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    private fun showHookTypeDialog(pkg: String, existingHook: LauncherHook?) {
+        val hookTypes = arrayOf(
+            getString(R.string.hook_instrumentation),
+            getString(R.string.hook_launcher3)
+        )
+        val currentSelection = when (existingHook?.hookType) {
+            HOOK_LAUNCHER3 -> 1
+            else -> 0
+        }
+        var selected = currentSelection
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(pkg)
+            .setSingleChoiceItems(hookTypes, currentSelection) { _, which -> selected = which }
+            .setPositiveButton(R.string.save) { _, _ ->
+                val hookType = when (selected) { 1 -> HOOK_LAUNCHER3 else -> HOOK_INSTRUMENTATION }
+                repo.setLauncherHook(LauncherHook(pkg, hookType))
+                loadHooks()
+                Toast.makeText(requireContext(), R.string.saved, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.cancel, null).show()
+    }
+}
+
+class LauncherHookAdapter(
+    private val onEdit: (String, LauncherHook) -> Unit,
+    private val onDelete: (String) -> Unit
+) : RecyclerView.Adapter<LauncherHookAdapter.ViewHolder>() {
+
+    private var hooks: Map<String, LauncherHook> = emptyMap()
+
+    fun submitList(newHooks: Map<String, LauncherHook>) {
+        hooks = newHooks
+        notifyDataSetChanged()
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val view = LayoutInflater.from(parent.context)
+            .inflate(R.layout.item_app_rule, parent, false)
+        return ViewHolder(view)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        val (packageName, hook) = hooks.entries.toList()[position]
+        holder.bind(packageName, hook)
+    }
+
+    override fun getItemCount() = hooks.size
+
+    inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val container = itemView as com.google.android.material.card.MaterialCardView
+        private val appNameText: android.widget.TextView
+        private val pkgText: android.widget.TextView
+        private val summaryText: android.widget.TextView
+        private val editButton: View
+        private val deleteButton: View
+        private val switchEnabled: com.google.android.material.materialswitch.MaterialSwitch
+
+        init {
+            appNameText = container.findViewById(R.id.textAppName)
+            pkgText = container.findViewById(R.id.textPackageName)
+            summaryText = container.findViewById(R.id.textSummary)
+            editButton = container.findViewById(R.id.buttonEdit)
+            deleteButton = container.findViewById(R.id.buttonDelete)
+            switchEnabled = container.findViewById(R.id.switchEnabled)
+        }
+
+        fun bind(packageName: String, hook: LauncherHook) {
+            val appName = try {
+                itemView.context.packageManager.getApplicationInfo(packageName, 0).loadLabel(itemView.context.packageManager).toString()
+            } catch (e: Exception) {
+                packageName
+            }
+            appNameText.text = appName
+            pkgText.text = packageName
+            switchEnabled.visibility = View.GONE
+            summaryText.text = when (hook.hookType) {
+                HOOK_LAUNCHER3 -> itemView.context.getString(R.string.hook_launcher3)
+                else -> itemView.context.getString(R.string.hook_instrumentation)
+            }
+
+            editButton.setOnClickListener { onEdit(packageName, hook) }
             deleteButton.setOnClickListener { onDelete(packageName) }
         }
     }

@@ -5,6 +5,10 @@
         android:icon="@android:drawable/ic_menu_edit"
         android:title="@string/nav_rules_title" />
     <item
+        android:id="@+id/nav_launchers"
+        android:icon="@android:drawable/ic_menu_agenda"
+        android:title="@string/nav_launchers_title" />
+    <item
         android:id="@+id/nav_settings"
         android:icon="@android:drawable/ic_menu_preferences"
         android:title="@string/nav_settings_title" />

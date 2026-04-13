@@ -16,6 +16,22 @@ import org.json.JSONObject
 class XposedInit : IXposedHookLoadPackage {
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
+        val launcherHooks = LauncherHooksLoader.getHooks()
+        val currentPkg = lpparam.packageName
+        
+        val hookType = launcherHooks[currentPkg]?.hookType ?: HOOK_INSTRUMENTATION
+        XposedBridge.log("IntentModifier: Loading package=$currentPkg, using hook=$hookType")
+        
+        when (hookType) {
+            HOOK_LAUNCHER3 -> {
+                XposedBridge.log("IntentModifier: Using Launcher3 hook for $currentPkg")
+                hookLauncher3(lpparam)
+            }
+            else -> hookInstrumentation(lpparam)
+        }
+    }
+    
+    private fun hookInstrumentation(lpparam: XC_LoadPackage.LoadPackageParam) {
         XposedHelpers.findAndHookMethod(
             "android.app.Instrumentation", lpparam.classLoader, "execStartActivity",
             Context::class.java, IBinder::class.java, IBinder::class.java, Activity::class.java, Intent::class.java, Int::class.javaPrimitiveType, Bundle::class.java,
@@ -29,9 +45,37 @@ class XposedInit : IXposedHookLoadPackage {
                     val rule = RulesLoader.getRule(targetPackage)
                     if (rule != null && rule.enabled) {
                         param.args[4] = rule.apply(intent)
+                        XposedBridge.log("IntentModifier: Modified intent for $targetPackage")
                     }
                 }
             })
+    }
+    
+    private fun hookLauncher3(lpparam: XC_LoadPackage.LoadPackageParam) {
+        try {
+            val classLoader = lpparam.classLoader
+            val cls = Class.forName("com.android.launcher3.Launcher", false, classLoader)
+            for (method in cls.declaredMethods) {
+                if (method.name == "startActivitySafely") {
+                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            val intent = param.args[1] as? Intent ?: return
+                            if (intent.component == null) return
+
+                            val targetPackage = intent.component!!.packageName
+                            val rule = RulesLoader.getRule(targetPackage)
+                            if (rule != null && rule.enabled) {
+                                param.args[1] = rule.apply(intent)
+                                XposedBridge.log("IntentModifier: Modified intent for $targetPackage via Launcher3")
+                            }
+                        }
+                    })
+                    return
+                }
+            }
+        } catch (e: Exception) {
+            XposedBridge.log("IntentModifier: Failed to hook Launcher3: ${e.message}")
+        }
     }
 }
 
@@ -124,3 +168,44 @@ data class LoadedRule(
 }
 
 data class LoadedExtra(val key: String, val type: String, val value: String)
+
+const val HOOK_INSTRUMENTATION = "android.app.Instrumentation"
+const val HOOK_LAUNCHER3 = "com.android.launcher3.Launcher"
+
+object LauncherHooksLoader {
+    private var hooks = mapOf<String, LoadedLauncherHook>()
+    private var lastLoad = 0L
+    private const val CACHE_DURATION = 5000L
+
+    @Synchronized
+    fun getHooks(): Map<String, LoadedLauncherHook> {
+        if (System.currentTimeMillis() - lastLoad > CACHE_DURATION) loadHooks()
+        return hooks
+    }
+
+    private fun loadHooks() {
+        lastLoad = System.currentTimeMillis()
+        val newHooks = mutableMapOf<String, LoadedLauncherHook>()
+        try {
+            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", "intent_modifier_config")
+            val jsonStr = xprefs.getString("launcher_hooks", null)
+            if (jsonStr.isNullOrEmpty() || jsonStr == "{}") {
+                hooks = emptyMap()
+                return
+            }
+            val json = JSONObject(jsonStr)
+            json.keys().forEach { pkg ->
+                val hookJson = json.getJSONObject(pkg)
+                newHooks[pkg] = LoadedLauncherHook(
+                    pkg,
+                    hookJson.optString("hookType", HOOK_INSTRUMENTATION)
+                )
+            }
+            hooks = newHooks
+        } catch (e: Exception) {
+            hooks = emptyMap()
+        }
+    }
+}
+
+data class LoadedLauncherHook(val packageName: String, val hookType: String)

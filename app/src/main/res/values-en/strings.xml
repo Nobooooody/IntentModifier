@@ -105,10 +105,16 @@
 
     <!-- Navigation -->
     <string name="nav_rules_title">Rules</string>
+    <string name="nav_launchers_title">Launchers</string>
     <string name="nav_settings_title">Settings</string>
     <string name="settings">Settings</string>
     <string name="language">Language</string>
     <string name="language_system">Follow System</string>
     <string name="language_english">English</string>
     <string name="language_chinese">Chinese</string>
+
+    <!-- Hook types -->
+    <string name="hook_instrumentation">Instrumentation (default)</string>
+    <string name="hook_launcher3">Launcher3 startActivitySafely</string>
+    <string name="delete_launcher_message">Delete hook setting for %1$s?</string>
 </resources>

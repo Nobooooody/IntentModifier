@@ -125,9 +125,58 @@ class ModifierRepository(private val context: Context) {
         prefs.edit().putString(KEY_RULES, json.toString()).apply()
     }
 
+    fun getLauncherHooks(): Map<String, LauncherHook> {
+        val jsonStr = prefs.getString(KEY_LAUNCHER_HOOKS, "{}") ?: "{}"
+        return parseLauncherHooksJson(jsonStr)
+    }
+
+    private fun parseLauncherHooksJson(jsonStr: String): Map<String, LauncherHook> {
+        val result = mutableMapOf<String, LauncherHook>()
+        try {
+            val json = JSONObject(jsonStr)
+            json.keys().forEach { pkg ->
+                val hookJson = json.getJSONObject(pkg)
+                result[pkg] = LauncherHook(
+                    packageName = pkg,
+                    hookType = hookJson.optString("hookType", HOOK_INSTRUMENTATION)
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return result
+    }
+
+    fun setLauncherHook(launcherHook: LauncherHook) {
+        val current = getLauncherHooks().toMutableMap()
+        current[launcherHook.packageName] = launcherHook
+        saveLauncherHooks(current)
+    }
+
+    fun removeLauncherHook(packageName: String) {
+        val current = getLauncherHooks().toMutableMap()
+        current.remove(packageName)
+        saveLauncherHooks(current)
+    }
+
+    private fun saveLauncherHooks(hooks: Map<String, LauncherHook>) {
+        val json = JSONObject()
+        hooks.forEach { (name, hook) ->
+            json.put(name, JSONObject().apply {
+                put("hookType", hook.hookType)
+            })
+        }
+        prefs.edit().putString(KEY_LAUNCHER_HOOKS, json.toString()).apply()
+    }
+
+    fun getLauncherHooksJson(): String {
+        return prefs.getString(KEY_LAUNCHER_HOOKS, "{}") ?: "{}"
+    }
+
     companion object {
         private const val KEY_RULES = "modifier_rules"
         private const val KEY_ENABLED = "module_enabled"
+        private const val KEY_LAUNCHER_HOOKS = "launcher_hooks"
     }
 }
 
@@ -145,3 +194,16 @@ data class AppIntentRule(
     val customClass: String? = null,
     val extras: List<ExtraItem> = emptyList()
 )
+
+data class LauncherHook(
+    val packageName: String,
+    val hookType: String = HOOK_INSTRUMENTATION
+)
+
+object HookType {
+    const val INSTRUMENTATION = "android.app.Instrumentation"
+    const val LAUNCHER3 = "com.android.launcher3.Launcher"
+}
+
+const val HOOK_INSTRUMENTATION = HookType.INSTRUMENTATION
+const val HOOK_LAUNCHER3 = HookType.LAUNCHER3
