@@ -1,57 +1,37 @@
 package io.github.nobooooody.intent_modifier
 
-import android.content.ComponentName
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.os.Bundle
+import android.os.IBinder
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
+import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.XSharedPreferences
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 import org.json.JSONObject
 
 class XposedInit : IXposedHookLoadPackage {
 
-    private val targetLaunchers = setOf(
-        "app.lawnchair",
-        "app.lawnchair.play",
-        "com.google.android.apps.nexuslauncher",
-        "com.android.launcher3",
-        "com.android.launcher"
-    )
-
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
-        if (lpparam.packageName !in targetLaunchers) return
+        XposedHelpers.findAndHookMethod(
+            "android.app.Instrumentation", lpparam.classLoader, "execStartActivity",
+            Context::class.java, IBinder::class.java, IBinder::class.java, Activity::class.java, Intent::class.java, Int::class.javaPrimitiveType, Bundle::class.java,
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    val context = param.args[0] as? Context ?: return
+                    val intent = param.args[4] as? Intent ?: return
+                    if (intent.component == null) return
 
-        try {
-            val classLoader = lpparam.classLoader
-            for (className in listOf("com.android.launcher3.Launcher")) {
-                try {
-                    val cls = Class.forName(className, false, classLoader)
-                    for (method in cls.declaredMethods) {
-                        if (method.name == "startActivitySafely") {
-                            XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                                override fun beforeHookedMethod(param: MethodHookParam) {
-                                    val intent = param.args[1] as Intent
-                                    val targetPackage = try {
-                                        val field = param.args[2]?.javaClass?.getDeclaredField("targetComponent")
-                                        field?.isAccessible = true
-                                        (field?.get(param.args[2]) as? ComponentName)?.packageName
-                                    } catch (e: Exception) { intent.component?.packageName }
-
-                                    if (targetPackage != null) {
-                                        val rule = RulesLoader.getRule(targetPackage)
-                                        if (rule != null && rule.enabled) {
-                                            param.args[1] = rule.apply(intent)
-                                        }
-                                    }
-                                }
-                            })
-                            return
-                        }
+                    val targetPackage = intent.component!!.packageName
+                    val rule = RulesLoader.getRule(targetPackage)
+                    if (rule != null && rule.enabled) {
+                        param.args[4] = rule.apply(intent)
                     }
-                } catch (e: Exception) { }
-            }
-        } catch (e: Throwable) { }
+                }
+            })
     }
 }
 
