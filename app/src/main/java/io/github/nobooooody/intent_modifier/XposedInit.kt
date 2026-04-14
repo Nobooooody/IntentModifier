@@ -115,7 +115,13 @@ object RulesLoader {
                 val extras = if (extrasArray != null) {
                     (0 until extrasArray.length()).map { i ->
                         val e = extrasArray.getJSONObject(i)
-                        LoadedExtra(e.getString("key"), e.getString("type"), e.getString("value"))
+                        val valuesJson = e.optJSONArray("values")
+                        val values = if (valuesJson != null) {
+                            (0 until valuesJson.length()).map { valuesJson.getString(it) }
+                        } else {
+                            listOf(e.optString("value", ""))
+                        }
+                        LoadedExtra(e.getString("key"), e.getString("type"), values)
                     }
                 } else emptyList()
                 newRules[pkg] = LoadedRule(
@@ -184,20 +190,32 @@ data class LoadedRule(
 
         extras.forEach { extra ->
             when (extra.type) {
-                "Boolean" -> modified.putExtra(extra.key, extra.value == "true")
-                "Integer" -> extra.value.toIntOrNull()?.let { modified.putExtra(extra.key, it) }
-                "Long" -> extra.value.toLongOrNull()?.let { modified.putExtra(extra.key, it) }
-                "Decimal Number" -> extra.value.toDoubleOrNull()?.let { modified.putExtra(extra.key, it) }
-                "String" -> modified.putExtra(extra.key, extra.value)
-                "URI" -> modified.putExtra(extra.key, android.net.Uri.parse(extra.value))
-                else -> modified.putExtra(extra.key, extra.value)
+                "Boolean" -> modified.putExtra(extra.key, extra.values[0] == "true")
+                "BooleanArray" -> modified.putExtra(extra.key, extra.values.map { it == "true" }.toBooleanArray())
+                "Integer" -> extra.values[0].toIntOrNull()?.let { modified.putExtra(extra.key, it) }
+                "IntArray" -> modified.putExtra(extra.key, extra.values.map { it.toInt() }.toIntArray())
+                "Long" -> extra.values[0].toLongOrNull()?.let { modified.putExtra(extra.key, it) }
+                "LongArray" -> modified.putExtra(extra.key, extra.values.map { it.toLong() }.toLongArray())
+                "Float" -> extra.values[0].toFloatOrNull()?.let { modified.putExtra(extra.key, it) }
+                "FloatArray" -> modified.putExtra(extra.key, extra.values.map { it.toFloat() }.toFloatArray())
+                "DoubleArray" -> modified.putExtra(extra.key, extra.values.map { it.toDouble() }.toDoubleArray())
+                "String" -> modified.putExtra(extra.key, extra.values[0])
+                "StringArray" -> modified.putExtra(extra.key, extra.values.toTypedArray())
+                "URI" -> modified.putExtra(extra.key, android.net.Uri.parse(extra.values[0]))
+                "ByteArray" -> modified.putExtra(extra.key, extra.values.map { it.toByte() }.toByteArray())
+                "CharArray" -> modified.putExtra(extra.key, extra.values.map { it[0] }.toCharArray())
+                "ShortArray" -> modified.putExtra(extra.key, extra.values.map { it.toShort() }.toShortArray())
+                "CharSequenceArray" -> modified.putExtra(extra.key, extra.values.map { it as CharSequence }.toTypedArray())
+                "ComponentName" -> modified.putExtra(extra.key, android.content.ComponentName(extra.values[0], extra.values[0].substringAfterLast(".")))
+                "ParcelableArray" -> {} // Parcelable needs class loader
+                else -> modified.putExtra(extra.key, extra.values[0])
             }
         }
         return modified
     }
 }
 
-data class LoadedExtra(val key: String, val type: String, val value: String)
+data class LoadedExtra(val key: String, val type: String, val values: List<String>)
 
 const val HOOK_INSTRUMENTATION = "android.app.Instrumentation"
 const val HOOK_LAUNCHER3 = "com.android.launcher3.Launcher"

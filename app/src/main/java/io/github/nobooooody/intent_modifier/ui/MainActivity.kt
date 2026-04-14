@@ -250,21 +250,31 @@ class RulesFragment : Fragment() {
         val extraViews = mutableListOf<View>()
 
         fun setInputTypeForExtra(eView: View, type: String, valueInput: TextInputEditText, valueInputLayout: TextInputLayout, switchBoolean: MaterialSwitch) {
+            val arrayContainer = eView.findViewById<LinearLayout>(R.id.arrayValuesContainer)
+            val addArrayBtn = eView.findViewById<MaterialButton>(R.id.buttonAddArrayItem)
+            val isArray = type.endsWith("Array")
             when (type) {
                 "Boolean" -> {
                     valueInputLayout.visibility = View.GONE
                     switchBoolean.visibility = View.VISIBLE
+                    arrayContainer.visibility = View.GONE
+                    addArrayBtn.visibility = View.GONE
                 }
                 "Null" -> {
                     valueInputLayout.visibility = View.GONE
                     switchBoolean.visibility = View.GONE
+                    arrayContainer.visibility = View.GONE
+                    addArrayBtn.visibility = View.GONE
                 }
                 else -> {
-                    valueInputLayout.visibility = View.VISIBLE
+                    valueInputLayout.visibility = if (isArray) View.GONE else View.VISIBLE
                     switchBoolean.visibility = View.GONE
-                    valueInput.inputType = when (type) {
-                        "Integer", "Long" -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
-                        "Decimal Number" -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                    arrayContainer.visibility = if (isArray) View.VISIBLE else View.GONE
+                    addArrayBtn.visibility = if (isArray) View.VISIBLE else View.GONE
+                    if (!isArray) valueInput.inputType = when (type) {
+                        "Integer" -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
+                        "Float" -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                        "Long" -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
                         "URI" -> InputType.TYPE_TEXT_VARIATION_URI
                         else -> InputType.TYPE_CLASS_TEXT
                     }
@@ -280,24 +290,92 @@ class RulesFragment : Fragment() {
             val valueInput = eView.findViewById<TextInputEditText>(R.id.inputExtraValue)
             val switchBoolean = eView.findViewById<MaterialSwitch>(R.id.switchBoolean)
             val removeBtn = eView.findViewById<ImageButton>(R.id.buttonRemoveExtra)
+            val arrayContainer = eView.findViewById<LinearLayout>(R.id.arrayValuesContainer)
+            val addArrayBtn = eView.findViewById<MaterialButton>(R.id.buttonAddArrayItem)
 
             typeSpinner.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, extraTypes))
             val currentType = extra?.type ?: "String"
             typeSpinner.setText(currentType, false)
             setInputTypeForExtra(eView, currentType, valueInput, valueInputLayout, switchBoolean)
 
+            val arrayItemViews = mutableListOf<View>()
+            var currentExtraType = currentType
+
+            fun buildArrayItemView(value: String? = null, isSwitch: Boolean = false) {
+                val itemView = LayoutInflater.from(requireContext()).inflate(R.layout.item_extra, arrayContainer, false)
+                val itemKeyInput = itemView.findViewById<TextInputEditText>(R.id.inputExtraKey)
+                val itemTypeSpinner = itemView.findViewById<AutoCompleteTextView>(R.id.spinnerType)
+                val itemValueLayout = itemView.findViewById<TextInputLayout>(R.id.valueInputLayout)
+                val itemValueInput = itemView.findViewById<TextInputEditText>(R.id.inputExtraValue)
+                val itemSwitch = itemView.findViewById<MaterialSwitch>(R.id.switchBoolean)
+                val itemArrayContainer = itemView.findViewById<LinearLayout>(R.id.arrayValuesContainer)
+                val itemAddBtn = itemView.findViewById<MaterialButton>(R.id.buttonAddArrayItem)
+                val itemRemoveBtn = itemView.findViewById<ImageButton>(R.id.buttonRemoveExtra)
+
+                itemKeyInput.visibility = View.GONE
+                itemTypeSpinner.visibility = View.GONE
+                itemArrayContainer.visibility = View.GONE
+                itemAddBtn.visibility = View.GONE
+
+                if (isSwitch) {
+                    itemValueLayout.visibility = View.GONE
+                    itemSwitch.visibility = View.VISIBLE
+                } else {
+                    itemValueLayout.visibility = View.VISIBLE
+                    itemSwitch.visibility = View.GONE
+                    itemValueInput.inputType = when (currentExtraType) {
+                        "IntArray", "LongArray", "ShortArray", "ByteArray" -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
+                        "FloatArray", "DoubleArray" -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                        else -> InputType.TYPE_CLASS_TEXT
+                    }
+                }
+
+                value?.let {
+                    if (isSwitch) {
+                        itemSwitch.isChecked = it == "true"
+                    } else {
+                        itemValueInput.setText(it)
+                    }
+                }
+
+                itemRemoveBtn.setOnClickListener {
+                    arrayContainer.removeView(itemView)
+                    arrayItemViews.remove(itemView)
+                }
+
+                arrayContainer.addView(itemView)
+                arrayItemViews.add(itemView)
+            }
+
+            fun clearArrayItems() {
+                arrayContainer.removeAllViews()
+                arrayItemViews.clear()
+            }
+
+            fun addArrayItemView(value: String? = null) {
+                buildArrayItemView(value, currentExtraType == "BooleanArray")
+            }
+
             extra?.let {
                 keyInput.setText(it.key)
                 if (it.type == "Boolean") {
-                    switchBoolean.isChecked = it.value == "true"
+                    switchBoolean.isChecked = it.values[0] == "true"
+                } else if (it.type.endsWith("Array")) {
+                    it.values.forEach { v -> buildArrayItemView(v, it.type == "BooleanArray") }
                 } else if (it.type != "Null") {
-                    valueInput.setText(it.value)
+                    valueInput.setText(it.values[0])
                 }
             }
 
             typeSpinner.setOnItemClickListener { _, _, position, _ ->
-                setInputTypeForExtra(eView, extraTypes[position], valueInput, valueInputLayout, switchBoolean)
+                currentExtraType = extraTypes[position]
+                switchBoolean.isChecked = false
+                valueInput.setText("")
+                clearArrayItems()
+                setInputTypeForExtra(eView, currentExtraType, valueInput, valueInputLayout, switchBoolean)
             }
+
+            addArrayBtn.setOnClickListener { addArrayItemView() }
 
             removeBtn.setOnClickListener {
                 extrasContainer.removeView(eView)
@@ -359,13 +437,33 @@ class RulesFragment : Fragment() {
                     customType = typeInput.text.toString().ifBlank { null },
                     extras = extraViews.mapNotNull { eView ->
                         val type = eView.findViewById<AutoCompleteTextView>(R.id.spinnerType).text.toString()
-                        val value = when (type) {
-                            "Boolean" -> (eView.findViewById<MaterialSwitch>(R.id.switchBoolean).isChecked).toString()
-                            "Null" -> ""
-                            else -> eView.findViewById<TextInputEditText>(R.id.inputExtraValue).text.toString()
+                        val values = when (type) {
+                            "Boolean" -> listOf(eView.findViewById<MaterialSwitch>(R.id.switchBoolean).isChecked.toString())
+                            "Null" -> emptyList()
+                            "BooleanArray" -> {
+                                val arrContainer = eView.findViewById<LinearLayout>(R.id.arrayValuesContainer)
+                                val items = mutableListOf<String>()
+                                for (i in 0 until arrContainer.childCount) {
+                                    items.add(arrContainer.getChildAt(i).findViewById<MaterialSwitch>(R.id.switchBoolean).isChecked.toString())
+                                }
+                                items
+                            }
+                            else -> {
+                                if (type.endsWith("Array")) {
+                                    val arrContainer = eView.findViewById<LinearLayout>(R.id.arrayValuesContainer)
+                                    val items = mutableListOf<String>()
+                                    for (i in 0 until arrContainer.childCount) {
+                                        val txt = arrContainer.getChildAt(i).findViewById<TextInputEditText>(R.id.inputExtraValue).text.toString()
+                                        if (txt.isNotEmpty()) items.add(txt)
+                                    }
+                                    items
+                                } else {
+                                    listOf(eView.findViewById<TextInputEditText>(R.id.inputExtraValue).text.toString())
+                                }
+                            }
                         }
                         val key = eView.findViewById<TextInputEditText>(R.id.inputExtraKey).text.toString()
-                        if (key.isBlank()) null else ExtraItem(key, type, value)
+                        if (key.isBlank()) null else ExtraItem(key, type, values)
                     }
                 )
                 repo.saveRule(pkg, newRule)
@@ -375,7 +473,7 @@ class RulesFragment : Fragment() {
             .setNegativeButton(R.string.cancel, null).show()
     }
 
-    private val extraTypes = listOf("Boolean", "ComponentName", "Decimal Number", "Integer", "Long", "Null", "String", "URI")
+    private val extraTypes = listOf("Boolean", "BooleanArray", "ByteArray", "CharArray", "CharSequenceArray", "ComponentName", "DoubleArray", "FloatArray", "Float", "IntArray", "Integer", "LongArray", "Long", "Null", "ParcelableArray", "ShortArray", "String", "StringArray", "URI")
 
     fun handleMenuItem(item: MenuItem): Boolean {
         return when (item.itemId) {

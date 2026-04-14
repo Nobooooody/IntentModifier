@@ -54,10 +54,16 @@ class ModifierRepository(private val context: Context) {
         val result = mutableListOf<ExtraItem>()
         for (i in 0 until json.length()) {
             val obj = json.getJSONObject(i)
+            val valuesJson = obj.optJSONArray("values")
+            val values = if (valuesJson != null) {
+                (0 until valuesJson.length()).map { valuesJson.getString(it) }
+            } else {
+                listOf(obj.optString("value", ""))
+            }
             result.add(ExtraItem(
                 key = obj.getString("key"),
                 type = obj.getString("type"),
-                value = obj.getString("value")
+                values = values
             ))
         }
         return result
@@ -101,7 +107,13 @@ class ModifierRepository(private val context: Context) {
                         extrasJson.put(JSONObject().apply {
                             put("key", extra.key)
                             put("type", extra.type)
-                            put("value", extra.value)
+                            if (extra.values.size == 1) {
+                                put("value", extra.values[0])
+                            } else if (extra.values.isNotEmpty()) {
+                                val valuesJson = JSONArray()
+                                extra.values.forEach { valuesJson.put(it) }
+                                put("values", valuesJson)
+                            }
                         })
                     }
                     put("extras", extrasJson)
@@ -134,13 +146,19 @@ class ModifierRepository(private val context: Context) {
                     put("customCategories", categoriesJson)
                 }
                 r.customType?.let { put("customType", it) }
-                if (r.extras.isNotEmpty()) {
+if (r.extras.isNotEmpty()) {
                     val extrasJson = JSONArray()
                     r.extras.forEach { extra ->
                         extrasJson.put(JSONObject().apply {
                             put("key", extra.key)
                             put("type", extra.type)
-                            put("value", extra.value)
+                            if (extra.values.size == 1) {
+                                put("value", extra.values[0])
+                            } else if (extra.values.isNotEmpty()) {
+                                val valuesJson = JSONArray()
+                                extra.values.forEach { valuesJson.put(it) }
+                                put("values", valuesJson)
+                            }
                         })
                     }
                     put("extras", extrasJson)
@@ -148,6 +166,7 @@ class ModifierRepository(private val context: Context) {
             }
             json.put(name, ruleJson)
         }
+
         prefs.edit().putString(KEY_RULES, json.toString()).apply()
     }
 
@@ -209,7 +228,7 @@ class ModifierRepository(private val context: Context) {
 data class ExtraItem(
     val key: String,
     val type: String,
-    val value: String
+    val values: List<String> = emptyList()
 )
 
 data class AppIntentRule(
