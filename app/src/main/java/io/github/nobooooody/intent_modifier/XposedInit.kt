@@ -16,7 +16,9 @@ import org.json.JSONObject
 class XposedInit : IXposedHookLoadPackage {
 
     private fun logIntent(prefix: String, intent: Intent) {
-        XposedBridge.log("$prefix pkg=${intent.`package`}, component=${intent.component}, action=${intent.action}, data=${intent.data}, type=${intent.type}, flags=${intent.flags}, categories=${intent.categories}")
+        val extras = intent.extras?.keySet()?.joinToString(",") ?: "null"
+        val fillIn = intent.fillIn(Intent.FILL_IN_ACTION, Intent.FILL_IN_DATA) // check fillIn compatibility
+        XposedBridge.log("$prefix pkg=${intent.`package`}, component=${intent.component}, action=${intent.action}, data=${intent.data}, dataString=${intent.dataString}, type=${intent.type}, flags=${intent.flags}, categories=${intent.categories}, scheme=${intent.scheme}, selector=${intent.selector}, sourceBounds=${intent.sourceBounds}, identifier=${intent.identifier}, resolveType=${intent.resolveType(null)}, extras=[$extras]")
     }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
