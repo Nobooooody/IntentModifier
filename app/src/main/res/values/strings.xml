@@ -28,6 +28,9 @@
     <string name="custom_package_hint">e.g., com.custom.package</string>
     <string name="custom_class">Custom Class</string>
     <string name="custom_class_hint">e.g., com.custom.package.MainActivity</string>
+    <string name="custom_flags">Flags (e.g. 270532608)</string>
+    <string name="custom_category">Category</string>
+    <string name="custom_type">MIME Type</string>
     <string name="enabled">Enabled</string>
 
     <!-- Extras -->

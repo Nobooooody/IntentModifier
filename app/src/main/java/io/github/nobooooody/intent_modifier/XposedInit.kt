@@ -42,10 +42,12 @@ class XposedInit : IXposedHookLoadPackage {
                     if (intent.component == null) return
 
                     val targetPackage = intent.component!!.packageName
+                    XposedBridge.log("IntentModifier: Original intent - getPackage=${intent.`package`}, componentPkg=${intent.component?.packageName}, componentCls=${intent.component?.className}, action=${intent.action}, data=${intent.data}")
                     val rule = RulesLoader.getRule(targetPackage)
                     if (rule != null && rule.enabled) {
-                        param.args[4] = rule.apply(intent)
-                        XposedBridge.log("IntentModifier: Modified intent for $targetPackage")
+                        val modifiedIntent = rule.apply(intent)
+                        param.args[4] = modifiedIntent
+                        XposedBridge.log("IntentModifier: Modified intent - getPackage=${modifiedIntent.`package`}, componentPkg=${modifiedIntent.component?.packageName}, componentCls=${modifiedIntent.component?.className}, action=${modifiedIntent.action}")
                     }
                 }
             })
@@ -63,10 +65,12 @@ class XposedInit : IXposedHookLoadPackage {
                             if (intent.component == null) return
 
                             val targetPackage = intent.component!!.packageName
+                            XposedBridge.log("IntentModifier L3: Original intent - getPackage=${intent.`package`}, componentPkg=${intent.component?.packageName}, componentCls=${intent.component?.className}, action=${intent.action}, data=${intent.data}")
                             val rule = RulesLoader.getRule(targetPackage)
                             if (rule != null && rule.enabled) {
-                                param.args[1] = rule.apply(intent)
-                                XposedBridge.log("IntentModifier: Modified intent for $targetPackage via Launcher3")
+                                val modifiedIntent = rule.apply(intent)
+                                param.args[1] = modifiedIntent
+                                XposedBridge.log("IntentModifier L3: Modified intent - getPackage=${modifiedIntent.`package`}, componentPkg=${modifiedIntent.component?.packageName}, componentCls=${modifiedIntent.component?.className}, action=${modifiedIntent.action}")
                             }
                         }
                     })
@@ -116,6 +120,9 @@ object RulesLoader {
                     ruleObj.optString("customData").ifEmpty { null },
                     ruleObj.optString("customPackage").ifEmpty { null },
                     ruleObj.optString("customClass").ifEmpty { null },
+                    if (ruleObj.has("customFlags")) ruleObj.getInt("customFlags") else null,
+                    ruleObj.optString("customCategory").ifEmpty { null },
+                    ruleObj.optString("customType").ifEmpty { null },
                     extras
                 )
             }
@@ -132,6 +139,9 @@ data class LoadedRule(
     val customData: String?,
     val customPackage: String?,
     val customClass: String?,
+    val customFlags: Int?,
+    val customCategory: String?,
+    val customType: String?,
     val extras: List<LoadedExtra>
 ) {
     fun apply(intent: Intent): Intent {
@@ -148,8 +158,13 @@ data class LoadedRule(
             val finalPkg = customPackage ?: intent.component?.packageName
             if (resolvedClass != null && finalPkg != null) {
                 modified.setClassName(finalPkg, resolvedClass)
+                modified.setPackage(finalPkg)
             }
         }
+
+        customFlags?.let { modified.addFlags(it) }
+        customCategory?.let { modified.addCategory(it) }
+        customType?.let { modified.setType(it) }
 
         extras.forEach { extra ->
             when (extra.type) {

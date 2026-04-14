@@ -229,6 +229,9 @@ class RulesFragment : Fragment() {
         val dataInput = dialogView.findViewById<TextInputEditText>(R.id.inputData)
         val packageInput = dialogView.findViewById<TextInputEditText>(R.id.inputPackage)
         val classInput = dialogView.findViewById<TextInputEditText>(R.id.inputClass)
+        val flagsInput = dialogView.findViewById<TextInputEditText>(R.id.inputFlags)
+        val categoryInput = dialogView.findViewById<TextInputEditText>(R.id.inputCategory)
+        val typeInput = dialogView.findViewById<TextInputEditText>(R.id.inputType)
         val extrasContainer = dialogView.findViewById<LinearLayout>(R.id.extrasContainer)
         val addExtraButton = dialogView.findViewById<MaterialButton>(R.id.buttonAddExtra)
 
@@ -237,6 +240,9 @@ class RulesFragment : Fragment() {
             dataInput.setText(it.customData ?: "")
             packageInput.setText(it.customPackage ?: "")
             classInput.setText(it.customClass ?: "")
+            flagsInput.setText(it.customFlags?.toString() ?: "")
+            categoryInput.setText(it.customCategory ?: "")
+            typeInput.setText(it.customType ?: "")
         }
 
         val currentEnabled = existingRule?.enabled ?: true
@@ -315,6 +321,9 @@ class RulesFragment : Fragment() {
                     customData = dataInput.text.toString().ifBlank { null },
                     customPackage = packageInput.text.toString().ifBlank { null },
                     customClass = classInput.text.toString().ifBlank { null },
+                    customFlags = flagsInput.text.toString().toIntOrNull(),
+                    customCategory = categoryInput.text.toString().ifBlank { null },
+                    customType = typeInput.text.toString().ifBlank { null },
                     extras = extraViews.mapNotNull { eView ->
                         val type = eView.findViewById<AutoCompleteTextView>(R.id.spinnerType).text.toString()
                         val value = when (type) {
