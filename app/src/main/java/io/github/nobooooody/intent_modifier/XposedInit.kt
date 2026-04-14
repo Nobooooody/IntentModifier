@@ -167,7 +167,10 @@ data class LoadedRule(
         }
 
         customFlags?.let { modified.addFlags(it) }
-        customCategory?.let { modified.addCategory(it) }
+        customCategory?.let {
+            modified.categories?.forEach { modified.removeCategory(it) }
+            modified.addCategory(it)
+        }
         customType?.let { modified.setType(it) }
 
         extras.forEach { extra ->
