@@ -302,20 +302,11 @@ class RulesFragment : Fragment() {
             var currentExtraType = currentType
 
             fun buildArrayItemView(value: String? = null, isSwitch: Boolean = false) {
-                val itemView = LayoutInflater.from(requireContext()).inflate(R.layout.item_extra, arrayContainer, false)
-                val itemKeyInput = itemView.findViewById<TextInputEditText>(R.id.inputExtraKey)
-                val itemTypeSpinner = itemView.findViewById<AutoCompleteTextView>(R.id.spinnerType)
+                val itemView = LayoutInflater.from(requireContext()).inflate(R.layout.item_array, arrayContainer, false)
                 val itemValueLayout = itemView.findViewById<TextInputLayout>(R.id.valueInputLayout)
                 val itemValueInput = itemView.findViewById<TextInputEditText>(R.id.inputExtraValue)
                 val itemSwitch = itemView.findViewById<MaterialSwitch>(R.id.switchBoolean)
-                val itemArrayContainer = itemView.findViewById<LinearLayout>(R.id.arrayValuesContainer)
-                val itemAddBtn = itemView.findViewById<MaterialButton>(R.id.buttonAddArrayItem)
                 val itemRemoveBtn = itemView.findViewById<ImageButton>(R.id.buttonRemoveExtra)
-
-                itemKeyInput.visibility = View.GONE
-                itemTypeSpinner.visibility = View.GONE
-                itemArrayContainer.visibility = View.GONE
-                itemAddBtn.visibility = View.GONE
 
                 if (isSwitch) {
                     itemValueLayout.visibility = View.GONE
@@ -326,6 +317,7 @@ class RulesFragment : Fragment() {
                     itemValueInput.inputType = when (currentExtraType) {
                         "IntArray", "LongArray", "ShortArray", "ByteArray" -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
                         "FloatArray", "DoubleArray" -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                        "StringArray", "CharSequenceArray" -> InputType.TYPE_CLASS_TEXT
                         else -> InputType.TYPE_CLASS_TEXT
                     }
                 }
