@@ -43,6 +43,7 @@
     <string name="extra_type">Extra Type</string>
     <string name="add_extra">Add Extra</string>
     <string name="add_array_item">Add Item</string>
+    <string name="remove">Remove</string>
     <string name="remove_extra">Remove</string>
 
     <!-- Extra types -->
