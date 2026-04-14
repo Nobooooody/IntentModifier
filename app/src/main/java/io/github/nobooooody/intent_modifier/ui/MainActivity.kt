@@ -392,19 +392,9 @@ class RulesFragment : Fragment() {
         val categoryViews = mutableListOf<View>()
 
         fun addCategoryView(category: String? = null) {
-            val cView = LayoutInflater.from(requireContext()).inflate(R.layout.item_extra, categoriesContainer, false)
+            val cView = LayoutInflater.from(requireContext()).inflate(R.layout.item_category, categoriesContainer, false)
             val keyInput = cView.findViewById<TextInputEditText>(R.id.inputExtraKey)
-            val typeSpinner = cView.findViewById<AutoCompleteTextView>(R.id.spinnerType)
-            val valueInputLayout = cView.findViewById<TextInputLayout>(R.id.valueInputLayout)
-            val valueInput = cView.findViewById<TextInputEditText>(R.id.inputExtraValue)
-            val switchBoolean = cView.findViewById<MaterialSwitch>(R.id.switchBoolean)
             val removeBtn = cView.findViewById<ImageButton>(R.id.buttonRemoveExtra)
-
-            keyInput.hint = getString(R.string.category_hint)
-            typeSpinner.visibility = View.GONE
-            valueInput.visibility = View.GONE
-            valueInputLayout.visibility = View.GONE
-            switchBoolean.visibility = View.GONE
 
             category?.let { keyInput.setText(it) }
 
