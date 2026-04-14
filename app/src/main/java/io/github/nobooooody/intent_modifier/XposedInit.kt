@@ -140,14 +140,13 @@ data class LoadedRule(
         customData?.let { modified.data = android.net.Uri.parse(it) }
 
         if (customPackage != null || customClass != null) {
-            val basePkg = intent.component?.packageName ?: customPackage ?: ""
             val resolvedClass = when {
                 customClass.isNullOrEmpty() -> intent.component?.className
-                customClass!!.startsWith(".") -> basePkg + customClass
+                customClass!!.startsWith(".") -> (customPackage ?: intent.component?.packageName ?: "") + customClass
                 else -> customClass
             }
-            val finalPkg = customPackage ?: basePkg
-            if (resolvedClass != null) {
+            val finalPkg = customPackage ?: intent.component?.packageName
+            if (resolvedClass != null && finalPkg != null) {
                 modified.setClassName(finalPkg, resolvedClass)
             }
         }
