@@ -125,7 +125,7 @@ object RulesLoader {
                     ruleObj.optString("customPackage").ifEmpty { null },
                     ruleObj.optString("customClass").ifEmpty { null },
                     if (ruleObj.has("customFlags")) ruleObj.getInt("customFlags") else null,
-                    ruleObj.optString("customCategory").ifEmpty { null },
+                    parseCategories(ruleObj.optJSONArray("customCategories")),
                     ruleObj.optString("customType").ifEmpty { null },
                     extras
                 )
@@ -134,6 +134,15 @@ object RulesLoader {
         } catch (e: Exception) {
             rules = emptyMap()
         }
+    }
+
+    private fun parseCategories(json: org.json.JSONArray?): List<String> {
+        if (json == null) return emptyList()
+        val result = mutableListOf<String>()
+        for (i in 0 until json.length()) {
+            result.add(json.getString(i))
+        }
+        return result
     }
 }
 
@@ -144,7 +153,7 @@ data class LoadedRule(
     val customPackage: String?,
     val customClass: String?,
     val customFlags: Int?,
-    val customCategory: String?,
+    val customCategories: List<String>,
     val customType: String?,
     val extras: List<LoadedExtra>
 ) {
@@ -167,9 +176,9 @@ data class LoadedRule(
         }
 
         customFlags?.let { modified.addFlags(it) }
-        customCategory?.let {
+        if (customCategories.isNotEmpty()) {
             modified.categories?.forEach { modified.removeCategory(it) }
-            modified.addCategory(it)
+            customCategories.forEach { modified.addCategory(it) }
         }
         customType?.let { modified.setType(it) }
 

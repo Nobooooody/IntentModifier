@@ -37,7 +37,7 @@ class ModifierRepository(private val context: Context) {
                     customPackage = ruleJson.optString("customPackage").ifEmpty { null },
                     customClass = ruleJson.optString("customClass").ifEmpty { null },
                     customFlags = if (ruleJson.has("customFlags")) ruleJson.getInt("customFlags") else null,
-                    customCategory = ruleJson.optString("customCategory").ifEmpty { null },
+                    customCategories = parseCategories(ruleJson.optJSONArray("customCategories")),
                     customType = ruleJson.optString("customType").ifEmpty { null },
                     extras = parseExtras(ruleJson.optJSONArray("extras"))
                 )
@@ -63,6 +63,15 @@ class ModifierRepository(private val context: Context) {
         return result
     }
 
+    private fun parseCategories(json: JSONArray?): List<String> {
+        if (json == null) return emptyList()
+        val result = mutableListOf<String>()
+        for (i in 0 until json.length()) {
+            result.add(json.getString(i))
+        }
+        return result
+    }
+
     fun saveRule(packageName: String, rule: AppIntentRule?) {
         val currentRules = getRules().toMutableMap()
         if (rule != null) {
@@ -80,7 +89,11 @@ class ModifierRepository(private val context: Context) {
                 r.customPackage?.let { put("customPackage", it) }
                 r.customClass?.let { put("customClass", it) }
                 r.customFlags?.let { put("customFlags", it) }
-                r.customCategory?.let { put("customCategory", it) }
+                if (r.customCategories.isNotEmpty()) {
+                    val categoriesJson = JSONArray()
+                    r.customCategories.forEach { categoriesJson.put(it) }
+                    put("customCategories", categoriesJson)
+                }
                 r.customType?.let { put("customType", it) }
                 if (r.extras.isNotEmpty()) {
                     val extrasJson = JSONArray()
@@ -105,7 +118,7 @@ class ModifierRepository(private val context: Context) {
     }
 
     fun saveAllRules(newRules: Map<String, AppIntentRule>) {
-        val filtered = newRules.filterValues { it.enabled || it.customAction != null || it.customData != null || it.customPackage != null || it.customClass != null || it.customFlags != null || it.customCategory != null || it.customType != null || it.extras.isNotEmpty() }
+        val filtered = newRules.filterValues { it.enabled || it.customAction != null || it.customData != null || it.customPackage != null || it.customClass != null || it.customFlags != null || it.customCategories.isNotEmpty() || it.customType != null || it.extras.isNotEmpty() }
         val json = JSONObject()
         filtered.forEach { (name, r) ->
             val ruleJson = JSONObject().apply {
@@ -115,7 +128,11 @@ class ModifierRepository(private val context: Context) {
                 r.customPackage?.let { put("customPackage", it) }
                 r.customClass?.let { put("customClass", it) }
                 r.customFlags?.let { put("customFlags", it) }
-                r.customCategory?.let { put("customCategory", it) }
+                if (r.customCategories.isNotEmpty()) {
+                    val categoriesJson = JSONArray()
+                    r.customCategories.forEach { categoriesJson.put(it) }
+                    put("customCategories", categoriesJson)
+                }
                 r.customType?.let { put("customType", it) }
                 if (r.extras.isNotEmpty()) {
                     val extrasJson = JSONArray()
@@ -202,7 +219,7 @@ data class AppIntentRule(
     val customPackage: String? = null,
     val customClass: String? = null,
     val customFlags: Int? = null,
-    val customCategory: String? = null,
+    val customCategories: List<String> = emptyList(),
     val customType: String? = null,
     val extras: List<ExtraItem> = emptyList()
 )

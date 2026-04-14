@@ -230,7 +230,8 @@ class RulesFragment : Fragment() {
         val packageInput = dialogView.findViewById<TextInputEditText>(R.id.inputPackage)
         val classInput = dialogView.findViewById<TextInputEditText>(R.id.inputClass)
         val flagsInput = dialogView.findViewById<TextInputEditText>(R.id.inputFlags)
-        val categoryInput = dialogView.findViewById<TextInputEditText>(R.id.inputCategory)
+        val categoriesContainer = dialogView.findViewById<LinearLayout>(R.id.categoriesContainer)
+        val addCategoryButton = dialogView.findViewById<MaterialButton>(R.id.buttonAddCategory)
         val typeInput = dialogView.findViewById<TextInputEditText>(R.id.inputType)
         val extrasContainer = dialogView.findViewById<LinearLayout>(R.id.extrasContainer)
         val addExtraButton = dialogView.findViewById<MaterialButton>(R.id.buttonAddExtra)
@@ -241,7 +242,6 @@ class RulesFragment : Fragment() {
             packageInput.setText(it.customPackage ?: "")
             classInput.setText(it.customClass ?: "")
             flagsInput.setText(it.customFlags?.toString() ?: "")
-            categoryInput.setText(it.customCategory ?: "")
             typeInput.setText(it.customType ?: "")
         }
 
@@ -311,6 +311,37 @@ class RulesFragment : Fragment() {
         existingRule?.extras?.forEach { addExtraView(it) }
         addExtraButton.setOnClickListener { addExtraView() }
 
+        val categoryViews = mutableListOf<View>()
+
+        fun addCategoryView(category: String? = null) {
+            val cView = LayoutInflater.from(requireContext()).inflate(R.layout.item_extra, categoriesContainer, false)
+            val keyInput = cView.findViewById<TextInputEditText>(R.id.inputExtraKey)
+            val typeSpinner = cView.findViewById<AutoCompleteTextView>(R.id.spinnerType)
+            val valueInputLayout = cView.findViewById<TextInputLayout>(R.id.valueInputLayout)
+            val valueInput = cView.findViewById<TextInputEditText>(R.id.inputExtraValue)
+            val switchBoolean = cView.findViewById<MaterialSwitch>(R.id.switchBoolean)
+            val removeBtn = cView.findViewById<ImageButton>(R.id.buttonRemoveExtra)
+
+            keyInput.hint = getString(R.string.category_hint)
+            typeSpinner.visibility = View.GONE
+            valueInput.visibility = View.GONE
+            valueInputLayout.visibility = View.GONE
+            switchBoolean.visibility = View.GONE
+
+            category?.let { keyInput.setText(it) }
+
+            removeBtn.setOnClickListener {
+                categoriesContainer.removeView(cView)
+                categoryViews.remove(cView)
+            }
+
+            categoriesContainer.addView(cView)
+            categoryViews.add(cView)
+        }
+
+        existingRule?.customCategories?.forEach { addCategoryView(it) }
+        addCategoryButton.setOnClickListener { addCategoryView() }
+
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(pkg)
             .setView(dialogView)
@@ -322,7 +353,9 @@ class RulesFragment : Fragment() {
                     customPackage = packageInput.text.toString().ifBlank { null },
                     customClass = classInput.text.toString().ifBlank { null },
                     customFlags = flagsInput.text.toString().toIntOrNull(),
-                    customCategory = categoryInput.text.toString().ifBlank { null },
+                    customCategories = categoryViews.mapNotNull { cView ->
+                        cView.findViewById<TextInputEditText>(R.id.inputExtraKey).text.toString().ifBlank { null }
+                    },
                     customType = typeInput.text.toString().ifBlank { null },
                     extras = extraViews.mapNotNull { eView ->
                         val type = eView.findViewById<AutoCompleteTextView>(R.id.spinnerType).text.toString()
