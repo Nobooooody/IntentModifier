@@ -17,7 +17,7 @@ class XposedInit : IXposedHookLoadPackage {
 
     private fun logIntent(prefix: String, intent: Intent) {
         val extras = intent.extras?.keySet()?.joinToString(",") ?: "null"
-        XposedBridge.log("$prefix pkg=${intent.`package`}, component=${intent.component}, action=${intent.action}, data=${intent.data}, dataString=${intent.dataString}, type=${intent.type}, flags=${intent.flags}, categories=${intent.categories}, scheme=${intent.scheme}, selector=${intent.selector}, sourceBounds=${intent.sourceBounds}, identifier=${intent.identifier}, extras=[$extras]")
+        XposedBridge.log("$prefix pkg=${intent.`package`}, component=${intent.component}, action=${intent.action}, data=${intent.data}, dataString=${intent.dataString}, type=${intent.type}, flags=${intent.flags}, categories=${intent.categories}, scheme=${intent.scheme}, selector=${intent.selector}, extras=[$extras]")
     }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
