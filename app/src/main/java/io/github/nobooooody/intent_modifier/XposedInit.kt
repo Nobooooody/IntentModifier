@@ -16,8 +16,28 @@ import org.json.JSONObject
 class XposedInit : IXposedHookLoadPackage {
 
     private fun logIntent(prefix: String, intent: Intent) {
-        val extras = intent.extras?.keySet()?.joinToString(",") ?: "null"
-        XposedBridge.log("$prefix pkg=${intent.`package`}, component=${intent.component}, action=${intent.action}, data=${intent.data}, dataString=${intent.dataString}, type=${intent.type}, flags=${intent.flags}, categories=${intent.categories}, scheme=${intent.scheme}, selector=${intent.selector}, extras=[$extras]")
+        val extrasStr = buildString {
+            intent.extras?.keySet()?.forEach { key ->
+                if (isNotEmpty()) append(", ")
+                append("$key=")
+                when (val v = intent.extras?.get(key)) {
+                    is Boolean -> append(v.toString())
+                    is BooleanArray -> append(v.contentToString())
+                    is Int -> append(v.toString())
+                    is IntArray -> append(v.contentToString())
+                    is Long -> append(v.toString())
+                    is LongArray -> append(v.contentToString())
+                    is Float -> append(v.toString())
+                    is FloatArray -> append(v.contentToString())
+                    is DoubleArray -> append(v.contentToString())
+                    is String -> append(v)
+                    is Array<*> -> append(v.contentToString())
+                    is android.os.Parcelable -> append(v.javaClass.simpleName)
+                    else -> append(v?.toString() ?: "null")
+                }
+            }
+        }
+        XposedBridge.log("$prefix pkg=${intent.`package`}, component=${intent.component}, action=${intent.action}, data=${intent.data}, dataString=${intent.dataString}, type=${intent.type}, flags=${intent.flags}, categories=${intent.categories}, scheme=${intent.scheme}, selector=${intent.selector}, extras={$extrasStr}")
     }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
