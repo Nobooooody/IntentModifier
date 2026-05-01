@@ -1,5 +1,7 @@
 # Intent Modifier - Roadmap
 
+[中文文档](./roadmap_cn.md)
+
 ## Project Overview
 
 Intent Modifier is an Android Xposed module that intercepts app launches and modifies intents in real-time, enabling advanced app launching and intent redirection capabilities.
