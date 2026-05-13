@@ -8,9 +8,39 @@ Intent Modifier is an Android Xposed module that intercepts app launches and mod
 
 ## Future Features
 
-### 1. Rule Engine with Pattern Matching
+### 1. Flexible Rule Engine with Java Code Support
 
-Implement a powerful rule engine that allows users to define complex matching conditions and transformations:
+Implement a powerful rule engine allowing direct Java code execution for maximum performance and flexibility:
+
+- **Java Code Conditions**
+  - Write Java expressions directly in condition field
+  - Access to Intent properties via built-in `intent` object
+  - Example: `intent.getPackage().contains("com.baidu")`
+  - Built-in variables: `intent` (the original Intent), `result` (modified Intent)
+
+- **Java Code Actions**
+  - Full Java code support including if/else, for loops, etc.
+  - Dynamic transformations using Java code
+  - Direct call to Intent setter methods
+  - String operations using Java String API
+  - Example with if/else:
+    ```java
+    if (intent.getPackage().contains("com.baidu")) {
+        result.setPackage(intent.getPackage().replace("com.baidu", "com.custom.baidu"));
+    } else if (intent.getPackage().contains("com.google")) {
+        result.setAction("android.intent.action.VIEW");
+    }
+    ```
+  - Modify intent APIs: `setAction()`, `setPackage()`, `setComponent()`, `setData()`, `setType()`, `addCategory()`, `removeCategory()`, `addFlags()`, `removeFlags()`, `putExtra()`, `removeExtra()`
+
+- **Execution Options**
+  - **Option A: JavaCompiler** - Wrap user code snippets into a class template, compile to bytecode at rule save time using `javax.tools.JavaCompiler`, load via ClassLoader at runtime. Best performance but increases APK size.
+  - **Option B: Reflection-based parser** - Parse expressions like `intent.getPackage().contains("xxx")` into method chains, invoke via reflection at runtime. Simpler implementation, acceptable performance for intent interception.
+  - **Option C: Script engine (optional)** - Integrate lightweight engines like QuickJS for balance between performance and flexibility.
+
+- **Advanced Features**
+  - Call system APIs: `ComponentName`, `Uri`, `Bundle` manipulation
+  - Access to Android system services (optional, with proper permissions)
 
 - **Intent Field Matching**
   - Match by action (e.g., `android.intent.action.MAIN`)
