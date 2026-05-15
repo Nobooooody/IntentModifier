@@ -144,7 +144,7 @@
     <string name="rule_name_hint">例如: 重定向百度</string>
     <string name="priority">优先级</string>
     <string name="condition_code">条件代码 (Condition)</string>
-    <string name="condition_hint">代码块需 return boolean; 语句需分号结尾，例如: intent.getPackage().contains("com.baidu");</string>
+    <string name="condition_hint">代码块需 return boolean; 语句需分号结尾，例如:\nintent.getPackage().contains("com.baidu");\n\n注意：某些启动器可能不设置getPackage()，可使用:\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
     <string name="action_code">动作代码 (Action)</string>
     <string name="action_hint">每条语句需以分号结尾，例如: result.setPackage("com.custom.package");</string>
     <string name="test_compile">测试编译</string>
