@@ -71,17 +71,26 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/buttonEdit"
+                style="@style/Widget.Material3.Button.TextButton.Icon"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="36dp"
                 android:text="@string/edit"
-                style="@style/Widget.Material3.Button.TextButton" />
+                android:textSize="12sp"
+                app:icon="@android:drawable/ic_menu_edit"
+                app:iconTint="?attr/colorPrimary"
+                app:iconSize="18dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/buttonDelete"
+                style="@style/Widget.Material3.Button.TextButton.Icon"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="36dp"
                 android:text="@string/delete"
-                style="@style/Widget.Material3.Button.TextButton" />
+                android:textSize="12sp"
+                android:textColor="?attr/colorError"
+                app:icon="@android:drawable/ic_menu_delete"
+                app:iconTint="?attr/colorError"
+                app:iconSize="18dp" />
 
         </LinearLayout>
 
