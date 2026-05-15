@@ -27,7 +27,7 @@
             android:name=".ui.JavaCodeRuleEditorActivity"
             android:exported="false"
             android:theme="@style/AppTheme"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustPan" />
 
         <meta-data
             android:name="xposedmodule"
