@@ -417,41 +417,55 @@ class ConflictResolutionAdapter(
         private val textName: android.widget.TextView = itemView.findViewById(R.id.textRuleName)
         private val textDetails: android.widget.TextView = itemView.findViewById(R.id.textRuleDetails)
         private val buttonDetails: com.google.android.material.button.MaterialButton = itemView.findViewById(R.id.buttonDetails)
-        private val radioGroup: android.widget.RadioGroup = itemView.findViewById(R.id.radioGroup)
+        private val chipReplace: com.google.android.material.chip.Chip = itemView.findViewById(R.id.chipReplace)
+        private val chipIgnore: com.google.android.material.chip.Chip = itemView.findViewById(R.id.chipIgnore)
+        private val chipRenameOld: com.google.android.material.chip.Chip = itemView.findViewById(R.id.chipRenameOld)
+        private val chipRenameNew: com.google.android.material.chip.Chip = itemView.findViewById(R.id.chipRenameNew)
 
         fun bind(position: Int, item: ConflictItem) {
             textName.text = item.rule.name
 
             val details = buildString {
-                if (item.rule.imports.isNotEmpty()) appendLine("Imports:\n${item.rule.imports}")
-                if (item.rule.members.isNotEmpty()) appendLine("Members:\n${item.rule.members}")
-                if (item.rule.condition.isNotEmpty()) appendLine("Condition:\n${item.rule.condition}")
-                if (item.rule.action.isNotEmpty()) appendLine("Action:\n${item.rule.action}")
+                if (item.rule.imports.isNotEmpty()) {
+                    appendLine("━━ Imports ━━")
+                    appendLine(item.rule.imports)
+                    appendLine()
+                }
+                if (item.rule.members.isNotEmpty()) {
+                    appendLine("━━ Members ━━")
+                    appendLine(item.rule.members)
+                    appendLine()
+                }
+                if (item.rule.condition.isNotEmpty()) {
+                    appendLine("━━ Condition ━━")
+                    appendLine(item.rule.condition)
+                    appendLine()
+                }
+                if (item.rule.action.isNotEmpty()) {
+                    appendLine("━━ Action ━━")
+                    appendLine(item.rule.action)
+                }
             }.trim()
 
             textDetails.text = details.ifEmpty { "(empty)" }
 
-            radioGroup.setOnCheckedChangeListener(null)
-            radioGroup.clearCheck()
+            chipReplace.isChecked = item.action == ConflictAction.REPLACE
+            chipIgnore.isChecked = item.action == ConflictAction.IGNORE
+            chipRenameOld.isChecked = item.action == ConflictAction.RENAME_OLD
+            chipRenameNew.isChecked = item.action == ConflictAction.RENAME_NEW
 
-            when (item.action) {
-                ConflictAction.REPLACE -> radioGroup.check(R.id.radioReplace)
-                ConflictAction.IGNORE -> radioGroup.check(R.id.radioIgnore)
-                ConflictAction.RENAME_OLD -> radioGroup.check(R.id.radioRenameOld)
-                ConflictAction.RENAME_NEW -> radioGroup.check(R.id.radioRenameNew)
-                else -> { }
-            }
-
-            radioGroup.setOnCheckedChangeListener { _, checkedId ->
-                val action = when (checkedId) {
-                    R.id.radioReplace -> ConflictAction.REPLACE
-                    R.id.radioIgnore -> ConflictAction.IGNORE
-                    R.id.radioRenameOld -> ConflictAction.RENAME_OLD
-                    R.id.radioRenameNew -> ConflictAction.RENAME_NEW
-                    else -> ConflictAction.NONE
-                }
+            val onChipCheckedListener = { action: ConflictAction ->
+                chipReplace.isChecked = action == ConflictAction.REPLACE
+                chipIgnore.isChecked = action == ConflictAction.IGNORE
+                chipRenameOld.isChecked = action == ConflictAction.RENAME_OLD
+                chipRenameNew.isChecked = action == ConflictAction.RENAME_NEW
                 onActionSelected(position, action)
             }
+
+            chipReplace.setOnClickListener { onChipCheckedListener(ConflictAction.REPLACE) }
+            chipIgnore.setOnClickListener { onChipCheckedListener(ConflictAction.IGNORE) }
+            chipRenameOld.setOnClickListener { onChipCheckedListener(ConflictAction.RENAME_OLD) }
+            chipRenameNew.setOnClickListener { onChipCheckedListener(ConflictAction.RENAME_NEW) }
 
             buttonDetails.setOnClickListener {
                 textDetails.visibility = if (textDetails.visibility == View.VISIBLE) View.GONE else View.VISIBLE

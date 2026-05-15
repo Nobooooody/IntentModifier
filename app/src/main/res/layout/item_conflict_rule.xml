@@ -47,44 +47,47 @@
             android:fontFamily="monospace"
             android:visibility="gone"
             android:background="?attr/colorSurfaceVariant"
-            android:padding="8dp" />
+            android:padding="12dp"
+            android:lineSpacingExtra="4dp" />
 
-        <RadioGroup
-            android:id="@+id/radioGroup"
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chipGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:orientation="horizontal">
+            app:singleSelection="true"
+            app:chipSpacingHorizontal="4dp"
+            app:chipSpacingVertical="4dp">
 
-            <RadioButton
-                android:id="@+id/radioReplace"
-                android:layout_width="0dp"
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipReplace"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:text="@string/conflict_action_replace_short" />
 
-            <RadioButton
-                android:id="@+id/radioIgnore"
-                android:layout_width="0dp"
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipIgnore"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:text="@string/conflict_action_ignore_short" />
 
-            <RadioButton
-                android:id="@+id/radioRenameOld"
-                android:layout_width="0dp"
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipRenameOld"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:text="@string/conflict_action_rename_old_short" />
 
-            <RadioButton
-                android:id="@+id/radioRenameNew"
-                android:layout_width="0dp"
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipRenameNew"
+                style="@style/Widget.Material3.Chip.Filter"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:text="@string/conflict_action_rename_new_short" />
 
-        </RadioGroup>
+        </com.google.android.material.chip.ChipGroup>
 
     </LinearLayout>
 
