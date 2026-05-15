@@ -415,14 +415,21 @@ class ConflictResolutionAdapter(
 
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val textName: android.widget.TextView = itemView.findViewById(R.id.textRuleName)
-        private val textInfo: android.widget.TextView = itemView.findViewById(R.id.textRuleInfo)
+        private val textDetails: android.widget.TextView = itemView.findViewById(R.id.textRuleDetails)
+        private val buttonDetails: com.google.android.material.button.MaterialButton = itemView.findViewById(R.id.buttonDetails)
         private val radioGroup: android.widget.RadioGroup = itemView.findViewById(R.id.radioGroup)
 
         fun bind(position: Int, item: ConflictItem) {
             textName.text = item.rule.name
-            val conditionPreview = if (item.rule.condition.length > 30) item.rule.condition.take(30) + "..." else item.rule.condition
-            val actionPreview = if (item.rule.action.length > 30) item.rule.action.take(30) + "..." else item.rule.action
-            textInfo.text = "Condition: $conditionPreview\nAction: $actionPreview"
+
+            val details = buildString {
+                if (item.rule.imports.isNotEmpty()) appendLine("Imports:\n${item.rule.imports}")
+                if (item.rule.members.isNotEmpty()) appendLine("Members:\n${item.rule.members}")
+                if (item.rule.condition.isNotEmpty()) appendLine("Condition:\n${item.rule.condition}")
+                if (item.rule.action.isNotEmpty()) appendLine("Action:\n${item.rule.action}")
+            }.trim()
+
+            textDetails.text = details.ifEmpty { "(empty)" }
 
             radioGroup.setOnCheckedChangeListener(null)
             radioGroup.clearCheck()
@@ -444,6 +451,10 @@ class ConflictResolutionAdapter(
                     else -> ConflictAction.NONE
                 }
                 onActionSelected(position, action)
+            }
+
+            buttonDetails.setOnClickListener {
+                textDetails.visibility = if (textDetails.visibility == View.VISIBLE) View.GONE else View.VISIBLE
             }
         }
     }

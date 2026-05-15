@@ -106,6 +106,7 @@
     <string name="import_conflict_message">Found %1$d conflicting rules. Do you want to continue?</string>
     <string name="import_conflict_apply_to_all">Apply to all conflicts</string>
     <string name="import_conflict_not_resolved">Please resolve all conflicts before confirming</string>
+    <string name="details">Details</string>
 
     <string name="conflict_action_replace">Replace old rule</string>
     <string name="conflict_action_ignore">Ignore (keep old)</string>
