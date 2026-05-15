@@ -10,8 +10,8 @@ android {
         applicationId = "io.github.nobooooody.intent_modifier"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
     }
 
     buildTypes {
