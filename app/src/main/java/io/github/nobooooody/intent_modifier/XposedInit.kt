@@ -161,7 +161,6 @@ class XposedInit : IXposedHookLoadPackage {
                 }
             } catch (e: Exception) {
                 XposedBridge.log("$TAG: Rule evaluation failed: ${e.message}")
-                XposedBridge.log("$TAG: Rule evaluation stacktrace: ${android.util.Log.getStackTraceString(e)}")
             }
         }
         return intent
