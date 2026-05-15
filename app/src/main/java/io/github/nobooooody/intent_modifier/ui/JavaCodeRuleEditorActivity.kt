@@ -116,14 +116,19 @@ class JavaCodeRuleEditorActivity : AppCompatActivity() {
                         condition = condition.ifBlank { null },
                         action = action.ifBlank { null }
                     ))
-                    val success = withContext(Dispatchers.IO) {
+                    val result = withContext(Dispatchers.IO) {
                         manager.compileAndStore(ruleSources)
                     }
-                    if (success) {
+                    if (result.success) {
                         textResult.text = getString(R.string.compile_success)
                         textResult.setTextColor(ContextCompat.getColor(this@JavaCodeRuleEditorActivity, R.color.green))
                     } else {
-                        textResult.text = getString(R.string.compile_failed)
+                        val errorMsg = result.errorMessage ?: getString(R.string.compile_failed)
+                        textResult.text = if (result.errorRuleName != null) {
+                            "${result.errorRuleName}:\n$errorMsg"
+                        } else {
+                            errorMsg
+                        }
                         textResult.setTextColor(ContextCompat.getColor(this@JavaCodeRuleEditorActivity, R.color.red))
                     }
                 } catch (e: Exception) {
@@ -171,17 +176,20 @@ class JavaCodeRuleEditorActivity : AppCompatActivity() {
                         .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }) }
 
                     if (ruleSources.isEmpty()) {
-                        Toast.makeText(this@JavaCodeRuleEditorActivity, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
-                        finish()
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@JavaCodeRuleEditorActivity, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
+                            finish()
+                        }
                     } else {
-                        val success = withContext(Dispatchers.IO) {
+                        val result = withContext(Dispatchers.IO) {
                             manager.compileAndStore(ruleSources)
                         }
                         withContext(Dispatchers.Main) {
-                            if (success) {
+                            if (result.success) {
                                 Toast.makeText(this@JavaCodeRuleEditorActivity, R.string.saved_and_compiled, Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(this@JavaCodeRuleEditorActivity, R.string.saved_but_compile_failed, Toast.LENGTH_SHORT).show()
+                                val errorMsg = result.errorMessage ?: getString(R.string.compile_failed)
+                                Toast.makeText(this@JavaCodeRuleEditorActivity, "${getString(R.string.saved)}\n$errorMsg", Toast.LENGTH_LONG).show()
                             }
                             finish()
                         }

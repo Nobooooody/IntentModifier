@@ -27,6 +27,12 @@ data class RuleSource(
     val action: String?
 )
 
+data class CompilationResult(
+    val success: Boolean,
+    val errorMessage: String? = null,
+    val errorRuleName: String? = null
+)
+
 class RuleCompilationManager(private val context: Context) {
     private val TAG = "RuleCompilationManager"
     private val setting = JavaEngineSetting(context)
@@ -52,32 +58,32 @@ class RuleCompilationManager(private val context: Context) {
         }
     }
     
-    fun compileAndStore(rules: List<RuleSource>, onProgress: ((String) -> Unit)? = null): Boolean {
+    fun compileAndStore(rules: List<RuleSource>, onProgress: ((String) -> Unit)? = null): CompilationResult {
         try {
             log("Starting compilation of ${rules.size} rules")
-            
+
             if (!setting.ensureAllJarsInstalled()) {
                 log("Failed to install required JAR files")
-                return false
+                return CompilationResult(false, "Failed to install required JAR files")
             }
-            
+
             val cacheDir = File(context.filesDir, "compile_cache").also { it.mkdirs() }
             cacheDir.deleteRecursively()
             cacheDir.mkdirs()
-            
+
             val classOutputDir = File(cacheDir, "classes").also { it.mkdirs() }
-            
+
             for ((index, rule) in rules.withIndex()) {
                 val ruleName = "Rule_$index"
                 val sourceCode = buildRuleTemplate(ruleName, rule.condition, rule.action)
                 val sourceFile = File(cacheDir, "$ruleName.java")
                 sourceFile.writeText(sourceCode)
-                
+
                 onProgress?.invoke("Compiling $ruleName...")
-                
+
                 val logFilePath = setting.createAndCleanFile(File(cacheDir, "compile_$ruleName.log"))
                 val printWriter = JavaPrintWriter(logFilePath)
-                
+
                 val compileCmd = arrayOf(
                     sourceFile.absolutePath,
                     "-d", classOutputDir.absolutePath,
@@ -89,17 +95,17 @@ class RuleCompilationManager(private val context: Context) {
                     "-time",
                     "-noExit"
                 )
-                
+
                 log("Compiling $ruleName")
                 val success = Main.compile(compileCmd, printWriter, printWriter, null)
                 printWriter.close()
-                
+
                 if (!success) {
                     val errorLog = File(logFilePath).readText()
                     log("Compilation failed for $ruleName:\n$errorLog")
-                    return false
+                    return CompilationResult(false, errorLog, ruleName)
                 }
-                
+
                 val classFile = File(classOutputDir, "engine/$ruleName.class")
                 if (!classFile.exists()) {
                     val altClassFile = File(classOutputDir, "$ruleName.class")
@@ -110,19 +116,19 @@ class RuleCompilationManager(private val context: Context) {
                     }
                 }
             }
-            
+
             onProgress?.invoke("Converting to DEX...")
             val dexFile = convertToDex(classOutputDir, cacheDir)
             if (dexFile == null || !dexFile.exists()) {
                 log("Failed to create DEX file")
-                return false
+                return CompilationResult(false, "Failed to create DEX file")
             }
-            
+
             val dexBytes = dexFile.readBytes()
             val dexBase64 = Base64.encodeToString(dexBytes, Base64.NO_WRAP)
             val version = System.currentTimeMillis()
             val rulesHash = computeRulesHash(rules)
-            
+
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_WORLD_READABLE or Context.MODE_MULTI_PROCESS)
             prefs.edit()
                 .putLong(KEY_COMPILED_VERSION, version)
@@ -130,13 +136,13 @@ class RuleCompilationManager(private val context: Context) {
                 .putString(KEY_RULES_HASH, rulesHash)
                 .putInt(KEY_RULE_COUNT, rules.size)
                 .apply()
-            
+
             log("Saved compiled DEX: ${dexBytes.size} bytes, version=$version, rules=${rules.size}")
-            return true
-            
+            return CompilationResult(true)
+
         } catch (e: Exception) {
             log("Compilation failed: ${e.message}")
-            return false
+            return CompilationResult(false, e.message ?: "Unknown error")
         }
     }
     
