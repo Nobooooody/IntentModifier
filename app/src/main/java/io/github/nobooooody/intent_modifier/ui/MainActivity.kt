@@ -192,6 +192,8 @@ class MainActivity : AppCompatActivity() {
                     importedRules.add(JavaCodeRule(
                         enabled = obj.optBoolean("enabled", true),
                         name = name,
+                        imports = obj.optString("imports", ""),
+                        members = obj.optString("members", ""),
                         condition = obj.optString("condition", ""),
                         action = obj.optString("action", ""),
                         priority = obj.optInt("priority", 0)
