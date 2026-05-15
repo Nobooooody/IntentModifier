@@ -1,0 +1,8 @@
+io.github.nobooooody.compiler.jdk8.compiler-jdk8-pngs-0 /home/nixos/AndroidStudioProjects/IntentModifier/compiler-jdk8/build/generated/res/pngs/debug
+io.github.nobooooody.compiler.jdk8.compiler-jdk8-updated_navigation_xml-1 /home/nixos/AndroidStudioProjects/IntentModifier/compiler-jdk8/build/generated/updated_navigation_xml/debug
+io.github.nobooooody.compiler.jdk8.compiler-jdk8-mergeDebugResources-2 /home/nixos/AndroidStudioProjects/IntentModifier/compiler-jdk8/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+io.github.nobooooody.compiler.jdk8.compiler-jdk8-mergeDebugResources-3 /home/nixos/AndroidStudioProjects/IntentModifier/compiler-jdk8/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+io.github.nobooooody.compiler.jdk8.compiler-jdk8-debug-4 /home/nixos/AndroidStudioProjects/IntentModifier/compiler-jdk8/build/intermediates/merged_res/debug/mergeDebugResources
+io.github.nobooooody.compiler.jdk8.compiler-jdk8-debug-5 /home/nixos/AndroidStudioProjects/IntentModifier/compiler-jdk8/build/intermediates/packaged_res/debug/packageDebugResources
+io.github.nobooooody.compiler.jdk8.compiler-jdk8-debug-6 /home/nixos/AndroidStudioProjects/IntentModifier/compiler-jdk8/src/debug/res
+io.github.nobooooody.compiler.jdk8.compiler-jdk8-main-7 /home/nixos/AndroidStudioProjects/IntentModifier/compiler-jdk8/src/main/res

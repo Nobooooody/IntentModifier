@@ -25,7 +25,7 @@
         };
         androidSdk = pkgs.androidenv.composeAndroidPackages {
           buildToolsVersions = [ "36.0.0" ];
-          platformVersions = [ "36.1" ];
+          platformVersions = [ "36" ];
           includeNDK = false;
           includeEmulator = false;
           includeSources = false;

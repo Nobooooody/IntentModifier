@@ -102,16 +102,28 @@
     <string name="import_rules">Import</string>
     <string name="import_from_file">Import from file</string>
     <string name="import_from_clipboard">Import from clipboard</string>
-    <string name="import_conflict_title">Import conflict</string>
-    <string name="import_conflict_replace">Replace all (delete old rules)</string>
-    <string name="import_conflict_merge_new">Keep new rules on conflict</string>
-    <string name="import_conflict_keep_old">Keep old rules on conflict</string>
+    <string name="import_conflict_title">Conflict Resolution</string>
+    <string name="import_conflict_message">Found %1$d conflicting rules. Do you want to continue?</string>
+    <string name="import_conflict_apply_to_all">Apply to all conflicts</string>
+    <string name="import_conflict_not_resolved">Please resolve all conflicts before confirming</string>
+
+    <string name="conflict_action_replace">Replace old rule</string>
+    <string name="conflict_action_ignore">Ignore (keep old)</string>
+    <string name="conflict_action_rename_old">Rename old to _old, keep new as-is</string>
+    <string name="conflict_action_rename_new">Rename new to _new, keep old as-is</string>
+
+    <string name="conflict_action_replace_short">Replace</string>
+    <string name="conflict_action_ignore_short">Ignore</string>
+    <string name="conflict_action_rename_old_short">Old→_old</string>
+    <string name="conflict_action_rename_new_short">New→_new</string>
+
     <string name="import_success">Imported %1$d rules</string>
     <string name="import_failed">Import failed</string>
+    <string name="import_cancelled">Import cancelled</string>
     <string name="action_import">Import</string>
 
     <!-- Navigation -->
-    <string name="nav_rules_title">规则</string>
+    <string name="nav_rules_title">规则引擎</string>
     <string name="nav_launchers_title">启动器</string>
     <string name="nav_settings_title">设置</string>
     <string name="settings">Settings</string>
@@ -124,4 +136,29 @@
     <string name="hook_instrumentation">Instrumentation (默认)</string>
     <string name="hook_launcher3">Launcher3 startActivitySafely</string>
     <string name="delete_launcher_message">删除 %1$s 的Hook设置?</string>
+
+    <!-- Java Code Rules -->
+    <string name="new_rule">新规则</string>
+    <string name="edit_rule">编辑规则</string>
+    <string name="rule_name">规则名称</string>
+    <string name="rule_name_hint">例如: 重定向百度</string>
+    <string name="priority">优先级</string>
+    <string name="condition_code">条件代码 (Condition)</string>
+    <string name="condition_hint">代码块需 return boolean; 语句需分号结尾，例如: intent.getPackage().contains("com.baidu");</string>
+    <string name="action_code">动作代码 (Action)</string>
+    <string name="action_hint">每条语句需以分号结尾，例如: result.setPackage("com.custom.package");</string>
+    <string name="test_compile">测试编译</string>
+    <string name="compile_success">编译成功!</string>
+    <string name="compile_failed">编译失败</string>
+    <string name="no_java_rules">暂无规则</string>
+    <string name="tap_to_add_rule">点击 + 添加新规则</string>
+    <string name="add_new_rule">添加规则</string>
+    <string name="delete_rule_confirm">删除规则 \"%1$s\"?</string>
+    <string name="condition_empty">条件为空，将匹配所有Intent</string>
+    <string name="priority_hint">数字越大优先级越高</string>
+    <string name="compiling">编译中...</string>
+    <string name="compiling_all_rules">正在编译所有规则...</string>
+    <string name="no_rules_to_compile">没有可编译的规则</string>
+    <string name="saved_and_compiled">已保存并编译</string>
+    <string name="saved_but_compile_failed">已保存但编译失败</string>
 </resources>

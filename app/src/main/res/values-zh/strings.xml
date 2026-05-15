@@ -95,12 +95,24 @@
     <string name="import_rules">导入</string>
     <string name="import_from_file">从文件导入</string>
     <string name="import_from_clipboard">从剪贴板导入</string>
-    <string name="import_conflict_title">导入冲突</string>
-    <string name="import_conflict_replace">替换全部 (删除旧规则)</string>
-    <string name="import_conflict_merge_new">冲突时保留新规则</string>
-    <string name="import_conflict_keep_old">冲突时保留旧规则</string>
+    <string name="import_conflict_title">冲突处理</string>
+    <string name="import_conflict_message">发现 %1$d 条冲突规则。是否继续处理？</string>
+    <string name="import_conflict_apply_to_all">对所有冲突应用</string>
+    <string name="import_conflict_not_resolved">请在确认前处理所有冲突</string>
+
+    <string name="conflict_action_replace">替换旧规则</string>
+    <string name="conflict_action_ignore">忽略（保留旧）</string>
+    <string name="conflict_action_rename_old">旧规则重命名→_old, 新规则保持原名</string>
+    <string name="conflict_action_rename_new">新规则重命名→_new, 旧规则保持原名</string>
+
+    <string name="conflict_action_replace_short">替换</string>
+    <string name="conflict_action_ignore_short">忽略</string>
+    <string name="conflict_action_rename_old_short">旧→_old</string>
+    <string name="conflict_action_rename_new_short">新→_new</string>
+
     <string name="import_success">已导入 %1$d 条规则</string>
     <string name="import_failed">导入失败</string>
+    <string name="import_cancelled">导入已取消</string>
     <string name="action_import">导入</string>
 
     <!-- Navigation -->

@@ -23,6 +23,12 @@
             android:exported="false"
             android:theme="@style/AppTheme" />
 
+        <activity
+            android:name=".ui.JavaCodeRuleEditorActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme"
+            android:windowSoftInputMode="adjustResize" />
+
         <meta-data
             android:name="xposedmodule"
             android:value="true" />

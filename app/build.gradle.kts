@@ -1,14 +1,10 @@
 plugins {
-    alias(libs.plugins.android.application)
+    id("com.android.application")
 }
 
 android {
     namespace = "io.github.nobooooody.intent_modifier"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "io.github.nobooooody.intent_modifier"
@@ -46,4 +42,13 @@ dependencies {
     implementation(libs.material)
     implementation(libs.coordinatorlayout)
     compileOnly(libs.xposed.api)
+    
+    // Eclipse JDT Java Compiler for Android
+    implementation("org.eclipse.jdt:ecj:3.26.0")
+    
+    // D8 for class to dex compilation (local jar)
+    implementation(files("libs/d8.jar"))
+    
+    // Java 8 stubs for Android (javax.lang.model, javax.tools, etc.)
+    implementation(project(":compiler-jdk8"))
 }

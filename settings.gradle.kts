@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "IntentModifier"
 include(":app")
+include(":compiler-jdk8")

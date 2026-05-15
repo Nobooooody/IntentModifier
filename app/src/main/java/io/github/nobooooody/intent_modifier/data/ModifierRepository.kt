@@ -2,8 +2,6 @@ package io.github.nobooooody.intent_modifier.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import org.json.JSONArray
-import org.json.JSONObject
 
 class ModifierRepository(private val context: Context) {
 
@@ -19,157 +17,6 @@ class ModifierRepository(private val context: Context) {
         prefs.edit().putBoolean(KEY_ENABLED, enabled).apply()
     }
 
-    fun getRules(): Map<String, AppIntentRule> {
-        val jsonStr = prefs.getString(KEY_RULES, "{}") ?: "{}"
-        return parseRulesJson(jsonStr)
-    }
-
-    fun parseRulesJson(jsonStr: String): Map<String, AppIntentRule> {
-        val result = mutableMapOf<String, AppIntentRule>()
-        try {
-            val json = JSONObject(jsonStr)
-            json.keys().forEach { packageName ->
-                val ruleJson = json.getJSONObject(packageName)
-                val rule = AppIntentRule(
-                    enabled = ruleJson.optBoolean("enabled", true),
-                    customAction = ruleJson.optString("customAction").ifEmpty { null },
-                    customData = ruleJson.optString("customData").ifEmpty { null },
-                    customPackage = ruleJson.optString("customPackage").ifEmpty { null },
-                    customClass = ruleJson.optString("customClass").ifEmpty { null },
-                    customFlags = if (ruleJson.has("customFlags")) ruleJson.getInt("customFlags") else null,
-                    customCategories = parseCategories(ruleJson.optJSONArray("customCategories")),
-                    customType = ruleJson.optString("customType").ifEmpty { null },
-                    extras = parseExtras(ruleJson.optJSONArray("extras"))
-                )
-                result[packageName] = rule
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return result
-    }
-
-    private fun parseExtras(json: JSONArray?): List<ExtraItem> {
-        if (json == null) return emptyList()
-        val result = mutableListOf<ExtraItem>()
-        for (i in 0 until json.length()) {
-            val obj = json.getJSONObject(i)
-            val valuesJson = obj.optJSONArray("values")
-            val values = if (valuesJson != null) {
-                (0 until valuesJson.length()).map { valuesJson.getString(it) }
-            } else {
-                listOf(obj.optString("value", ""))
-            }
-            result.add(ExtraItem(
-                key = obj.getString("key"),
-                type = obj.getString("type"),
-                values = values
-            ))
-        }
-        return result
-    }
-
-    private fun parseCategories(json: JSONArray?): List<String> {
-        if (json == null) return emptyList()
-        val result = mutableListOf<String>()
-        for (i in 0 until json.length()) {
-            result.add(json.getString(i))
-        }
-        return result
-    }
-
-    fun saveRule(packageName: String, rule: AppIntentRule?) {
-        val currentRules = getRules().toMutableMap()
-        if (rule != null) {
-            currentRules[packageName] = rule
-        } else {
-            currentRules.remove(packageName)
-        }
-
-        val json = JSONObject()
-        currentRules.forEach { (name, r) ->
-            val ruleJson = JSONObject().apply {
-                put("enabled", r.enabled)
-                r.customAction?.let { put("customAction", it) }
-                r.customData?.let { put("customData", it) }
-                r.customPackage?.let { put("customPackage", it) }
-                r.customClass?.let { put("customClass", it) }
-                r.customFlags?.let { put("customFlags", it) }
-                if (r.customCategories.isNotEmpty()) {
-                    val categoriesJson = JSONArray()
-                    r.customCategories.forEach { categoriesJson.put(it) }
-                    put("customCategories", categoriesJson)
-                }
-                r.customType?.let { put("customType", it) }
-                if (r.extras.isNotEmpty()) {
-                    val extrasJson = JSONArray()
-                    r.extras.forEach { extra ->
-                        extrasJson.put(JSONObject().apply {
-                            put("key", extra.key)
-                            put("type", extra.type)
-                            if (extra.values.size == 1) {
-                                put("value", extra.values[0])
-                            } else if (extra.values.isNotEmpty()) {
-                                val valuesJson = JSONArray()
-                                extra.values.forEach { valuesJson.put(it) }
-                                put("values", valuesJson)
-                            }
-                        })
-                    }
-                    put("extras", extrasJson)
-                }
-            }
-            json.put(name, ruleJson)
-        }
-
-        prefs.edit().putString(KEY_RULES, json.toString()).apply()
-    }
-
-    fun getRulesJson(): String {
-        return prefs.getString(KEY_RULES, "{}") ?: "{}"
-    }
-
-    fun saveAllRules(newRules: Map<String, AppIntentRule>) {
-        val filtered = newRules.filterValues { it.enabled || it.customAction != null || it.customData != null || it.customPackage != null || it.customClass != null || it.customFlags != null || it.customCategories.isNotEmpty() || it.customType != null || it.extras.isNotEmpty() }
-        val json = JSONObject()
-        filtered.forEach { (name, r) ->
-            val ruleJson = JSONObject().apply {
-                put("enabled", r.enabled)
-                r.customAction?.let { put("customAction", it) }
-                r.customData?.let { put("customData", it) }
-                r.customPackage?.let { put("customPackage", it) }
-                r.customClass?.let { put("customClass", it) }
-                r.customFlags?.let { put("customFlags", it) }
-                if (r.customCategories.isNotEmpty()) {
-                    val categoriesJson = JSONArray()
-                    r.customCategories.forEach { categoriesJson.put(it) }
-                    put("customCategories", categoriesJson)
-                }
-                r.customType?.let { put("customType", it) }
-if (r.extras.isNotEmpty()) {
-                    val extrasJson = JSONArray()
-                    r.extras.forEach { extra ->
-                        extrasJson.put(JSONObject().apply {
-                            put("key", extra.key)
-                            put("type", extra.type)
-                            if (extra.values.size == 1) {
-                                put("value", extra.values[0])
-                            } else if (extra.values.isNotEmpty()) {
-                                val valuesJson = JSONArray()
-                                extra.values.forEach { valuesJson.put(it) }
-                                put("values", valuesJson)
-                            }
-                        })
-                    }
-                    put("extras", extrasJson)
-                }
-            }
-            json.put(name, ruleJson)
-        }
-
-        prefs.edit().putString(KEY_RULES, json.toString()).apply()
-    }
-
     fun getLauncherHooks(): Map<String, LauncherHook> {
         val jsonStr = prefs.getString(KEY_LAUNCHER_HOOKS, "{}") ?: "{}"
         return parseLauncherHooksJson(jsonStr)
@@ -178,7 +25,7 @@ if (r.extras.isNotEmpty()) {
     private fun parseLauncherHooksJson(jsonStr: String): Map<String, LauncherHook> {
         val result = mutableMapOf<String, LauncherHook>()
         try {
-            val json = JSONObject(jsonStr)
+            val json = org.json.JSONObject(jsonStr)
             json.keys().forEach { pkg ->
                 val hookJson = json.getJSONObject(pkg)
                 result[pkg] = LauncherHook(
@@ -205,9 +52,9 @@ if (r.extras.isNotEmpty()) {
     }
 
     private fun saveLauncherHooks(hooks: Map<String, LauncherHook>) {
-        val json = JSONObject()
+        val json = org.json.JSONObject()
         hooks.forEach { (name, hook) ->
-            json.put(name, JSONObject().apply {
+            json.put(name, org.json.JSONObject().apply {
                 put("hookType", hook.hookType)
             })
         }
@@ -218,30 +65,73 @@ if (r.extras.isNotEmpty()) {
         return prefs.getString(KEY_LAUNCHER_HOOKS, "{}") ?: "{}"
     }
 
+    fun getJavaCodeRules(): List<JavaCodeRule> {
+        val jsonStr = prefs.getString(KEY_JAVA_CODE_RULES, "[]") ?: "[]"
+        return parseJavaCodeRulesJson(jsonStr)
+    }
+
+    private fun parseJavaCodeRulesJson(jsonStr: String): List<JavaCodeRule> {
+        val result = mutableListOf<JavaCodeRule>()
+        try {
+            val json = org.json.JSONArray(jsonStr)
+            for (i in 0 until json.length()) {
+                val obj = json.getJSONObject(i)
+                result.add(JavaCodeRule(
+                    enabled = obj.optBoolean("enabled", true),
+                    name = obj.optString("name", ""),
+                    condition = obj.optString("condition", ""),
+                    action = obj.optString("action", ""),
+                    priority = obj.optInt("priority", 0)
+                ))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return result
+    }
+
+    fun saveJavaCodeRules(rules: List<JavaCodeRule>) {
+        val json = org.json.JSONArray()
+        rules.forEach { rule ->
+            val ruleJson = org.json.JSONObject().apply {
+                put("enabled", rule.enabled)
+                put("name", rule.name)
+                put("condition", rule.condition)
+                put("action", rule.action)
+                put("priority", rule.priority)
+            }
+            json.put(ruleJson)
+        }
+        prefs.edit().putString(KEY_JAVA_CODE_RULES, json.toString()).apply()
+    }
+
+    fun getJavaCodeRulesJson(): String {
+        return prefs.getString(KEY_JAVA_CODE_RULES, "[]") ?: "[]"
+    }
+
+    fun getCompiledVersion(): Long = prefs.getLong(KEY_COMPILED_VERSION, 0)
+
+    fun saveCompiledDex(dexBase64: String, version: Long, ruleCount: Int) {
+        prefs.edit()
+            .putString(KEY_COMPILED_DEX, dexBase64)
+            .putLong(KEY_COMPILED_VERSION, version)
+            .putInt(KEY_RULE_COUNT, ruleCount)
+            .apply()
+    }
+
+    fun getCompiledDex(): String? = prefs.getString(KEY_COMPILED_DEX, null)
+
+    fun getRuleCount(): Int = prefs.getInt(KEY_RULE_COUNT, 0)
+
     companion object {
-        private const val KEY_RULES = "modifier_rules"
         private const val KEY_ENABLED = "module_enabled"
         private const val KEY_LAUNCHER_HOOKS = "launcher_hooks"
+        private const val KEY_JAVA_CODE_RULES = "java_code_rules"
+        private const val KEY_COMPILED_DEX = "compiled_dex"
+        private const val KEY_COMPILED_VERSION = "compiled_version"
+        private const val KEY_RULE_COUNT = "rule_count"
     }
 }
-
-data class ExtraItem(
-    val key: String,
-    val type: String,
-    val values: List<String> = emptyList()
-)
-
-data class AppIntentRule(
-    val enabled: Boolean = true,
-    val customAction: String? = null,
-    val customData: String? = null,
-    val customPackage: String? = null,
-    val customClass: String? = null,
-    val customFlags: Int? = null,
-    val customCategories: List<String> = emptyList(),
-    val customType: String? = null,
-    val extras: List<ExtraItem> = emptyList()
-)
 
 data class LauncherHook(
     val packageName: String,

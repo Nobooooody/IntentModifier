@@ -95,10 +95,21 @@
     <string name="import_rules">Import</string>
     <string name="import_from_file">Import from file</string>
     <string name="import_from_clipboard">Import from clipboard</string>
-    <string name="import_conflict_title">Import conflict</string>
-    <string name="import_conflict_replace">Replace all (delete old rules)</string>
-    <string name="import_conflict_merge_new">Keep new rules on conflict</string>
-    <string name="import_conflict_keep_old">Keep old rules on conflict</string>
+    <string name="import_conflict_title">Conflict Resolution</string>
+    <string name="import_conflict_message">Found %1$d conflicting rules. Do you want to continue?</string>
+    <string name="import_conflict_apply_to_all">Apply to all conflicts</string>
+    <string name="import_conflict_not_resolved">Please resolve all conflicts before confirming</string>
+
+    <string name="conflict_action_replace">Replace old rule</string>
+    <string name="conflict_action_ignore">Ignore (keep old)</string>
+    <string name="conflict_action_rename_old">Rename old to _old, keep new as-is</string>
+    <string name="conflict_action_rename_new">Rename new to _new, keep old as-is</string>
+
+    <string name="conflict_action_replace_short">Replace</string>
+    <string name="conflict_action_ignore_short">Ignore</string>
+    <string name="conflict_action_rename_old_short">Old→_old</string>
+    <string name="conflict_action_rename_new_short">New→_new</string>
+
     <string name="import_success">Imported %1$d rules</string>
     <string name="import_failed">Import failed</string>
     <string name="action_import">Import</string>
