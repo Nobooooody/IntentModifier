@@ -90,10 +90,21 @@ class MainActivity : AppCompatActivity() {
             else -> currentFragmentTag
         }
         supportFragmentManager.beginTransaction().replace(R.id.fragmentContainer, fragment).commit()
+        invalidateOptionsMenu()
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        menu.clear()
+        if (currentFragmentTag == "rules") {
+            menuInflater.inflate(R.menu.menu_rules, menu)
+        }
+        return super.onPrepareOptionsMenu(menu)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.menu_rules, menu)
+        if (currentFragmentTag == "rules") {
+            menuInflater.inflate(R.menu.menu_rules, menu)
+        }
         return true
     }
 
