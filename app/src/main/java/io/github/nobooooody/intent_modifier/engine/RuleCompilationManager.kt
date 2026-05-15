@@ -169,12 +169,14 @@ class RuleCompilationManager(private val context: Context) {
             val classFiles = classOutputDir.walkTopDown()
                 .filter { it.isFile && it.name.endsWith(".class") }
                 .toList()
-            
+
             if (classFiles.isEmpty()) {
                 log("No class files found")
                 return null
             }
-            
+
+            log("Found ${classFiles.size} class files")
+
             val jarFile = File(cacheDir, "temp_rules.jar")
             val jarOut = java.util.jar.JarOutputStream(java.io.FileOutputStream(jarFile))
             classFiles.forEach { file ->
@@ -184,40 +186,53 @@ class RuleCompilationManager(private val context: Context) {
                 jarOut.closeEntry()
             }
             jarOut.close()
-            
+
+            log("Created JAR: ${jarFile.absolutePath} (${jarFile.length()} bytes)")
+
             val dexOutputDir = File(cacheDir, "dex").also { it.mkdirs() }
             val dexFile = File(dexOutputDir, "classes.dex")
-            
+
             val compileCmd = arrayOf(
                 "--lib", setting.rtJarPath,
                 "--output", dexOutputDir.absolutePath,
                 "--release",
                 jarFile.absolutePath
             )
-            
-            log("Running D8...")
-            com.android.tools.r8.D8.run(
+
+            log("Running D8 with args: ${compileCmd.joinToString(" ")}")
+            val result = com.android.tools.r8.D8.run(
                 com.android.tools.r8.D8Command.parse(compileCmd, com.android.tools.r8.origin.Origin.root(), null).build()
             )
-            
+
+            log("D8 exit code: $result")
             jarFile.delete()
-            
+
             if (!dexFile.exists()) {
-                log("D8 failed to produce dex")
+                val dexFiles = dexOutputDir.listFiles()?.map { it.name } ?: emptyList()
+                log("D8 failed to produce dex. Files in dex dir: $dexFiles")
                 return null
             }
-            
+
+            log("DEX created: ${dexFile.absolutePath} (${dexFile.length()} bytes)")
             dexFile
         } catch (e: Exception) {
             log("D8 conversion failed: ${e.message}")
+            e.printStackTrace()
             null
         }
     }
-    
+
     private fun buildRuleTemplate(ruleName: String, ruleSource: RuleSource): String {
         val importsSection = ruleSource.imports.trim().let { imports ->
             if (imports.isNotEmpty()) {
-                imports.lines().joinToString("\n") { "import ${it.trim()};" }
+                imports.lines().joinToString("\n") { line ->
+                    val trimmed = line.trim()
+                    if (trimmed.isNotEmpty() && !trimmed.endsWith(";")) {
+                        "$trimmed;"
+                    } else {
+                        trimmed
+                    }
+                }
             } else {
                 ""
             }
