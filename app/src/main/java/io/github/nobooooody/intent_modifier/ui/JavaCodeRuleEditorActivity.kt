@@ -81,6 +81,8 @@ class JavaCodeRuleEditorActivity : AppCompatActivity() {
         val inputName = findViewById<TextInputEditText>(R.id.inputName)
         val switchEnabled = findViewById<MaterialSwitch>(R.id.switchEnabled)
         val inputPriority = findViewById<TextInputEditText>(R.id.inputPriority)
+        val inputImports = findViewById<TextInputEditText>(R.id.inputImports)
+        val inputMembers = findViewById<TextInputEditText>(R.id.inputMembers)
         val inputCondition = findViewById<TextInputEditText>(R.id.inputCondition)
         val inputAction = findViewById<TextInputEditText>(R.id.inputAction)
         val buttonTestCompile = findViewById<MaterialButton>(R.id.buttonTestCompile)
@@ -91,11 +93,15 @@ class JavaCodeRuleEditorActivity : AppCompatActivity() {
             inputName.setText(rule.name)
             switchEnabled.isChecked = rule.enabled
             inputPriority.setText(rule.priority.toString())
+            inputImports.setText(rule.imports)
+            inputMembers.setText(rule.members)
             inputCondition.setText(rule.condition)
             inputAction.setText(rule.action)
         }
 
         buttonTestCompile.setOnClickListener {
+            val imports = inputImports.text.toString()
+            val members = inputMembers.text.toString()
             val condition = inputCondition.text.toString()
             val action = inputAction.text.toString()
 
@@ -114,7 +120,9 @@ class JavaCodeRuleEditorActivity : AppCompatActivity() {
                     val manager = RuleCompilationManager(this@JavaCodeRuleEditorActivity)
                     val ruleSources = listOf(RuleSource(
                         condition = condition.ifBlank { null },
-                        action = action.ifBlank { null }
+                        action = action.ifBlank { null },
+                        imports = imports,
+                        members = members
                     ))
                     val result = withContext(Dispatchers.IO) {
                         manager.compileAndStore(ruleSources)
@@ -143,6 +151,8 @@ class JavaCodeRuleEditorActivity : AppCompatActivity() {
             val name = inputName.text.toString().trim()
             val enabled = switchEnabled.isChecked
             val priority = inputPriority.text.toString().toIntOrNull() ?: 0
+            val imports = inputImports.text.toString().trim()
+            val members = inputMembers.text.toString().trim()
             val condition = inputCondition.text.toString().trim()
             val action = inputAction.text.toString().trim()
 
@@ -156,10 +166,10 @@ class JavaCodeRuleEditorActivity : AppCompatActivity() {
             if (editingRule != null) {
                 val index = currentRules.indexOfFirst { it.name == editingRule!!.name }
                 if (index >= 0) {
-                    currentRules[index] = JavaCodeRule(enabled, name, condition, action, priority)
+                    currentRules[index] = JavaCodeRule(enabled, name, imports, members, condition, action, priority)
                 }
             } else {
-                currentRules.add(JavaCodeRule(enabled, name, condition, action, priority))
+                currentRules.add(JavaCodeRule(enabled, name, imports, members, condition, action, priority))
             }
 
             repo.saveJavaCodeRules(currentRules)
@@ -173,7 +183,7 @@ class JavaCodeRuleEditorActivity : AppCompatActivity() {
                     val ruleSources = currentRules
                         .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
                         .sortedByDescending { it.priority }
-                        .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }) }
+                        .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }, it.imports, it.members) }
 
                     if (ruleSources.isEmpty()) {
                         withContext(Dispatchers.Main) {

@@ -22,10 +22,12 @@ data class LoadedRuleInfo(
     val executeMethod: java.lang.reflect.Method
 )
 
-data class RuleSource(
-    val condition: String?,
-    val action: String?
-)
+    data class RuleSource(
+        val condition: String?,
+        val action: String?,
+        val imports: String = "",
+        val members: String = ""
+    )
 
 data class CompilationResult(
     val success: Boolean,
@@ -75,7 +77,7 @@ class RuleCompilationManager(private val context: Context) {
 
             for ((index, rule) in rules.withIndex()) {
                 val ruleName = "Rule_$index"
-                val sourceCode = buildRuleTemplate(ruleName, rule.condition, rule.action)
+                val sourceCode = buildRuleTemplate(ruleName, rule)
                 val sourceFile = File(cacheDir, "$ruleName.java")
                 sourceFile.writeText(sourceCode)
 
@@ -212,8 +214,31 @@ class RuleCompilationManager(private val context: Context) {
         }
     }
     
-    private fun buildRuleTemplate(ruleName: String, conditionCode: String?, actionCode: String?): String {
-        val conditionBody = conditionCode?.trim()?.let { code ->
+    private fun buildRuleTemplate(ruleName: String, ruleSource: RuleSource): String {
+        val importsSection = ruleSource.imports.trim().let { imports ->
+            if (imports.isNotEmpty()) {
+                imports.lines().joinToString("\n") { "import ${it.trim()};" }
+            } else {
+                ""
+            }
+        }
+
+        val membersSection = ruleSource.members.trim().let { members ->
+            if (members.isNotEmpty()) {
+                members.lines().joinToString("\n") { line ->
+                    val trimmed = line.trim()
+                    if (trimmed.isNotEmpty() && !trimmed.endsWith(";") && !trimmed.endsWith("{") && !trimmed.endsWith("}")) {
+                        "$trimmed;"
+                    } else {
+                        trimmed
+                    }
+                }
+            } else {
+                ""
+            }
+        }
+
+        val conditionBody = ruleSource.condition?.trim()?.let { code ->
             val processedCode = code.lines().joinToString("\n") { line ->
                 val trimmed = line.trim()
                 if (trimmed.isNotEmpty() && !trimmed.endsWith(";") && !trimmed.endsWith("{") && !trimmed.endsWith("}")) {
@@ -233,7 +258,7 @@ class RuleCompilationManager(private val context: Context) {
                 }
         """.trimIndent()
 
-        val actionBody = actionCode?.trim()?.let { code ->
+        val actionBody = ruleSource.action?.trim()?.let { code ->
             val processedCode = code.lines().joinToString("\n") { line ->
                 val trimmed = line.trim()
                 if (trimmed.isNotEmpty() && !trimmed.endsWith(";") && !trimmed.endsWith("{") && !trimmed.endsWith("}")) {
@@ -252,15 +277,24 @@ class RuleCompilationManager(private val context: Context) {
                 }
         """.trimIndent()
 
+        val baseImports = "import android.content.Intent;"
+        val allImports = if (importsSection.isNotEmpty()) {
+            "$baseImports\n$importsSection"
+        } else {
+            baseImports
+        }
+
         return """
             package engine;
-            
-            import android.content.Intent;
-            
+
+            $allImports
+
             public class $ruleName {
-                
+
+                $membersSection
+
                 $conditionBody
-                
+
                 $actionBody
             }
         """.trimIndent()

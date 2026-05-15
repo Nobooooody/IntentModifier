@@ -79,6 +79,8 @@ class ModifierRepository(private val context: Context) {
                 result.add(JavaCodeRule(
                     enabled = obj.optBoolean("enabled", true),
                     name = obj.optString("name", ""),
+                    imports = obj.optString("imports", ""),
+                    members = obj.optString("members", ""),
                     condition = obj.optString("condition", ""),
                     action = obj.optString("action", ""),
                     priority = obj.optInt("priority", 0)
@@ -96,6 +98,8 @@ class ModifierRepository(private val context: Context) {
             val ruleJson = org.json.JSONObject().apply {
                 put("enabled", rule.enabled)
                 put("name", rule.name)
+                put("imports", rule.imports)
+                put("members", rule.members)
                 put("condition", rule.condition)
                 put("action", rule.action)
                 put("priority", rule.priority)

@@ -359,7 +359,7 @@ class MainActivity : AppCompatActivity() {
         val rules = repo.getJavaCodeRules()
             .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
             .sortedByDescending { it.priority }
-            .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }) }
+            .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }, it.imports, it.members) }
 
         if (rules.isEmpty()) {
             return

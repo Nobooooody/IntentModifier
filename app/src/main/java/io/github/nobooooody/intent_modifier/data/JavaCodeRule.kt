@@ -3,6 +3,8 @@ package io.github.nobooooody.intent_modifier.data
 data class JavaCodeRule(
     val enabled: Boolean = true,
     val name: String = "",
+    val imports: String = "",
+    val members: String = "",
     val condition: String = "",
     val action: String = "",
     val priority: Int = 0

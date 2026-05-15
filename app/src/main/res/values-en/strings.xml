@@ -137,6 +137,10 @@
     <string name="priority">Priority</string>
     <string name="condition_code">Condition Code</string>
     <string name="condition_hint">Code block must return boolean; statements need semicolons, e.g.:\nintent.getPackage().contains("com.baidu");\n\nNote: Some launchers may not set getPackage(), use:\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
+    <string name="imports_code">Import Statements</string>
+    <string name="imports_hint">e.g.:\nimport android.util.Log;\nimport java.text.SimpleDateFormat;</string>
+    <string name="members_code">Member Code</string>
+    <string name="members_hint">Class fields and methods, e.g.:\nprivate static final String TAG = "MyApp";\nprivate boolean checkExtra(Intent intent) { return intent.hasExtra("key"); }</string>
     <string name="action_code">Action Code</string>
     <string name="action_hint">Statements need semicolons, e.g.:\nresult.setPackage("com.custom.package");</string>
     <string name="test_compile">Test Compile</string>
