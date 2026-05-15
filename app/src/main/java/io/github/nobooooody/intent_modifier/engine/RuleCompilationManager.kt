@@ -3,7 +3,11 @@ package io.github.nobooooody.intent_modifier.engine
 import android.content.Context
 import android.util.Base64
 import android.util.Log
+import com.android.tools.r8.D8
+import com.android.tools.r8.D8Command
+import com.android.tools.r8.OutputMode
 import dalvik.system.DexClassLoader
+import java.nio.file.Path
 import io.github.nobooooody.intent_modifier.compiler.JavaEngineSetting
 import io.github.nobooooody.intent_modifier.compiler.JavaPrintWriter
 import org.eclipse.jdt.internal.compiler.batch.Main
@@ -200,9 +204,11 @@ class RuleCompilationManager(private val context: Context) {
             )
 
             log("Running D8 with args: ${compileCmd.joinToString(" ")}")
-            val result = com.android.tools.r8.D8.run(
-                com.android.tools.r8.D8Command.parse(compileCmd, com.android.tools.r8.origin.Origin.root(), null).build()
-            )
+            val builder = D8Command.builder()
+            builder.addProgramFiles(jarFile.toPath())
+            builder.setOutput(dexOutputDir.toPath(), OutputMode.DexIndexed)
+            val command = builder.build()
+            val result = D8.run(command)
 
             log("D8 exit code: $result")
             jarFile.delete()
