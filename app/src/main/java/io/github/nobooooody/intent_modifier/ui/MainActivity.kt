@@ -758,7 +758,7 @@ class LauncherHookAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_app_rule, parent, false)
+            .inflate(R.layout.item_launcher_hook, parent, false)
         return ViewHolder(view)
     }
 
