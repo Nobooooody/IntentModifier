@@ -77,6 +77,8 @@
     <!-- App picker -->
     <string name="select_app">Select App</string>
     <string name="search_apps">Search apps</string>
+    <string name="loading_apps">Loading apps...</string>
+    <string name="refresh">Refresh</string>
 
     <!-- Summary -->
     <string name="summary_action">Action: %1$s</string>
