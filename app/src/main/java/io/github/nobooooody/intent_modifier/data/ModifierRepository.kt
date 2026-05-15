@@ -61,13 +61,13 @@ class ModifierRepository(private val context: Context) {
         prefs.edit().putString(KEY_LAUNCHER_HOOKS, json.toString()).apply()
     }
 
-    fun getLauncherHooksJson(): String {
-        return prefs.getString(KEY_LAUNCHER_HOOKS, "{}") ?: "{}"
-    }
-
     fun getJavaCodeRules(): List<JavaCodeRule> {
         val jsonStr = prefs.getString(KEY_JAVA_CODE_RULES, "[]") ?: "[]"
         return parseJavaCodeRulesJson(jsonStr)
+    }
+
+    fun getJavaCodeRulesJson(): String {
+        return prefs.getString(KEY_JAVA_CODE_RULES, "[]") ?: "[]"
     }
 
     private fun parseJavaCodeRulesJson(jsonStr: String): List<JavaCodeRule> {
@@ -105,10 +105,6 @@ class ModifierRepository(private val context: Context) {
         prefs.edit().putString(KEY_JAVA_CODE_RULES, json.toString()).apply()
     }
 
-    fun getJavaCodeRulesJson(): String {
-        return prefs.getString(KEY_JAVA_CODE_RULES, "[]") ?: "[]"
-    }
-
     fun getCompiledVersion(): Long = prefs.getLong(KEY_COMPILED_VERSION, 0)
 
     fun saveCompiledDex(dexBase64: String, version: Long, ruleCount: Int) {
@@ -138,10 +134,5 @@ data class LauncherHook(
     val hookType: String = HOOK_INSTRUMENTATION
 )
 
-object HookType {
-    const val INSTRUMENTATION = "android.app.Instrumentation"
-    const val LAUNCHER3 = "com.android.launcher3.Launcher"
-}
-
-const val HOOK_INSTRUMENTATION = HookType.INSTRUMENTATION
-const val HOOK_LAUNCHER3 = HookType.LAUNCHER3
+const val HOOK_INSTRUMENTATION = "android.app.Instrumentation"
+const val HOOK_LAUNCHER3 = "com.android.launcher3.Launcher"

@@ -22,6 +22,11 @@ data class LoadedRuleInfo(
     val executeMethod: java.lang.reflect.Method
 )
 
+data class RuleSource(
+    val condition: String?,
+    val action: String?
+)
+
 class RuleCompilationManager(private val context: Context) {
     private val TAG = "RuleCompilationManager"
     private val setting = JavaEngineSetting(context)

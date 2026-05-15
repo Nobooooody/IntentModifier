@@ -28,8 +28,8 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import io.github.nobooooody.intent_modifier.R
-import io.github.nobooooody.intent_modifier.HOOK_INSTRUMENTATION
-import io.github.nobooooody.intent_modifier.HOOK_LAUNCHER3
+import io.github.nobooooody.intent_modifier.data.HOOK_INSTRUMENTATION
+import io.github.nobooooody.intent_modifier.data.HOOK_LAUNCHER3
 import io.github.nobooooody.intent_modifier.data.JavaCodeRule
 import io.github.nobooooody.intent_modifier.data.LauncherHook
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
