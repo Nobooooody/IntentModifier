@@ -3,6 +3,8 @@ package io.github.nobooooody.intent_modifier.ui
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
@@ -11,7 +13,6 @@ import android.view.ViewGroup
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.progressindicator.CircularProgressIndicator
 import io.github.nobooooody.intent_modifier.R
 
 class AppPickerActivity : AppCompatActivity() {
@@ -48,18 +49,20 @@ class AppPickerActivity : AppCompatActivity() {
         }
         recyclerView.adapter = adapter
 
-        searchInput.setOnEditorActionListener { _, _, _ ->
-            val query = searchInput.text?.toString() ?: ""
-            adapter.filter(query)
-            true
-        }
+        searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                adapter.filter(s?.toString() ?: "")
+            }
+        })
 
         loadApps()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menu.add(Menu.NONE, Menu.FIRST, Menu.NONE, R.string.refresh)
-            .setIcon(android.R.drawable.ic_menu_rotate)
+            .setIcon(R.drawable.ic_refresh)
             .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
         return true
     }
@@ -85,7 +88,7 @@ class AppPickerActivity : AppCompatActivity() {
             runOnUiThread {
                 allApps = apps
                 adapter.updateApps(allApps)
-                adapter.filter("")
+                adapter.filter(searchInput.text?.toString() ?: "")
                 loadingContainer.visibility = View.GONE
                 contentContainer.visibility = View.VISIBLE
             }
