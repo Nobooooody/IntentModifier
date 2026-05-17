@@ -33,10 +33,15 @@ class XposedInit : IXposedHookLoadPackage {
         private const val KEY_RULES_HASH = "rules_hash"
         private const val KEY_RULE_COUNT = "rule_count"
 
+        private val MODULE_PACKAGE = "io.github.nobooooody.intent_modifier"
+
         private const val PROVIDER_AUTHORITY = "io.github.nobooooody.intent_modifier.provider"
         private val PROVIDER_URI_VERSION = Uri.parse("content://$PROVIDER_AUTHORITY/version")
         private val PROVIDER_URI_META = Uri.parse("content://$PROVIDER_AUTHORITY/meta")
         private val PROVIDER_URI_DEX = Uri.parse("content://$PROVIDER_AUTHORITY/dex")
+
+        val URI_VERSION: Uri get() = PROVIDER_URI_VERSION
+        val URI_DEX: Uri get() = PROVIDER_URI_DEX
     }
 
     private fun log(msg: String) {
@@ -183,7 +188,8 @@ class XposedInit : IXposedHookLoadPackage {
                 "getSystemContext"
             ) as Context
 
-            val cursor = ctx.contentResolver.query(PROVIDER_URI_VERSION, null, null, null, null)
+            val modulePkgCtx = ctx.createPackageContext(MODULE_PACKAGE, 0)
+            val cursor = modulePkgCtx.contentResolver.query(URI_VERSION, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val version = it.getLong(0)
@@ -194,7 +200,7 @@ class XposedInit : IXposedHookLoadPackage {
                 }
             }
         } catch (e: Exception) {
-            log("ContentProvider failed: ${e.message}")
+            log("ContentProvider version failed: ${e.message}")
         }
 
         return null
@@ -221,7 +227,8 @@ class XposedInit : IXposedHookLoadPackage {
                 "getSystemContext"
             ) as Context
 
-            val cursor = ctx.contentResolver.query(PROVIDER_URI_DEX, null, null, null, null)
+            val modulePkgCtx = ctx.createPackageContext(MODULE_PACKAGE, 0)
+            val cursor = modulePkgCtx.contentResolver.query(URI_DEX, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val dex = it.getString(0)
@@ -231,7 +238,7 @@ class XposedInit : IXposedHookLoadPackage {
                 }
             }
         } catch (e: Exception) {
-            log("ContentProvider dex read failed: ${e.message}")
+            log("ContentProvider dex failed: ${e.message}")
         }
 
         return null
