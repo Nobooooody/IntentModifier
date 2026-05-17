@@ -32,7 +32,7 @@
         <provider
             android:name=".ui.provider.RuleProvider"
             android:authorities="io.github.nobooooody.intent_modifier.provider"
-            android:exported="false"
+            android:exported="true"
             android:enabled="true" />
 
         <meta-data
