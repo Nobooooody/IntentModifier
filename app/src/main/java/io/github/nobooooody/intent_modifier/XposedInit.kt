@@ -98,10 +98,6 @@ class XposedInit : IXposedHookLoadPackage {
             val targetDataDir = "/data/data/$targetPkg"
 
             val remoteVersion = tryGetRemoteVersion(lpparam, ctx)
-            if (remoteVersion == null || remoteVersion == 0L) {
-                log("No remote rules found (XSharedPreferences and ContentProvider both failed)")
-                return
-            }
 
             val localDexFile = File("$targetDataDir/cache/intent_modifier_rules/rules.dex")
             val localMetaFile = File("$targetDataDir/cache/intent_modifier_rules/meta.json")
@@ -119,6 +115,16 @@ class XposedInit : IXposedHookLoadPackage {
                 } catch (e: Exception) {
                     log("Failed to read local meta: ${e.message}")
                 }
+            }
+
+            if (remoteVersion == null || remoteVersion == 0L) {
+                if (localDexFile.exists() && localRuleCount > 0) {
+                    log("No remote rules found, loading from local cache version=$localVersion")
+                    tryLoadLocalDex(lpparam, localDexFile, localRuleCount)
+                } else {
+                    log("No remote rules found (XSharedPreferences and ContentProvider both failed), and no local cache")
+                }
+                return
             }
 
             if (remoteVersion == localVersion && localDexFile.exists() && localRuleCount > 0) {
