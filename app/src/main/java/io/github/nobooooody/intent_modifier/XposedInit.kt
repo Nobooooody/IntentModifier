@@ -41,9 +41,6 @@ class XposedInit : IXposedHookLoadPackage {
         private val PROVIDER_URI_VERSION = Uri.parse("content://$PROVIDER_AUTHORITY/version")
         private val PROVIDER_URI_META = Uri.parse("content://$PROVIDER_AUTHORITY/meta")
         private val PROVIDER_URI_DEX = Uri.parse("content://$PROVIDER_AUTHORITY/dex")
-
-        val URI_VERSION: Uri get() = PROVIDER_URI_VERSION
-        val URI_DEX: Uri get() = PROVIDER_URI_DEX
     }
 
     private fun log(msg: String) {
@@ -145,8 +142,8 @@ class XposedInit : IXposedHookLoadPackage {
             }
 
             val dexBytes = Base64.decode(remoteDex, Base64.NO_WRAP)
-            val remoteHash = tryGetRemoteHash() ?: ""
-            val remoteRuleCount = tryGetRemoteRuleCount()
+            val remoteHash = tryGetRemoteHash(ctx) ?: ""
+            val remoteRuleCount = tryGetRemoteRuleCount(ctx)
 
             val rulesDir = File("$targetDataDir/cache/intent_modifier_rules")
             rulesDir.deleteRecursively()
@@ -181,7 +178,7 @@ class XposedInit : IXposedHookLoadPackage {
         }
 
         try {
-            val cursor = ctx?.contentResolver?.query(URI_VERSION, null, null, null, null)
+            val cursor = ctx?.contentResolver?.query(PROVIDER_URI_VERSION, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val version = it.getLong(0)
@@ -211,7 +208,7 @@ class XposedInit : IXposedHookLoadPackage {
         }
 
         try {
-            val cursor = ctx?.contentResolver?.query(URI_DEX, null, null, null, null)
+            val cursor = ctx?.contentResolver?.query(PROVIDER_URI_DEX, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val dex = it.getString(0)
@@ -227,24 +224,50 @@ class XposedInit : IXposedHookLoadPackage {
         return null
     }
 
-    private fun tryGetRemoteHash(): String? {
+    private fun tryGetRemoteHash(ctx: Context?): String? {
         try {
-            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", "intent_modifier_config")
+            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
             xprefs.makeWorldReadable()
             return xprefs.getString(KEY_RULES_HASH, null)
         } catch (e: Exception) {
-            return null
+            log("XSharedPreferences hash failed: ${e.message}")
         }
+
+        try {
+            val cursor = ctx?.contentResolver?.query(PROVIDER_URI_META, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    return it.getString(1)
+                }
+            }
+        } catch (e: Exception) {
+            log("ContentProvider hash failed: ${e.message}")
+        }
+
+        return null
     }
 
-    private fun tryGetRemoteRuleCount(): Int {
+    private fun tryGetRemoteRuleCount(ctx: Context?): Int {
         try {
-            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", "intent_modifier_config")
+            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
             xprefs.makeWorldReadable()
             return xprefs.getInt(KEY_RULE_COUNT, 0)
         } catch (e: Exception) {
-            return 0
+            log("XSharedPreferences rule count failed: ${e.message}")
         }
+
+        try {
+            val cursor = ctx?.contentResolver?.query(PROVIDER_URI_META, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    return it.getInt(2)
+                }
+            }
+        } catch (e: Exception) {
+            log("ContentProvider rule count failed: ${e.message}")
+        }
+
+        return 0
     }
 
     private fun tryLoadLocalDex(lpparam: XC_LoadPackage.LoadPackageParam, dexFile: File, ruleCount: Int) {
