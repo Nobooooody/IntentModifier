@@ -1,11 +1,16 @@
 package io.github.nobooooody.intent_modifier
 
 import android.app.Activity
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
+import android.database.Cursor
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Base64
+import android.util.Log
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -17,10 +22,25 @@ import java.io.File
 
 class XposedInit : IXposedHookLoadPackage {
 
-    companion object {
-        private val TAG = "IntentModifier"
-        private var lastVersion: Long = 0
-        private var compiledRules: CompiledRules? = null
+    private var lastVersion: Long = 0
+    private var compiledRules: CompiledRules? = null
+
+    private companion object {
+        private const val TAG = "IntentModifier"
+        private const val PREFS_NAME = "intent_modifier_config"
+        private const val KEY_COMPILED_VERSION = "compiled_version"
+        private const val KEY_COMPILED_DEX = "compiled_dex"
+        private const val KEY_RULES_HASH = "rules_hash"
+        private const val KEY_RULE_COUNT = "rule_count"
+
+        private const val PROVIDER_AUTHORITY = "io.github.nobooooody.intent_modifier.provider"
+        private val PROVIDER_URI_VERSION = Uri.parse("content://$PROVIDER_AUTHORITY/version")
+        private val PROVIDER_URI_META = Uri.parse("content://$PROVIDER_AUTHORITY/meta")
+        private val PROVIDER_URI_DEX = Uri.parse("content://$PROVIDER_AUTHORITY/dex")
+    }
+
+    private fun log(msg: String) {
+        XposedBridge.log("$TAG: $msg")
     }
 
     private fun logIntent(prefix: String, intent: Intent) {
@@ -50,10 +70,8 @@ class XposedInit : IXposedHookLoadPackage {
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         val currentPkg = lpparam.packageName
-        XposedBridge.log("$TAG: Loading package=$currentPkg")
 
         if (currentPkg == "io.github.nobooooody.intent_modifier") {
-            XposedBridge.log("$TAG: Skipping self")
             return
         }
 
@@ -64,14 +82,12 @@ class XposedInit : IXposedHookLoadPackage {
 
         when (hookType) {
             HOOK_LAUNCHER3 -> {
-                XposedBridge.log("$TAG: Using Launcher3 hook for $currentPkg")
                 hookLauncher3(lpparam)
             }
             HOOK_INSTRUMENTATION -> {
                 hookInstrumentation(lpparam)
             }
             else -> {
-                XposedBridge.log("$TAG: Using custom hook class: $hookType")
                 hookCustomClass(lpparam, hookType)
             }
         }
@@ -79,69 +95,203 @@ class XposedInit : IXposedHookLoadPackage {
 
     private fun loadRulesIfNeeded(lpparam: XC_LoadPackage.LoadPackageParam) {
         try {
-            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", "intent_modifier_config")
-            val version = xprefs.getLong("compiled_version", 0L)
-            val rulesCount = xprefs.getInt("rule_count", 0)
-            
-            if (version == 0L || rulesCount == 0) {
-                XposedBridge.log("$TAG: No compiled rules found")
-                return
-            }
-            
-            if (version == lastVersion && compiledRules != null) {
-                XposedBridge.log("$TAG: Using cached rules version=$version")
-                return
-            }
-            
-            XposedBridge.log("$TAG: Loading rules version=$version, count=$rulesCount")
-            
-            val dexBase64 = xprefs.getString("compiled_dex", null)
-            if (dexBase64.isNullOrEmpty()) {
-                XposedBridge.log("$TAG: No compiled dex in prefs")
-                return
-            }
-            
-            val dexBytes = Base64.decode(dexBase64, Base64.NO_WRAP)
-            XposedBridge.log("$TAG: DEX size: ${dexBytes.size} bytes")
-            
             val targetPkg = lpparam.packageName
             val targetDataDir = "/data/data/$targetPkg"
-            val loadedDir = File("$targetDataDir/cache/intent_modifier_rules")
-            loadedDir.deleteRecursively()
-            loadedDir.mkdirs()
-            
-            val dexFile = File(loadedDir, "rules.dex")
-            dexFile.writeBytes(dexBytes)
-            dexFile.setReadOnly()
-            
+
+            val remoteVersion = tryGetRemoteVersion(lpparam)
+            if (remoteVersion == null || remoteVersion == 0L) {
+                log("No remote rules found (XSharedPreferences and ContentProvider both failed)")
+                return
+            }
+
+            val localDexFile = File("$targetDataDir/cache/intent_modifier_rules/rules.dex")
+            val localMetaFile = File("$targetDataDir/cache/intent_modifier_rules/meta.json")
+
+            var localVersion = 0L
+            var localHash = ""
+            var localRuleCount = 0
+
+            if (localDexFile.exists() && localMetaFile.exists()) {
+                try {
+                    val metaJson = JSONObject(localMetaFile.readText())
+                    localVersion = metaJson.optLong("version", 0)
+                    localHash = metaJson.optString("hash", "")
+                    localRuleCount = metaJson.optInt("count", 0)
+                } catch (e: Exception) {
+                    log("Failed to read local meta: ${e.message}")
+                }
+            }
+
+            if (remoteVersion == localVersion && localDexFile.exists() && localRuleCount > 0) {
+                log("Local rules version=$localVersion is up to date")
+                tryLoadLocalDex(lpparam, localDexFile, localRuleCount)
+                return
+            }
+
+            log("Need to update rules: remote=$remoteVersion, local=$localVersion")
+            val remoteDex = tryGetRemoteDex()
+            if (remoteDex.isNullOrEmpty()) {
+                if (localDexFile.exists() && localRuleCount > 0) {
+                    log("No remote dex available, falling back to local")
+                    tryLoadLocalDex(lpparam, localDexFile, localRuleCount)
+                }
+                return
+            }
+
+            val dexBytes = Base64.decode(remoteDex, Base64.NO_WRAP)
+            val remoteHash = tryGetRemoteHash() ?: ""
+            val remoteRuleCount = tryGetRemoteRuleCount()
+
+            val rulesDir = File("$targetDataDir/cache/intent_modifier_rules")
+            rulesDir.deleteRecursively()
+            rulesDir.mkdirs()
+
+            localDexFile.writeBytes(dexBytes)
+            localDexFile.setReadOnly()
+            localMetaFile.writeText(JSONObject().apply {
+                put("version", remoteVersion)
+                put("hash", remoteHash)
+                put("count", remoteRuleCount)
+            }.toString())
+
+            tryLoadLocalDex(lpparam, localDexFile, remoteRuleCount)
+
+        } catch (e: Exception) {
+            log("Failed to load rules: ${e.message}")
+        }
+    }
+
+    private fun tryGetRemoteVersion(lpparam: XC_LoadPackage.LoadPackageParam): Long? {
+        try {
+            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
+            xprefs.makeWorldReadable()
+            val version = xprefs.getLong(KEY_COMPILED_VERSION, 0L)
+            if (version > 0) {
+                log("Got remote version=$version via XSharedPreferences")
+                return version
+            }
+        } catch (e: Exception) {
+            log("XSharedPreferences failed: ${e.message}")
+        }
+
+        try {
+            val ctx = XposedHelpers.callMethod(
+                XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("android.app.ActivityThread", null),
+                    "currentActivityThread"
+                ),
+                "getSystemContext"
+            ) as Context
+
+            val cursor = ctx.contentResolver.query(PROVIDER_URI_VERSION, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val version = it.getLong(0)
+                    if (version > 0) {
+                        log("Got remote version=$version via ContentProvider")
+                        return version
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log("ContentProvider failed: ${e.message}")
+        }
+
+        return null
+    }
+
+    private fun tryGetRemoteDex(): String? {
+        try {
+            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
+            xprefs.makeWorldReadable()
+            val dex = xprefs.getString(KEY_COMPILED_DEX, null)
+            if (!dex.isNullOrEmpty()) {
+                return dex
+            }
+        } catch (e: Exception) {
+            log("XSharedPreferences dex read failed: ${e.message}")
+        }
+
+        try {
+            val ctx = XposedHelpers.callMethod(
+                XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("android.app.ActivityThread", null),
+                    "currentActivityThread"
+                ),
+                "getSystemContext"
+            ) as Context
+
+            val cursor = ctx.contentResolver.query(PROVIDER_URI_DEX, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val dex = it.getString(0)
+                    if (!dex.isNullOrEmpty()) {
+                        return dex
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log("ContentProvider dex read failed: ${e.message}")
+        }
+
+        return null
+    }
+
+    private fun tryGetRemoteHash(): String? {
+        try {
+            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", "intent_modifier_config")
+            xprefs.makeWorldReadable()
+            return xprefs.getString(KEY_RULES_HASH, null)
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
+    private fun tryGetRemoteRuleCount(): Int {
+        try {
+            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", "intent_modifier_config")
+            xprefs.makeWorldReadable()
+            return xprefs.getInt(KEY_RULE_COUNT, 0)
+        } catch (e: Exception) {
+            return 0
+        }
+    }
+
+    private fun tryLoadLocalDex(lpparam: XC_LoadPackage.LoadPackageParam, dexFile: File, ruleCount: Int) {
+        try {
+            if (compiledRules != null && lastVersion > 0) {
+                return
+            }
+
+            val targetPkg = lpparam.packageName
+            val targetDataDir = "/data/data/$targetPkg"
             val optimizedDir = File("$targetDataDir/code_cache/optimized")
             optimizedDir.mkdirs()
+
             val dexClassLoader = dalvik.system.DexClassLoader(
                 dexFile.absolutePath,
                 optimizedDir.absolutePath,
                 dexFile.parentFile?.absolutePath,
                 lpparam.classLoader
             )
-            
+
             val rules = mutableListOf<LoadedRule>()
-            for (i in 0 until rulesCount) {
+            for (i in 0 until ruleCount) {
                 try {
                     val ruleClass = dexClassLoader.loadClass("engine.Rule_$i")
                     val evaluateMethod = ruleClass.getMethod("evaluate", Intent::class.java, Intent::class.java)
                     val executeMethod = ruleClass.getMethod("execute", Intent::class.java, Intent::class.java)
                     rules.add(LoadedRule(evaluateMethod, executeMethod))
-                    XposedBridge.log("$TAG: Loaded Rule_$i")
+                    log("Loaded Rule_$i")
                 } catch (e: Exception) {
-                    XposedBridge.log("$TAG: Failed to load Rule_$i: ${e.message}")
+                    log("Failed to load Rule_$i: ${e.message}")
                 }
             }
-            
-            lastVersion = version
+
             compiledRules = if (rules.isNotEmpty()) CompiledRules(rules) else null
-            XposedBridge.log("$TAG: Successfully loaded ${rules.size} rules")
-            
+            log("Successfully loaded ${rules.size} rules from local DEX")
         } catch (e: Exception) {
-            XposedBridge.log("$TAG: Failed to load rules: ${e.message}")
+            log("Failed to load local DEX: ${e.message}")
         }
     }
 
@@ -162,7 +312,7 @@ class XposedInit : IXposedHookLoadPackage {
                     break
                 }
             } catch (e: Exception) {
-                XposedBridge.log("$TAG: Rule evaluation failed: ${e.message}")
+                log("Rule evaluation failed: ${e.message}")
             }
         }
         return if (matched) resultIntent else intent
@@ -208,7 +358,7 @@ class XposedInit : IXposedHookLoadPackage {
                 }
             }
         } catch (e: Exception) {
-            XposedBridge.log("$TAG: Failed to hook Launcher3: ${e.message}")
+            log("Failed to hook Launcher3: ${e.message}")
         }
     }
 
@@ -233,7 +383,7 @@ class XposedInit : IXposedHookLoadPackage {
                             param.args[intentIndex] = modifiedIntent
                         }
                     })
-                    XposedBridge.log("$TAG: Hooked $hookClassName.$method")
+                    log("Hooked $hookClassName.$method")
                     hooked = true
                 }
             }
@@ -257,13 +407,13 @@ class XposedInit : IXposedHookLoadPackage {
                                 }
                             }
                         })
-                        XposedBridge.log("$TAG: Hooked $hookClassName.$method (fallback)")
+                        log("Hooked $hookClassName.$method (fallback)")
                         return
                     }
                 }
             }
         } catch (e: Exception) {
-            XposedBridge.log("$TAG: Failed to hook custom class $hookClassName: ${e.message}")
+            log("Failed to hook custom class $hookClassName: ${e.message}")
         }
     }
 }
@@ -294,6 +444,7 @@ object LauncherHooksLoader {
         val newHooks = mutableMapOf<String, LoadedLauncherHook>()
         try {
             val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", "intent_modifier_config")
+            xprefs.makeWorldReadable()
             val jsonStr = xprefs.getString("launcher_hooks", null)
             if (jsonStr.isNullOrEmpty() || jsonStr == "{}") {
                 hooks = emptyMap()

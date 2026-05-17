@@ -29,6 +29,12 @@
             android:theme="@style/AppTheme"
             android:windowSoftInputMode="adjustPan" />
 
+        <provider
+            android:name=".ui.provider.RuleProvider"
+            android:authorities="io.github.nobooooody.intent_modifier.provider"
+            android:exported="false"
+            android:enabled="true" />
+
         <meta-data
             android:name="xposedmodule"
             android:value="true" />
