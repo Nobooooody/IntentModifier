@@ -2,10 +2,15 @@ package io.github.nobooooody.intent_modifier.ui.provider
 
 import android.content.ContentProvider
 import android.content.ContentValues
+import android.content.Context
 import android.content.UriMatcher
+import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
+import android.os.Binder
+import android.os.Build
 
 class RuleProvider : ContentProvider() {
 
@@ -29,15 +34,73 @@ class RuleProvider : ContentProvider() {
         private const val KEY_COMPILED_DEX = "compiled_dex"
         private const val KEY_RULES_HASH = "rules_hash"
         private const val KEY_RULE_COUNT = "rule_count"
+
+        private const val MODULE_PKG = "io.github.nobooooody.intent_modifier"
+
+        private val URI_MATCHER = UriMatcher(UriMatcher.NO_MATCH).apply {
+            addURI(AUTHORITY, PATH_VERSION, CODE_VERSION)
+            addURI(AUTHORITY, PATH_DEX, CODE_DEX)
+            addURI(AUTHORITY, PATH_META, CODE_META)
+        }
     }
 
-    private val uriMatcher = UriMatcher(UriMatcher.NO_MATCH).apply {
-        addURI(AUTHORITY, PATH_VERSION, CODE_VERSION)
-        addURI(AUTHORITY, PATH_DEX, CODE_DEX)
-        addURI(AUTHORITY, PATH_META, CODE_META)
+    override fun onCreate(): Boolean {
+        context?.let { ctx ->
+            grantAccessToCaller(ctx)
+        }
+        return true
     }
 
-    override fun onCreate(): Boolean = true
+    private fun grantAccessToCaller(ctx: Context) {
+        try {
+            val callingUid = Binder.getCallingUid()
+            if (callingUid <= 0) return
+
+            val callingPkg = ctx.packageManager.getNameForUid(callingUid) ?: return
+
+            val callingSig = getPackageSignatures(ctx, callingPkg) ?: return
+            val moduleSig = getPackageSignatures(ctx, MODULE_PKG) ?: return
+
+            if (signaturesMatch(callingSig, moduleSig)) {
+                context?.contentResolver?.takePersistableUriPermission(
+                    URI_VERSION,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                )
+                context?.contentResolver?.takePersistableUriPermission(
+                    URI_DEX,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                )
+                context?.contentResolver?.takePersistableUriPermission(
+                    URI_META,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                )
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
+    private fun getPackageSignatures(ctx: Context, pkg: String): Array<Signature>? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                ctx.packageManager.getPackageInfo(
+                    pkg,
+                    PackageManager.GET_SIGNING_CERTIFICATES
+                ).signingInfo?.apkContentsSigners
+            } else {
+                @Suppress("DEPRECATION")
+                ctx.packageManager.getPackageInfo(pkg, PackageManager.GET_SIGNATURES)?.signatures
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun signaturesMatch(a: Array<Signature>, b: Array<Signature>): Boolean {
+        if (a.size != b.size) return false
+        val aSet = a.map { it.toByteArray().contentHashCode() }.toSet()
+        return b.all { bSig -> aSet.contains(bSig.toByteArray().contentHashCode()) }
+    }
 
     override fun query(
         uri: Uri,
@@ -46,10 +109,14 @@ class RuleProvider : ContentProvider() {
         selectionArgs: Array<out String>?,
         sortOrder: String?
     ): Cursor? {
-        val prefs = context!!.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+        val ctx = context ?: return null
+
+        grantAccessToCaller(ctx)
+
+        val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             ?: return null
 
-        return when (uriMatcher.match(uri)) {
+        return when (URI_MATCHER.match(uri)) {
             CODE_VERSION -> {
                 val version = prefs.getLong(KEY_COMPILED_VERSION, 0L)
                 val cursor = MatrixCursor(arrayOf("version"))
@@ -74,7 +141,7 @@ class RuleProvider : ContentProvider() {
         }
     }
 
-    override fun getType(uri: Uri): String? = when (uriMatcher.match(uri)) {
+    override fun getType(uri: Uri): String? = when (URI_MATCHER.match(uri)) {
         CODE_VERSION -> "vnd.android.cursor.item/long"
         CODE_DEX -> "vnd.android.cursor.item/string"
         CODE_META -> "vnd.android.cursor.item/string"
