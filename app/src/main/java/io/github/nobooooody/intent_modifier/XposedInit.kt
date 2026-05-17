@@ -37,8 +37,6 @@ class XposedInit : IXposedHookLoadPackage {
         private const val KEY_RULE_COUNT = "rule_count"
 
         private val MODULE_PACKAGE = "io.github.nobooooody.intent_modifier"
-
-        private const val PROVIDER_AUTHORITY = "io.github.nobooooody.intent_modifier.provider"
     }
 
     private fun log(msg: String) {
