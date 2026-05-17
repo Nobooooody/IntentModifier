@@ -1,6 +1,7 @@
 package io.github.nobooooody.intent_modifier
 
 import android.app.Activity
+import android.app.AndroidAppHelper
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
@@ -22,6 +23,7 @@ import java.io.File
 
 class XposedInit : IXposedHookLoadPackage {
 
+    var currentContext: Context? =  null
     private var lastVersion: Long = 0
     private var compiledRules: CompiledRules? = null
 
@@ -83,7 +85,6 @@ class XposedInit : IXposedHookLoadPackage {
         val launcherHooks = LauncherHooksLoader.getHooks()
         val hookType = launcherHooks[currentPkg]?.hookType ?: HOOK_INSTRUMENTATION
 
-        loadRulesIfNeeded(lpparam)
 
         when (hookType) {
             HOOK_LAUNCHER3 -> {
@@ -98,12 +99,12 @@ class XposedInit : IXposedHookLoadPackage {
         }
     }
 
-    private fun loadRulesIfNeeded(lpparam: XC_LoadPackage.LoadPackageParam) {
+    private fun loadRulesIfNeeded(lpparam: XC_LoadPackage.LoadPackageParam, ctx: Context?) {
         try {
             val targetPkg = lpparam.packageName
             val targetDataDir = "/data/data/$targetPkg"
 
-            val remoteVersion = tryGetRemoteVersion(lpparam)
+            val remoteVersion = tryGetRemoteVersion(lpparam, ctx)
             if (remoteVersion == null || remoteVersion == 0L) {
                 log("No remote rules found (XSharedPreferences and ContentProvider both failed)")
                 return
@@ -134,7 +135,7 @@ class XposedInit : IXposedHookLoadPackage {
             }
 
             log("Need to update rules: remote=$remoteVersion, local=$localVersion")
-            val remoteDex = tryGetRemoteDex()
+            val remoteDex = tryGetRemoteDex(ctx)
             if (remoteDex.isNullOrEmpty()) {
                 if (localDexFile.exists() && localRuleCount > 0) {
                     log("No remote dex available, falling back to local")
@@ -166,7 +167,7 @@ class XposedInit : IXposedHookLoadPackage {
         }
     }
 
-    private fun tryGetRemoteVersion(lpparam: XC_LoadPackage.LoadPackageParam): Long? {
+    private fun tryGetRemoteVersion(lpparam: XC_LoadPackage.LoadPackageParam, ctx: Context?): Long? {
         try {
             val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
             xprefs.makeWorldReadable()
@@ -180,16 +181,7 @@ class XposedInit : IXposedHookLoadPackage {
         }
 
         try {
-            val ctx = XposedHelpers.callMethod(
-                XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("android.app.ActivityThread", null),
-                    "currentActivityThread"
-                ),
-                "getSystemContext"
-            ) as Context
-
-            val modulePkgCtx = ctx.createPackageContext(MODULE_PACKAGE, 0)
-            val cursor = modulePkgCtx.contentResolver.query(URI_VERSION, null, null, null, null)
+            val cursor = ctx?.contentResolver?.query(URI_VERSION, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val version = it.getLong(0)
@@ -206,7 +198,7 @@ class XposedInit : IXposedHookLoadPackage {
         return null
     }
 
-    private fun tryGetRemoteDex(): String? {
+    private fun tryGetRemoteDex(ctx: Context?): String? {
         try {
             val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
             xprefs.makeWorldReadable()
@@ -219,16 +211,7 @@ class XposedInit : IXposedHookLoadPackage {
         }
 
         try {
-            val ctx = XposedHelpers.callMethod(
-                XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("android.app.ActivityThread", null),
-                    "currentActivityThread"
-                ),
-                "getSystemContext"
-            ) as Context
-
-            val modulePkgCtx = ctx.createPackageContext(MODULE_PACKAGE, 0)
-            val cursor = modulePkgCtx.contentResolver.query(URI_DEX, null, null, null, null)
+            val cursor = ctx?.contentResolver?.query(URI_DEX, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val dex = it.getString(0)
@@ -331,6 +314,10 @@ class XposedInit : IXposedHookLoadPackage {
             Context::class.java, IBinder::class.java, IBinder::class.java, Activity::class.java, Intent::class.java, Int::class.javaPrimitiveType, Bundle::class.java,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (currentContext == null) {
+                        currentContext = AndroidAppHelper.currentApplication().getApplicationContext()
+                    }
+                    loadRulesIfNeeded(lpparam,currentContext)
                     val intent = param.args[4] as? Intent ?: return
 
                     logIntent("$TAG: Original", intent)
@@ -351,6 +338,10 @@ class XposedInit : IXposedHookLoadPackage {
                 if (method.name == "startActivitySafely") {
                     XposedBridge.hookMethod(method, object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
+                            if (currentContext == null) {
+                                currentContext = AndroidAppHelper.currentApplication().getApplicationContext()
+                            }
+                            loadRulesIfNeeded(lpparam,currentContext)
                             val intent = param.args[1] as? Intent ?: return
 
                             logIntent("$TAG L3: Original", intent)
@@ -380,6 +371,10 @@ class XposedInit : IXposedHookLoadPackage {
                     val intentIndex = method.parameterTypes.indexOf(Intent::class.java)
                     XposedBridge.hookMethod(method, object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
+                            if (currentContext == null) {
+                                currentContext = AndroidAppHelper.currentApplication().getApplicationContext()
+                            }
+                            loadRulesIfNeeded(lpparam,currentContext)
                             val intent = param.args[intentIndex] as? Intent ?: return
 
                             logIntent("$TAG Custom: Original", intent)
@@ -400,6 +395,10 @@ class XposedInit : IXposedHookLoadPackage {
                     if (method.name.contains("startActivity")) {
                         XposedBridge.hookMethod(method, object : XC_MethodHook() {
                             override fun beforeHookedMethod(param: MethodHookParam) {
+                                if (currentContext == null) {
+                                    currentContext = AndroidAppHelper.currentApplication().getApplicationContext()
+                                }
+                                loadRulesIfNeeded(lpparam,currentContext)
                                 for (i in param.args.indices) {
                                     if (param.args[i] is Intent) {
                                         val intent = param.args[i] as Intent
