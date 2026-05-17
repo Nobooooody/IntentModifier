@@ -224,7 +224,11 @@ class XposedInit : IXposedHookLoadPackage {
         try {
             val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
             xprefs.makeWorldReadable()
-            return xprefs.getString(KEY_RULES_HASH, null)
+            val hash = xprefs.getString(KEY_RULES_HASH, null)
+            if (hash != null) {
+                log("Got hash=${hash.take(16)}... via XSharedPreferences")
+                return hash
+            }
         } catch (e: Exception) {
             log("XSharedPreferences hash failed: ${e.message}")
         }
@@ -232,7 +236,11 @@ class XposedInit : IXposedHookLoadPackage {
         try {
             ctx?.contentResolver?.query(RuleProvider.URI_HASH, null, null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
-                    return cursor.getString(0)
+                    val hash = cursor.getString(0)
+                    if (!hash.isNullOrEmpty()) {
+                        log("Got hash=${hash.take(16)}... via ContentProvider")
+                        return hash
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -246,7 +254,11 @@ class XposedInit : IXposedHookLoadPackage {
         try {
             val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
             xprefs.makeWorldReadable()
-            return xprefs.getInt(KEY_RULE_COUNT, 0)
+            val count = xprefs.getInt(KEY_RULE_COUNT, 0)
+            if (count > 0) {
+                log("Got rule count=$count via XSharedPreferences")
+                return count
+            }
         } catch (e: Exception) {
             log("XSharedPreferences rule count failed: ${e.message}")
         }
@@ -254,7 +266,9 @@ class XposedInit : IXposedHookLoadPackage {
         try {
             ctx?.contentResolver?.query(RuleProvider.URI_COUNT, null, null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
-                    return cursor.getInt(0)
+                    val count = cursor.getInt(0)
+                    log("Got rule count=$count via ContentProvider")
+                    return count
                 }
             }
         } catch (e: Exception) {
