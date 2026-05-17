@@ -173,7 +173,6 @@ class XposedInit : IXposedHookLoadPackage {
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     val intent = param.args[4] as? Intent ?: return
-                    if (intent.component == null) return
 
                     logIntent("$TAG: Original", intent)
                     val modifiedIntent = applyRules(intent)
@@ -194,7 +193,6 @@ class XposedInit : IXposedHookLoadPackage {
                     XposedBridge.hookMethod(method, object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
                             val intent = param.args[1] as? Intent ?: return
-                            if (intent.component == null) return
 
                             logIntent("$TAG L3: Original", intent)
                             val modifiedIntent = applyRules(intent)
@@ -224,7 +222,6 @@ class XposedInit : IXposedHookLoadPackage {
                     XposedBridge.hookMethod(method, object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
                             val intent = param.args[intentIndex] as? Intent ?: return
-                            if (intent.component == null) return
 
                             logIntent("$TAG Custom: Original", intent)
                             val modifiedIntent = applyRules(intent)
@@ -247,15 +244,13 @@ class XposedInit : IXposedHookLoadPackage {
                                 for (i in param.args.indices) {
                                     if (param.args[i] is Intent) {
                                         val intent = param.args[i] as Intent
-                                        if (intent.component != null) {
-                                            logIntent("$TAG Custom: Original", intent)
-                                            val modifiedIntent = applyRules(intent)
-                                            if (modifiedIntent !== intent) {
-                                                logIntent("$TAG Custom: Modified", modifiedIntent)
-                                            }
-                                            param.args[i] = modifiedIntent
-                                            return
+                                        logIntent("$TAG Custom: Original", intent)
+                                        val modifiedIntent = applyRules(intent)
+                                        if (modifiedIntent !== intent) {
+                                            logIntent("$TAG Custom: Modified", modifiedIntent)
                                         }
+                                        param.args[i] = modifiedIntent
+                                        return
                                     }
                                 }
                             }
