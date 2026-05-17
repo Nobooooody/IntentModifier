@@ -12,18 +12,25 @@ class RuleProvider : ContentProvider() {
 
     companion object {
         const val AUTHORITY = "io.github.nobooooody.intent_modifier.provider"
+
         const val PATH_VERSION = "version"
         const val PATH_DEX = "dex"
         const val PATH_META = "meta"
+        const val PATH_HASH = "hash"
+        const val PATH_COUNT = "count"
 
         private const val CODE_VERSION = 1
         private const val CODE_DEX = 2
         private const val CODE_META = 3
+        private const val CODE_HASH = 4
+        private const val CODE_COUNT = 5
 
         val CONTENT_URI: Uri = Uri.parse("content://$AUTHORITY")
         val URI_VERSION: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_VERSION)
         val URI_DEX: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_DEX)
         val URI_META: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_META)
+        val URI_HASH: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_HASH)
+        val URI_COUNT: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_COUNT)
 
         private const val PREFS_NAME = "intent_modifier_config"
         private const val KEY_COMPILED_VERSION = "compiled_version"
@@ -35,6 +42,8 @@ class RuleProvider : ContentProvider() {
             addURI(AUTHORITY, PATH_VERSION, CODE_VERSION)
             addURI(AUTHORITY, PATH_DEX, CODE_DEX)
             addURI(AUTHORITY, PATH_META, CODE_META)
+            addURI(AUTHORITY, PATH_HASH, CODE_HASH)
+            addURI(AUTHORITY, PATH_COUNT, CODE_COUNT)
         }
     }
 
@@ -71,6 +80,18 @@ class RuleProvider : ContentProvider() {
                 cursor.addRow(arrayOf(version, rulesHash, ruleCount))
                 cursor
             }
+            CODE_HASH -> {
+                val rulesHash = prefs.getString(KEY_RULES_HASH, "") ?: ""
+                val cursor = MatrixCursor(arrayOf("hash"))
+                cursor.addRow(arrayOf(rulesHash))
+                cursor
+            }
+            CODE_COUNT -> {
+                val ruleCount = prefs.getInt(KEY_RULE_COUNT, 0)
+                val cursor = MatrixCursor(arrayOf("count"))
+                cursor.addRow(arrayOf(ruleCount))
+                cursor
+            }
             else -> null
         }
     }
@@ -79,6 +100,8 @@ class RuleProvider : ContentProvider() {
         CODE_VERSION -> "vnd.android.cursor.item/long"
         CODE_DEX -> "vnd.android.cursor.item/string"
         CODE_META -> "vnd.android.cursor.item/string"
+        CODE_HASH -> "vnd.android.cursor.item/string"
+        CODE_COUNT -> "vnd.android.cursor.item/int"
         else -> null
     }
 

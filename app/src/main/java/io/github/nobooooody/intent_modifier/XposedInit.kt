@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import android.net.Uri
+import io.github.nobooooody.intent_modifier.ui.provider.RuleProvider
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -38,9 +39,6 @@ class XposedInit : IXposedHookLoadPackage {
         private val MODULE_PACKAGE = "io.github.nobooooody.intent_modifier"
 
         private const val PROVIDER_AUTHORITY = "io.github.nobooooody.intent_modifier.provider"
-        private val PROVIDER_URI_VERSION = Uri.parse("content://$PROVIDER_AUTHORITY/version")
-        private val PROVIDER_URI_META = Uri.parse("content://$PROVIDER_AUTHORITY/meta")
-        private val PROVIDER_URI_DEX = Uri.parse("content://$PROVIDER_AUTHORITY/dex")
     }
 
     private fun log(msg: String) {
@@ -178,7 +176,7 @@ class XposedInit : IXposedHookLoadPackage {
         }
 
         try {
-            val cursor = ctx?.contentResolver?.query(PROVIDER_URI_VERSION, null, null, null, null)
+            val cursor = ctx?.contentResolver?.query(RuleProvider.URI_VERSION, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val version = it.getLong(0)
@@ -208,7 +206,7 @@ class XposedInit : IXposedHookLoadPackage {
         }
 
         try {
-            val cursor = ctx?.contentResolver?.query(PROVIDER_URI_DEX, null, null, null, null)
+            val cursor = ctx?.contentResolver?.query(RuleProvider.URI_DEX, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val dex = it.getString(0)
@@ -234,10 +232,9 @@ class XposedInit : IXposedHookLoadPackage {
         }
 
         try {
-            val cursor = ctx?.contentResolver?.query(PROVIDER_URI_META, null, null, null, null)
-            cursor?.use {
-                if (it.moveToFirst()) {
-                    return it.getString(1)
+            ctx?.contentResolver?.query(RuleProvider.URI_HASH, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    return cursor.getString(0)
                 }
             }
         } catch (e: Exception) {
@@ -257,10 +254,9 @@ class XposedInit : IXposedHookLoadPackage {
         }
 
         try {
-            val cursor = ctx?.contentResolver?.query(PROVIDER_URI_META, null, null, null, null)
-            cursor?.use {
-                if (it.moveToFirst()) {
-                    return it.getInt(2)
+            ctx?.contentResolver?.query(RuleProvider.URI_COUNT, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    return cursor.getInt(0)
                 }
             }
         } catch (e: Exception) {
