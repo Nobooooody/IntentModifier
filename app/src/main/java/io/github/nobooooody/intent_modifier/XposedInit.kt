@@ -150,20 +150,22 @@ class XposedInit : IXposedHookLoadPackage {
         if (rules == null || rules.list.isEmpty()) {
             return intent
         }
-        
+
         val resultIntent = Intent(intent)
+        var matched = false
         for (rule in rules.list) {
             try {
                 val evalResult = rule.evaluateMethod.invoke(null, intent, resultIntent) as? Boolean ?: false
                 if (evalResult) {
                     rule.executeMethod.invoke(null, intent, resultIntent)
-                    return resultIntent
+                    matched = true
+                    break
                 }
             } catch (e: Exception) {
                 XposedBridge.log("$TAG: Rule evaluation failed: ${e.message}")
             }
         }
-        return intent
+        return if (matched) resultIntent else intent
     }
 
     private fun hookInstrumentation(lpparam: XC_LoadPackage.LoadPackageParam) {
