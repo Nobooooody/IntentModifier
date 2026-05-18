@@ -269,12 +269,12 @@ class RuleCompilationManager(private val context: Context) {
                 }
             }
             """
-                public static boolean evaluate(android.content.Intent intent, android.content.Intent result) {
+                public static boolean evaluate(android.content.Context ctx, android.content.Intent intent, android.content.Intent result) {
                     $processedCode
                 }
             """.trimIndent()
         } ?: """
-                public static boolean evaluate(android.content.Intent intent, android.content.Intent result) {
+                public static boolean evaluate(android.content.Context ctx, android.content.Intent intent, android.content.Intent result) {
                     return false;
                 }
         """.trimIndent()
@@ -289,16 +289,16 @@ class RuleCompilationManager(private val context: Context) {
                 }
             }
             """
-                public static void execute(android.content.Intent intent, android.content.Intent result) {
+                public static void execute(android.content.Context ctx, android.content.Intent intent, android.content.Intent result) {
                     $processedCode
                 }
             """.trimIndent()
         } ?: """
-                public static void execute(android.content.Intent intent, android.content.Intent result) {
+                public static void execute(android.content.Context ctx, android.content.Intent intent, android.content.Intent result) {
                 }
         """.trimIndent()
 
-        val baseImports = "import android.content.Intent;"
+        val baseImports = "import android.content.Context;\nimport android.content.Intent;"
         val allImports = if (importsSection.isNotEmpty()) {
             "$baseImports\n$importsSection"
         } else {

@@ -306,8 +306,8 @@ class XposedInit : IXposedHookLoadPackage {
             for (i in 0 until ruleCount) {
                 try {
                     val ruleClass = dexClassLoader.loadClass("engine.Rule_$i")
-                    val evaluateMethod = ruleClass.getMethod("evaluate", Intent::class.java, Intent::class.java)
-                    val executeMethod = ruleClass.getMethod("execute", Intent::class.java, Intent::class.java)
+                    val evaluateMethod = ruleClass.getMethod("evaluate", Context::class.java, Intent::class.java, Intent::class.java)
+                    val executeMethod = ruleClass.getMethod("execute", Context::class.java, Intent::class.java, Intent::class.java)
                     rules.add(LoadedRule(evaluateMethod, executeMethod))
                     log("Loaded Rule_$i")
                 } catch (e: Exception) {
@@ -332,9 +332,9 @@ class XposedInit : IXposedHookLoadPackage {
         var matched = false
         for (rule in rules.list) {
             try {
-                val evalResult = rule.evaluateMethod.invoke(null, intent, resultIntent) as? Boolean ?: false
+                val evalResult = rule.evaluateMethod.invoke(null, currentContext, intent, resultIntent) as? Boolean ?: false
                 if (evalResult) {
-                    rule.executeMethod.invoke(null, intent, resultIntent)
+                    rule.executeMethod.invoke(null, currentContext, intent, resultIntent)
                     matched = true
                     break
                 }
