@@ -1,6 +1,6 @@
 # Intent Modifier - 使用指南
 
-[English documentation](./usage.md)
+[English documentation](./USAGE.md)
 
 ## 快速开始
 
@@ -13,74 +13,108 @@
 
 ### 添加规则
 
-1. 在"规则"页面点击 **+** 按钮
-2. 选择要配置的应用
-3. 设置需要的修改：
-   - **自定义 Action**：覆盖 intent action（如 `android.intent.action.VIEW`）
-   - **自定义 Data**：设置自定义 data URI
-   - **自定义 Package**：重定向到其他应用
-   - **自定义 Class**：覆盖 activity 类
-   - **Flags**：设置 intent flags（如 `270532608`）
-   - **Categories**：添加 intent categories
-   - **MIME Type**：设置 MIME 类型
-   - **Extras**：添加键值对
+1. 进入**规则**页面
+2. 点击 **+** 按钮
+3. 编写 Java 代码规则：
+   - **Imports（导入语句）**：自定义 `import` 语句（如 `import android.net.Uri;`）
+   - **Members（成员代码）**：类的字段和辅助方法
+   - **Condition（条件代码）**：返回 `boolean` 的 Java 代码
+   - **Action（动作代码）**：修改 `result` Intent 的 Java 代码
+4. 设置优先级（数字越大越先检查）
+5. 点击**测试编译**检查错误
+6. 点击**保存**编译并激活规则
 
-### 理解 Intent 字段
+### 规则字段
 
-| 字段 | 说明 | 示例 |
-|-------|------|------|
-| Action | Intent action | `android.intent.action.MAIN` |
-| Data | Intent URI | `content://com.example.app` |
-| Package | 目标应用包名 | `com.android.settings` |
-| Class | 目标 activity | `.MainActivity` |
-| Flags | Activity 启动标志 | `270532608` |
-| Category | Intent 类别 | `android.intent.category.LAUNCHER` |
-| Type | MIME 类型 | `image/png` |
+| 字段 | 说明 |
+|------|------|
+| Imports | 自定义 `import` 语句，引入外部类 |
+| Members | 类的字段和辅助方法 |
+| Condition | 返回 `boolean` 的 Java 代码 — 判断规则是否匹配 |
+| Action | 修改 `result` Intent 的 Java 代码 |
+| Priority | 数字越大越先检查（首个匹配生效） |
 
-### Extra 类型
+### 内置变量
 
-支持的 extra 值类型：
+在 **Condition** 和 **Action** 中可以使用：
 
-- **Boolean** - `true` 或 `false`
-- **Integer** - 整数（如 `123`）
-- **Long** - 大整数（如 `9223372036854775807`）
-- **Float** - 小数（如 `3.14`）
-- **String** - 文本
-- **URI** - Content 或文件 URI
+- `ctx` — `android.content.Context` — 可用于日志输出、Toast、调用系统服务
+- `intent` — `android.content.Intent` — **原始** Intent（被启动的 App）
+- `result` — `android.content.Intent` — **修改后** 的 Intent（实际被启动的）
 
-### 数组类型
+### 规则示例
 
-- **BooleanArray** - 多个布尔值
-- **IntegerArray** - 多个整数
-- **LongArray** - 多个长整数
-- **FloatArray** - 多个小数
-- **StringArray** - 多个字符串
-- **ByteArray**, **CharArray**, **ShortArray**, **DoubleArray**
+**重定向抖音到特定 Tab：**
+```java
+// Imports
+import android.net.Uri;
+
+// Members
+public static String getPkg(Intent i) {
+    return i.getPackage() != null ? i.getPackage() : i.getComponent() != null ? i.getComponent().getPackageName() : null;
+}
+
+// Condition
+return "com.ss.android.ugc.aweme".equals(getPkg(intent));
+
+// Action
+result.setData(Uri.parse("snssdk1128://land_tab?tabid=homepage_notification"));
+```
+
+**重定向百度系应用：**
+```java
+// Condition
+return intent.getPackage() != null && intent.getPackage().contains("baidu");
+
+// Action
+result.setPackage("com.example.custom");
+```
+
+**打印日志并修改：**
+```java
+// Imports
+import android.util.Log;
+
+// Condition
+Log.d("MyRule", "Launching: " + intent.getPackage());
+return intent.getPackage() != null && intent.getPackage().contains("baidu");
+
+// Action
+Log.d("MyRule", "Redirecting to custom package");
+result.setPackage("com.example.custom");
+```
 
 ### 配置启动器 Hook
 
-1. 进入"启动器"页面
-2. 添加启动器应用
-3. 选择 hook 方式：
-   - **Instrumentation（默认）**：Hook `android.app.Instrumentation.execStartActivity`
-   - **Launcher3**：Hook `com.android.launcher3.Launcher.startActivitySafely`
+1. 进入**启动器**页面
+2. 点击 **+**
+3. 选择一个启动器应用
+4. 选择 hook 方式：
+   - **Instrumentation（默认）**：Hook `android.app.Instrumentation.execStartActivity` — 适用于大多数应用
+   - **Launcher3**：Hook `com.android.launcher3.Launcher.startActivitySafely` — 适用于 Lawnchair/Pixel Launcher 系列
+   - **Custom（自定义）**：Hook 用户指定的类
 
-### 导出/导入
+### 导出 / 导入
 
 **导出：**
-- 点击菜单 → 导出到文件 或 复制到剪贴板
+- 点击菜单（⋮）→ 导出到文件 或 复制到剪贴板
 
 **导入：**
-- 点击菜单 → 从文件导入 或 从剪贴板导入
-- 选择冲突处理方式：
-  - **替换全部**：删除旧规则
-  - **保留新规则**：冲突时覆盖
-  - **保留旧规则**：冲突时跳过
+- 点击菜单（⋮）→ 从文件导入 或 从剪贴板导入
+- 冲突按每条规则独立解决，四种选项：
+  - **Replace（替换）**：用新规则覆盖旧规则
+  - **Ignore（忽略）**：保留旧规则，丢弃新规则
+  - **Rename Old→_old（重命名旧）**：保留两条，旧的加 `_old` 后缀
+  - **Rename New→_new（重命名新）**：保留两条，新的加 `_new` 后缀
 
 ### 切换语言
 
-1. 进入"设置"页面
-2. 选择语言：
-   - **跟随系统**
-   - **English**
-   - **Chinese**
+1. 进入**设置**页面
+2. 点击语言卡片
+3. 选择**跟随系统**、**English** 或 **Chinese**
+
+## 构建
+
+```bash
+./gradlew assembleDebug
+```

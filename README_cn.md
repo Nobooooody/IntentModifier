@@ -4,53 +4,61 @@
 
 ## 功能介绍
 
-Intent Modifier 会钩入主流 Android 启动器（Lawnchair、Pixel Launcher、Launcher3），拦截应用启动的 Intent，并根据用户定义的规则进行修改。这允许您：
-
-- **自定义应用启动行为** - 将应用重定向到不同的 Activity
-- **修改 Intent Extras** - 添加或覆盖额外参数
-- **更改 Intent Action** - 覆盖启动应用时的 Action
-- **覆盖 Data URI** - 为特定应用设置自定义数据
+Intent Modifier 是一个安卓 Xposed 模块，通过用户编写的 Java 代码规则拦截应用启动并实时修改 Intent。编写 Java 代码来匹配 Intent 并随心所欲地修改它们——重定向到不同 Activity、修改 Data URI、添加 Extras 等。
 
 ## 功能特性
 
-- **Material Design 3 UI** - 现代外观，支持动态颜色（从壁纸提取颜色）
-- **导出/导入规则** - 备份和恢复配置
-  - 导出到文件或剪贴板
-  - 从文件或剪贴板导入，支持冲突解决：
-    - 替换全部（删除旧规则）
-    - 冲突时保留新规则
-    - 冲突时保留旧规则
-- **按应用配置** - 为每个应用配置不同的修改
-- **Extras 支持** - 支持多种类型（Boolean、Integer、Long、String 等）
+- **Java 代码规则** - 用真正的 Java 代码编写条件匹配和 Intent 修改逻辑
+- **丰富的内置变量** - `ctx`（Context）、`intent`（原始 Intent）、`result`（修改后的 Intent）
+- **自定义导入和方法** - 每条规则可定义自己的 imports、字段和辅助方法
+- **规则优先级** - 优先级越高的规则越先被检查
+- **Material Design 3 UI** - 现代外观，支持动态颜色
+- **导出 / 导入** - 备份和恢复，每条规则独立解决冲突（替换 / 忽略 / 重命名）
+- **跨框架兼容** - 通过双重传输（XSharedPreferences + ContentProvider）支持 LSPosed、EdXposed、FPA、npatch
 
 ## 支持的启动器
 
-- Lawnchair (app.lawnchair, app.lawnchair.play)
-- Pixel Launcher (com.google.android.apps.nexuslauncher)
-- Launcher3 (com.android.launcher3, com.android.launcher)
+- Lawnchair
+- Pixel Launcher
+- Launcher3
+- 任何使用 Instrumentation 或 Launcher3 的启动器
 
 ## 安装
 
 1. 安装 APK
 2. 在 LSPosed/Xposed 中启用模块
-3. 配置模块作用域以包含您的启动器
+3. 配置模块作用域以包含你的启动器
 4. 打开应用添加规则
 
-## 使用方法
+## 快速使用
 
-1. 点击 **+ 添加应用规则** 按钮添加新规则
-2. 选择要配置的应用
-3. 设置所需的修改：
-   - 自定义 Action
-   - 自定义 Data (URI)
-   - 自定义 Package
-   - 自定义 Class
-   - Extras（键值对及其类型）
-4. 使用开关启用/禁用每条规则
+1. 进入**规则**页面
+2. 点击 **+**
+3. 编写 Java 代码：
+   - **Condition**：返回 `boolean` — 返回 `true` 时执行 Action
+   - **Action**：修改 `result` Intent
+4. 点击**测试编译**，然后**保存**
+
+示例 — 重定向抖音到特定 Tab：
+
+```java
+// Imports
+import android.net.Uri;
+
+// Members
+public static String getPkg(Intent i) {
+    return i.getPackage() != null ? i.getPackage()
+        : i.getComponent() != null ? i.getComponent().getPackageName() : null;
+}
+
+// Condition
+return "com.ss.android.ugc.aweme".equals(getPkg(intent));
+
+// Action
+result.setData(Uri.parse("snssdk1128://land_tab?tabid=homepage_notification"));
+```
 
 ## 构建
-
-本项目使用 **MiniMax M2.5** 作为 AI 编程助手完成（vibe coding 方式）。
 
 ```bash
 ./gradlew assembleDebug

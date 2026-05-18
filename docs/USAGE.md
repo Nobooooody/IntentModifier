@@ -1,6 +1,6 @@
 # Intent Modifier - Usage
 
-[中文文档](./usage_cn.md)
+[中文文档](./USAGE_cn.md)
 
 ## Quick Start
 
@@ -13,74 +13,108 @@
 
 ### Adding a Rule
 
-1. Tap the **+** button on the Rules page
-2. Select an app to configure
-3. Set the desired modifications:
-   - **Custom Action**: Override the intent action (e.g., `android.intent.action.VIEW`)
-   - **Custom Data**: Set a custom data URI
-   - **Custom Package**: Redirect to a different app
-   - **Custom Class**: Override the activity class
-   - **Flags**: Set intent flags (e.g., `270532608`)
-   - **Categories**: Add intent categories
-   - **MIME Type**: Set the MIME type
-   - **Extras**: Add key-value pairs with specific types
+1. Go to the **Rules** tab
+2. Tap the **+** button
+3. Write your Java code rule:
+   - **Imports**: Custom `import` statements (e.g., `import android.net.Uri;`)
+   - **Members**: Class fields and helper methods
+   - **Condition**: Java code that returns `boolean`
+   - **Action**: Java code modifying the `result` Intent
+4. Set priority (higher = checked first)
+5. Tap **Test Compile** to check for errors
+6. Tap **Save** to compile and activate
 
-### Understanding Intent Fields
+### Rule Fields
 
-| Field | Description | Example |
-|-------|-------------|---------|
-| Action | The intent action | `android.intent.action.MAIN` |
-| Data | URI for the intent | `content://com.example.app` |
-| Package | Target app package | `com.android.settings` |
-| Class | Target activity class | `.MainActivity` |
-| Flags | Activity launch flags | `270532608` |
-| Category | Intent category | `android.intent.category.LAUNCHER` |
-| Type | MIME type | `image/png` |
+| Field | Description |
+|-------|-------------|
+| Imports | Custom `import` statements for external classes |
+| Members | Class fields and helper methods |
+| Condition | Java code returning `boolean` — determines if the rule matches |
+| Action | Java code modifying the `result` Intent |
+| Priority | Higher number = checked first (first match wins) |
 
-### Extra Types
+### Built-in Variables
 
-Supported extra value types:
+In **Condition** and **Action**, you have access to:
 
-- **Boolean** - `true` or `false`
-- **Integer** - Whole numbers (e.g., `123`)
-- **Long** - Large numbers (e.g., `9223372036854775807`)
-- **Float** - Decimal numbers (e.g., `3.14`)
-- **String** - Text values
-- **URI** - Content or file URIs
+- `ctx` — `android.content.Context` — use for logging, Toast, system services
+- `intent` — `android.content.Intent` — the **original** Intent being launched
+- `result` — `android.content.Intent` — the **modified** Intent (what gets launched)
 
-### Array Types
+### Example Rules
 
-- **BooleanArray** - Multiple boolean values
-- **IntegerArray** - Multiple integers
-- **LongArray** - Multiple long values
-- **FloatArray** - Multiple floats
-- **StringArray** - Multiple strings
-- **ByteArray**, **CharArray**, **ShortArray**, **DoubleArray**
+**Redirect TikTok to a specific tab:**
+```java
+// Imports
+import android.net.Uri;
+
+// Members
+public static String getPkg(Intent i) {
+    return i.getPackage() != null ? i.getPackage() : i.getComponent() != null ? i.getComponent().getPackageName() : null;
+}
+
+// Condition
+return "com.ss.android.ugc.aweme".equals(getPkg(intent));
+
+// Action
+result.setData(Uri.parse("snssdk1128://land_tab?tabid=homepage_notification"));
+```
+
+**Redirect Baidu to a custom package:**
+```java
+// Condition
+return intent.getPackage() != null && intent.getPackage().contains("baidu");
+
+// Action
+result.setPackage("com.example.custom");
+```
+
+**Log and modify:**
+```java
+// Imports
+import android.util.Log;
+
+// Condition
+Log.d("MyRule", "Launching: " + intent.getPackage());
+return intent.getPackage() != null && intent.getPackage().contains("baidu");
+
+// Action
+Log.d("MyRule", "Redirecting to custom package");
+result.setPackage("com.example.custom");
+```
 
 ### Configuring Launcher Hooks
 
-1. Go to the **Launchers** page
-2. Add the launcher app
-3. Select hook method:
-   - **Instrumentation (default)**: Hooks `android.app.Instrumentation.execStartActivity`
-   - **Launcher3**: Hooks `com.android.launcher3.Launcher.startActivitySafely`
+1. Go to the **Launchers** tab
+2. Tap **+**
+3. Select a launcher app
+4. Choose hook method:
+   - **Instrumentation (default)**: Hooks `android.app.Instrumentation.execStartActivity` — works for most apps
+   - **Launcher3**: Hooks `com.android.launcher3.Launcher.startActivitySafely` — for Lawnchair/Pixel Launcher variants
+   - **Custom**: Hook a user-specified class
 
-### Export/Import
+### Export / Import
 
 **Export:**
-- Tap menu → Export to File or Export to Clipboard
+- Tap the menu (⋮) → Export to File or Export to Clipboard
 
 **Import:**
-- Tap menu → Import from File or Import from Clipboard
-- Choose conflict resolution:
-  - **Replace All**: Delete old rules
-  - **Keep New**: Overwrite on conflict
-  - **Keep Old**: Skip on conflict
+- Tap the menu (⋮) → Import from File or Import from Clipboard
+- Conflicts are resolved per-rule with four options:
+  - **Replace**: Overwrite old rule with new
+  - **Ignore**: Keep old rule, discard new
+  - **Rename Old→_old**: Keep both, rename old rule
+  - **Rename New→_new**: Keep both, rename new rule
 
 ### Changing Language
 
-1. Go to **Settings** page
-2. Select language:
-   - **Follow System**
-   - **English**
-   - **Chinese**
+1. Go to the **Settings** tab
+2. Tap the language card
+3. Select **Follow System**, **English**, or **Chinese**
+
+## Building
+
+```bash
+./gradlew assembleDebug
+```
