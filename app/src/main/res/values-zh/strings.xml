@@ -103,7 +103,7 @@
     <string name="rule_name">规则名称</string>
     <string name="priority">优先级</string>
     <string name="condition_code">条件代码</string>
-    <string name="condition_hint">必须返回 boolean，每条语句以分号结尾。例如：\nintent.getPackage().contains("com.baidu");\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n注意：某些启动器可能不设置 getPackage()，可使用：\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
+    <string name="condition_hint">必须返回 boolean，每条语句以分号结尾。例如：\nintent.getPackage().contains("com.example");\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n注意：某些启动器可能不设置 getPackage()，可使用：\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
     <string name="imports_code">导入语句</string>
     <string name="imports_hint">例如：\nimport android.util.Log;\nimport java.text.SimpleDateFormat;</string>
     <string name="members_code">成员代码</string>

@@ -103,7 +103,7 @@
     <string name="rule_name">Rule Name</string>
     <string name="priority">Priority</string>
     <string name="condition_code">Condition Code</string>
-    <string name="condition_hint">Must return boolean. Each statement must end with a semicolon. Example:\nintent.getPackage().contains("com.baidu");\n\nBuilt-in variables: ctx (Context), intent (original Intent), result (modified Intent)\n\nNote: some launchers may not set getPackage(), use:\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
+    <string name="condition_hint">Must return boolean. Each statement must end with a semicolon. Example:\nintent.getPackage().contains("com.example");\n\nBuilt-in variables: ctx (Context), intent (original Intent), result (modified Intent)\n\nNote: some launchers may not set getPackage(), use:\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
     <string name="imports_code">Import Statements</string>
     <string name="imports_hint">Example:\nimport android.util.Log;\nimport java.text.SimpleDateFormat;</string>
     <string name="members_code">Member Code</string>
