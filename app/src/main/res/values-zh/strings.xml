@@ -109,7 +109,7 @@
     <string name="members_code">成员代码</string>
     <string name="members_hint">类成员变量和方法。例如：\nprivate static final String TAG = "MyApp";\nprivate boolean checkExtra(Intent intent) { return intent.hasExtra("key"); }</string>
     <string name="action_code">动作代码</string>
-    <string name="action_hint">每条语句以分号结尾。例如：result.setPackage("com.custom.package");\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n示例：ctx.startActivity(result);</string>
+    <string name="action_hint">每条语句以分号结尾。例如：result.setPackage("com.custom.package");\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n示例：Toast.makeText(ctx, "匹配: " + intent.getAction(), Toast.LENGTH_SHORT).show();</string>
     <string name="test_compile">测试编译</string>
     <string name="compile_success">编译成功！</string>
     <string name="compile_failed">编译失败</string>

@@ -109,7 +109,7 @@
     <string name="members_code">Member Code</string>
     <string name="members_hint">Class fields and methods. Example:\nprivate static final String TAG = "MyApp";\nprivate boolean checkExtra(Intent intent) { return intent.hasExtra("key"); }</string>
     <string name="action_code">Action Code</string>
-    <string name="action_hint">Each statement must end with a semicolon. Example: result.setPackage("com.custom.package");\n\nBuilt-in variables: ctx (Context), intent (original Intent), result (modified Intent)\n\nExample: ctx.startActivity(result);</string>
+    <string name="action_hint">Each statement must end with a semicolon. Example: result.setPackage("com.custom.package");\n\nBuilt-in variables: ctx (Context), intent (original Intent), result (modified Intent)\n\nExample: Toast.makeText(ctx, "Matched: " + intent.getAction(), Toast.LENGTH_SHORT).show();</string>
     <string name="test_compile">Test Compile</string>
     <string name="compile_success">Compile successful!</string>
     <string name="compile_failed">Compile failed</string>
