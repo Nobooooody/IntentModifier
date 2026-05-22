@@ -74,6 +74,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.unit.dp
 import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.HOOK_INSTRUMENTATION
@@ -250,7 +251,8 @@ private fun RulesScreen(modifier: Modifier = Modifier) {
         if (selectedItems.isEmpty()) isSelectionMode = false
     }
 
-    Scaffold(
+    Scaffold(modifier = modifier,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             if (isSelectionMode) {
                 TopAppBar(
@@ -757,7 +759,8 @@ private fun LaunchersScreen(modifier: Modifier = Modifier) {
         hooks = repo.getLauncherHooks()
     }
 
-    Scaffold(
+    Scaffold(modifier = modifier,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_launchers_title)) }) },
         floatingActionButton = {
             FloatingActionButton(onClick = {
@@ -884,7 +887,8 @@ private fun SettingsScreen(modifier: Modifier = Modifier) {
     val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
     var currentLang by remember { mutableStateOf(prefs.getString("language", "system") ?: "system") }
 
-    Scaffold(
+    Scaffold(modifier = modifier,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }) }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {

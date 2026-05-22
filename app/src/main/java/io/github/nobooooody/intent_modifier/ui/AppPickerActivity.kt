@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.unit.dp
 import io.github.nobooooody.intent_modifier.R
 import kotlinx.coroutines.Dispatchers
@@ -83,10 +84,8 @@ private fun AppPickerScreen(onAppSelected: (String) -> Unit) {
         isLoading = false
     }
 
-    val filtered = remember(allApps, query) {
-        if (query.isBlank()) allApps.toList()
+    val filtered = if (query.isBlank()) allApps.toList()
         else allApps.filter { it.packageName.contains(query, ignoreCase = true) || it.label.contains(query, ignoreCase = true) }
-    }
 
     Scaffold(
         topBar = {
