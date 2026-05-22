@@ -1,5 +1,6 @@
 plugins {
     id("com.android.application")
+    kotlin("plugin.compose") version "2.0.21"
 }
 
 android {
@@ -29,8 +30,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 }
 
@@ -42,13 +45,22 @@ dependencies {
     implementation(libs.material)
     implementation(libs.coordinatorlayout)
     compileOnly(libs.xposed.api)
-    
+
     // Eclipse JDT Java Compiler for Android
     implementation("org.eclipse.jdt:ecj:3.26.0")
-    
+
     // D8 for class to dex compilation (local jar)
     implementation(files("libs/d8.jar"))
-    
+
     // Java 8 stubs for Android (javax.lang.model, javax.tools, etc.)
     implementation(project(":compiler-jdk8"))
+
+    // Compose
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.material3)
+    implementation(libs.activity.compose)
+    debugImplementation(libs.compose.ui.tooling)
 }

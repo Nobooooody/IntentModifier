@@ -3,28 +3,53 @@ package io.github.nobooooody.intent_modifier.ui
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
-import android.view.View
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.textfield.TextInputEditText
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.JavaCodeRule
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.engine.RuleCompilationManager
 import io.github.nobooooody.intent_modifier.engine.RuleSource
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class JavaCodeRuleEditorActivity : AppCompatActivity() {
+class JavaCodeRuleEditorActivity : ComponentActivity() {
 
     private lateinit var repo: ModifierRepository
     private var editingRule: JavaCodeRule? = null
@@ -47,11 +72,7 @@ class JavaCodeRuleEditorActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_rule_editor)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-
         repo = ModifierRepository(this)
-
         val index = intent.getIntExtra(EXTRA_RULE_INDEX, -1)
         if (index >= 0) {
             val rules = repo.getJavaCodeRules()
@@ -59,157 +80,248 @@ class JavaCodeRuleEditorActivity : AppCompatActivity() {
                 editingRule = rules[index]
             }
         }
-
-        setupToolbar()
-        setupViews()
-    }
-
-    private fun setupToolbar() {
-        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
-        supportActionBar?.title = if (editingRule != null) getString(R.string.edit_rule) else getString(R.string.new_rule)
-    }
-
-    private fun setupViews() {
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { view, insets ->
-            view.setPadding(0, insets.getInsets(WindowInsetsCompat.Type.statusBars()).top, 0, insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
-            insets
-        }
-
-        val inputName = findViewById<TextInputEditText>(R.id.inputName)
-        val switchEnabled = findViewById<MaterialSwitch>(R.id.switchEnabled)
-        val inputPriority = findViewById<TextInputEditText>(R.id.inputPriority)
-        val inputImports = findViewById<TextInputEditText>(R.id.inputImports)
-        val inputMembers = findViewById<TextInputEditText>(R.id.inputMembers)
-        val inputCondition = findViewById<TextInputEditText>(R.id.inputCondition)
-        val inputAction = findViewById<TextInputEditText>(R.id.inputAction)
-        val buttonTestCompile = findViewById<MaterialButton>(R.id.buttonTestCompile)
-        val buttonSave = findViewById<MaterialButton>(R.id.buttonSave)
-        val textResult = findViewById<android.widget.TextView>(R.id.textCompileResult)
-
-        editingRule?.let { rule ->
-            inputName.setText(rule.name)
-            switchEnabled.isChecked = rule.enabled
-            inputPriority.setText(rule.priority.toString())
-            inputImports.setText(rule.imports)
-            inputMembers.setText(rule.members)
-            inputCondition.setText(rule.condition)
-            inputAction.setText(rule.action)
-        }
-
-        buttonTestCompile.setOnClickListener {
-            val imports = inputImports.text.toString()
-            val members = inputMembers.text.toString()
-            val condition = inputCondition.text.toString()
-            val action = inputAction.text.toString()
-
-            if (condition.isBlank() && action.isBlank()) {
-                Toast.makeText(this, R.string.compile_failed, Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            textResult.text = getString(R.string.compiling)
-            textResult.setTextColor(ContextCompat.getColor(this, R.color.orange))
-            textResult.visibility = View.VISIBLE
-            buttonTestCompile.isEnabled = false
-
-            CoroutineScope(Dispatchers.Main).launch {
-                try {
-                    val manager = RuleCompilationManager(this@JavaCodeRuleEditorActivity)
-                    val ruleSources = listOf(RuleSource(
-                        condition = condition.ifBlank { null },
-                        action = action.ifBlank { null },
-                        imports = imports,
-                        members = members
-                    ))
-                    val result = withContext(Dispatchers.IO) {
-                        manager.compileAndStore(ruleSources)
-                    }
-                    if (result.success) {
-                        textResult.text = getString(R.string.compile_success)
-                        textResult.setTextColor(ContextCompat.getColor(this@JavaCodeRuleEditorActivity, R.color.green))
-                    } else {
-                        val errorMsg = result.errorMessage ?: getString(R.string.compile_failed)
-                        textResult.text = if (result.errorRuleName != null) {
-                            "${result.errorRuleName}:\n$errorMsg"
+        setContent {
+            IntentModifierTheme {
+                RuleEditorScreen(
+                    editingRule = editingRule,
+                    onSave = { rule ->
+                        val currentRules = repo.getJavaCodeRules().toMutableList()
+                        if (editingRule != null) {
+                            val idx = currentRules.indexOfFirst { it.name == editingRule!!.name }
+                            if (idx >= 0) currentRules[idx] = rule
                         } else {
-                            errorMsg
+                            currentRules.add(rule)
                         }
-                        textResult.setTextColor(ContextCompat.getColor(this@JavaCodeRuleEditorActivity, R.color.red))
-                    }
-                } catch (e: Exception) {
-                    textResult.text = "${getString(R.string.compile_failed)}: ${e.message}"
-                    textResult.setTextColor(ContextCompat.getColor(this@JavaCodeRuleEditorActivity, R.color.red))
-                }
-                buttonTestCompile.isEnabled = true
-            }
-        }
-
-        buttonSave.setOnClickListener {
-            val name = inputName.text.toString().trim()
-            val enabled = switchEnabled.isChecked
-            val priority = inputPriority.text.toString().toIntOrNull() ?: 0
-            val imports = inputImports.text.toString().trim()
-            val members = inputMembers.text.toString().trim()
-            val condition = inputCondition.text.toString().trim()
-            val action = inputAction.text.toString().trim()
-
-            if (name.isBlank()) {
-                Toast.makeText(this, R.string.error_key_required, Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val currentRules = repo.getJavaCodeRules().toMutableList()
-
-            if (editingRule != null) {
-                val index = currentRules.indexOfFirst { it.name == editingRule!!.name }
-                if (index >= 0) {
-                    currentRules[index] = JavaCodeRule(enabled, name, imports, members, condition, action, priority)
-                }
-            } else {
-                currentRules.add(JavaCodeRule(enabled, name, imports, members, condition, action, priority))
-            }
-
-            repo.saveJavaCodeRules(currentRules)
-
-            Toast.makeText(this, R.string.compiling_all_rules, Toast.LENGTH_SHORT).show()
-            buttonSave.isEnabled = false
-
-            CoroutineScope(Dispatchers.Main).launch {
-                try {
-                    val manager = RuleCompilationManager(this@JavaCodeRuleEditorActivity)
-                    val ruleSources = currentRules
-                        .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
-                        .sortedByDescending { it.priority }
-                        .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }, it.imports, it.members) }
-
-                    if (ruleSources.isEmpty()) {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(this@JavaCodeRuleEditorActivity, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
-                            finish()
-                        }
-                    } else {
-                        val result = withContext(Dispatchers.IO) {
-                            manager.compileAndStore(ruleSources)
-                        }
-                        withContext(Dispatchers.Main) {
-                            if (result.success) {
-                                Toast.makeText(this@JavaCodeRuleEditorActivity, R.string.saved_and_compiled, Toast.LENGTH_SHORT).show()
-                            } else {
-                                val errorMsg = result.errorMessage ?: getString(R.string.compile_failed)
-                                Toast.makeText(this@JavaCodeRuleEditorActivity, "${getString(R.string.saved)}\n$errorMsg", Toast.LENGTH_LONG).show()
-                            }
-                            finish()
-                        }
-                    }
-                } catch (e: Exception) {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(this@JavaCodeRuleEditorActivity, "${getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
+                        repo.saveJavaCodeRules(currentRules)
                         finish()
                     }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RuleEditorScreen(
+    editingRule: JavaCodeRule?,
+    onSave: (JavaCodeRule) -> Unit
+) {
+    val ctx = LocalContext.current
+    var name by remember { mutableStateOf(editingRule?.name ?: "") }
+    var enabled by remember { mutableStateOf(editingRule?.enabled ?: true) }
+    var priority by remember { mutableStateOf(editingRule?.priority?.toString() ?: "0") }
+    var imports by remember { mutableStateOf(editingRule?.imports ?: "") }
+    var members by remember { mutableStateOf(editingRule?.members ?: "") }
+    var condition by remember { mutableStateOf(editingRule?.condition ?: "") }
+    var action by remember { mutableStateOf(editingRule?.action ?: "") }
+    var compileResult by remember { mutableStateOf<Pair<String, Color>?>(null) }
+    var isCompiling by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (editingRule != null) stringResource(R.string.edit_rule) else stringResource(R.string.new_rule)) },
+                navigationIcon = {
+                    IconButton(onClick = { (ctx as? ComponentActivity)?.finish() }) {
+                        Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
                 }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState())
+        ) {
+            OutlinedTextField(
+                value = name, onValueChange = { name = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.rule_name)) },
+                singleLine = true
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.enabled), modifier = Modifier.weight(1f))
+                Switch(checked = enabled, onCheckedChange = { enabled = it })
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = priority, onValueChange = { priority = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.priority)) },
+                singleLine = true
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(stringResource(R.string.imports_code), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.imports_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = imports, onValueChange = { imports = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                        minLines = 2
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(stringResource(R.string.members_code), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.members_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = members, onValueChange = { members = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                        minLines = 3
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(stringResource(R.string.condition_code), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.condition_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = condition, onValueChange = { condition = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                        minLines = 3
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(stringResource(R.string.action_code), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.action_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = action, onValueChange = { action = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                        minLines = 6
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            Row(modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = {
+                        if (condition.isBlank() && action.isBlank()) {
+                            Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
+                            return@OutlinedButton
+                        }
+                        isCompiling = true
+                        compileResult = Pair(ctx.getString(R.string.compiling), Color(0xFFFF9800))
+                        scope.launch {
+                            try {
+                                val manager = RuleCompilationManager(ctx)
+                                val sources = listOf(RuleSource(condition.ifBlank { null }, action.ifBlank { null }, imports, members))
+                                val result = withContext(Dispatchers.IO) { manager.compileAndStore(sources) }
+                                compileResult = if (result.success) {
+                                    Pair(ctx.getString(R.string.compile_success), Color(0xFF4CAF50))
+                                } else {
+                                    val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
+                                    Pair(if (result.errorRuleName != null) "${result.errorRuleName}:\n$msg" else msg, Color(0xFFF44336))
+                                }
+                            } catch (e: Exception) {
+                                compileResult = Pair("${ctx.getString(R.string.compile_failed)}: ${e.message}", Color(0xFFF44336))
+                            }
+                            isCompiling = false
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isCompiling && !isSaving
+                ) {
+                    Text(stringResource(R.string.test_compile))
+                }
+
+                Spacer(Modifier.padding(horizontal = 8.dp))
+
+                Button(
+                    onClick = {
+                        val trimmedName = name.trim()
+                        if (trimmedName.isBlank()) {
+                            Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        isSaving = true
+                        val rule = JavaCodeRule(
+                            enabled = enabled,
+                            name = trimmedName,
+                            imports = imports.trim(),
+                            members = members.trim(),
+                            condition = condition.trim(),
+                            action = action.trim(),
+                            priority = priority.toIntOrNull() ?: 0
+                        )
+                        onSave(rule)
+
+                        Toast.makeText(ctx, R.string.compiling_all_rules, Toast.LENGTH_SHORT).show()
+                        scope.launch {
+                            try {
+                                val repo = ModifierRepository(ctx)
+                                val currentRules = repo.getJavaCodeRules()
+                                val sources = currentRules
+                                    .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
+                                    .sortedByDescending { it.priority }
+                                    .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }, it.imports, it.members) }
+                                if (sources.isEmpty()) {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(ctx, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
+                                        (ctx as? ComponentActivity)?.finish()
+                                    }
+                                } else {
+                                    val manager = RuleCompilationManager(ctx)
+                                    val result = withContext(Dispatchers.IO) { manager.compileAndStore(sources) }
+                                    withContext(Dispatchers.Main) {
+                                        if (result.success) {
+                                            Toast.makeText(ctx, R.string.saved_and_compiled, Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
+                                            Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()
+                                        }
+                                        (ctx as? ComponentActivity)?.finish()
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
+                                    (ctx as? ComponentActivity)?.finish()
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isCompiling && !isSaving
+                ) {
+                    Text(stringResource(R.string.save))
+                }
+            }
+
+            compileResult?.let { (msg, color) ->
+                Spacer(Modifier.height(16.dp))
+                Text(msg, color = color, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

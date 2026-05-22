@@ -3,144 +3,149 @@ package io.github.nobooooody.intent_modifier.ui
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
-import android.view.LayoutInflater
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
-import android.view.ViewGroup
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
-import androidx.recyclerview.widget.RecyclerView
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import io.github.nobooooody.intent_modifier.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-class AppPickerActivity : AppCompatActivity() {
-
-    private lateinit var adapter: AppAdapter
-    private var allApps: List<AppInfo> = emptyList()
-    private lateinit var loadingContainer: View
-    private lateinit var contentContainer: View
-    private lateinit var searchInput: com.google.android.material.textfield.TextInputEditText
-
+class AppPickerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_picker)
-
-        val toolbar = findViewById<Toolbar>(R.id.toolbar)
-        if (toolbar != null) {
-            setSupportActionBar(toolbar)
-            supportActionBar?.title = getString(R.string.select_app)
-            supportActionBar?.setDisplayHomeAsUpEnabled(true)
-            toolbar.setNavigationOnClickListener { finish() }
-        }
-
-        searchInput = findViewById(R.id.searchInput)
-        val recyclerView = findViewById<RecyclerView>(R.id.recyclerView)
-        recyclerView.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
-
-        loadingContainer = findViewById(R.id.loadingContainer)
-        contentContainer = findViewById(R.id.contentContainer)
-
-        adapter = AppAdapter(emptyList()) { pkg ->
-            val result = Intent().putExtra("package", pkg)
-            setResult(RESULT_OK, result)
-            finish()
-        }
-        recyclerView.adapter = adapter
-
-        searchInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                adapter.filter(s?.toString() ?: "")
+        setContent {
+            IntentModifierTheme {
+                AppPickerScreen(
+                    onAppSelected = { pkg ->
+                        val result = Intent().putExtra("package", pkg)
+                        setResult(RESULT_OK, result)
+                        finish()
+                    }
+                )
             }
-        })
-
-        loadApps()
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(Menu.NONE, Menu.FIRST, Menu.NONE, R.string.refresh)
-            .setIcon(R.drawable.ic_refresh)
-            .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == Menu.FIRST) {
-            loadApps()
-            return true
         }
-        return super.onOptionsItemSelected(item)
     }
+}
 
-    private fun loadApps() {
-        loadingContainer.visibility = View.VISIBLE
-        contentContainer.visibility = View.GONE
+data class AppInfo(val packageName: String, val label: String)
 
-        Thread {
-            val apps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-                .filter { it.packageName != packageName }
-                .map { AppInfo(it.packageName, it.loadLabel(packageManager).toString()) }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppPickerScreen(onAppSelected: (String) -> Unit) {
+    var isLoading by remember { mutableStateOf(true) }
+    var query by remember { mutableStateOf("") }
+    val allApps = remember { mutableStateListOf<AppInfo>() }
+    val ctx = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        val apps = withContext(Dispatchers.IO) {
+            ctx.packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
+                .filter { it.packageName != ctx.packageName }
+                .map { AppInfo(it.packageName, it.loadLabel(ctx.packageManager).toString()) }
                 .sortedBy { it.label.lowercase() }
-
-            runOnUiThread {
-                allApps = apps
-                adapter.updateApps(allApps)
-                adapter.filter(searchInput.text?.toString() ?: "")
-                loadingContainer.visibility = View.GONE
-                contentContainer.visibility = View.VISIBLE
-            }
-        }.start()
+        }
+        allApps.clear()
+        allApps.addAll(apps)
+        isLoading = false
     }
 
-    data class AppInfo(val packageName: String, val label: String)
+    val filtered = remember(allApps, query) {
+        if (query.isBlank()) allApps.toList()
+        else allApps.filter { it.packageName.contains(query, ignoreCase = true) || it.label.contains(query, ignoreCase = true) }
+    }
 
-    class AppAdapter(
-        private var apps: List<AppInfo>,
-        private val onClick: (String) -> Unit
-    ) : RecyclerView.Adapter<AppAdapter.ViewHolder>() {
-
-        private var filtered = apps.toMutableList()
-
-        fun updateApps(newApps: List<AppInfo>) {
-            apps = newApps
-            filter("")
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.select_app)) },
+                navigationIcon = {
+                    IconButton(onClick = { (ctx as? ComponentActivity)?.finish() }) {
+                        Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = {
+                        isLoading = true
+                        (ctx as? ComponentActivity)?.recreate()
+                    }) {
+                        Icon(androidx.compose.material.icons.Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                    }
+                }
+            )
         }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_app_picker, parent, false)
-            return ViewHolder(view)
-        }
-
-        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            holder.bind(filtered[position])
-        }
-
-        override fun getItemCount() = filtered.size
-
-        fun filter(query: String) {
-            filtered = if (query.isBlank()) {
-                apps.toMutableList()
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (isLoading) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator()
+                    Spacer(Modifier.height(16.dp))
+                    Text(stringResource(R.string.loading_apps))
+                }
             } else {
-                apps.filter {
-                    it.packageName.contains(query, ignoreCase = true) ||
-                    it.label.contains(query, ignoreCase = true)
-                }.toMutableList()
-            }
-            notifyDataSetChanged()
-        }
-
-        inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-            private val labelView: android.widget.TextView = itemView.findViewById(R.id.textAppLabel)
-            private val pkgView: android.widget.TextView = itemView.findViewById(R.id.textAppPackage)
-
-            fun bind(app: AppInfo) {
-                labelView.text = app.label
-                pkgView.text = app.packageName
-                itemView.setOnClickListener { onClick(app.packageName) }
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    placeholder = { Text(stringResource(R.string.search_apps)) },
+                    singleLine = true
+                )
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    items(filtered, key = { it.packageName }) { app ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { onAppSelected(app.packageName) }.padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(app.label, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    app.packageName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

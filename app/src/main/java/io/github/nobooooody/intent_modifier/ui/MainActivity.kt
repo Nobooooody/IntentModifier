@@ -8,27 +8,73 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
-import android.view.LayoutInflater
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
-import android.view.ViewGroup
-import android.widget.CheckBox
-import androidx.appcompat.view.ActionMode
-import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.fragment.app.Fragment
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.bottomnavigation.BottomNavigationView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.HOOK_INSTRUMENTATION
 import io.github.nobooooody.intent_modifier.data.HOOK_LAUNCHER3
@@ -37,13 +83,13 @@ import io.github.nobooooody.intent_modifier.data.LauncherHook
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.engine.RuleCompilationManager
 import io.github.nobooooody.intent_modifier.engine.RuleSource
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : ComponentActivity() {
 
     override fun attachBaseContext(newBase: Context) {
         val prefs = newBase.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -59,999 +105,905 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-
-        val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNav)
-        ViewCompat.setOnApplyWindowInsetsListener(bottomNav) { view, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(0, 0, 0, bars.bottom)
-            insets
-        }
-
-        if (savedInstanceState == null) {
-            showFragment(RulesFragment())
-        }
-
-        bottomNav.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.nav_rules -> showFragment(RulesFragment())
-                R.id.nav_launchers -> showFragment(LaunchersFragment())
-                R.id.nav_settings -> showFragment(SettingsFragment())
+        setContent {
+            IntentModifierTheme {
+                MainScreen()
             }
-            true
-        }
-    }
-
-    private var currentFragmentTag: String? = null
-    var pendingExportRules: List<JavaCodeRule>? = null
-    var isSelectionModeActive = false
-
-    private fun showFragment(fragment: Fragment) {
-        currentFragmentTag = when (fragment) {
-            is RulesFragment -> "rules"
-            is LaunchersFragment -> "launchers"
-            is SettingsFragment -> "settings"
-            else -> currentFragmentTag
-        }
-        supportFragmentManager.beginTransaction().replace(R.id.fragmentContainer, fragment).commit()
-        invalidateOptionsMenu()
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menu.clear()
-        if (currentFragmentTag == "rules" && !isSelectionModeActive) {
-            menuInflater.inflate(R.menu.menu_rules, menu)
-        }
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        if (currentFragmentTag == "rules") {
-            menuInflater.inflate(R.menu.menu_rules, menu)
-        }
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_export_clipboard -> {
-                exportToClipboard()
-                true
-            }
-            R.id.action_export_file -> {
-                exportToFileLauncher.launch("intent_modifier_rules.json")
-                true
-            }
-            R.id.action_import_clipboard -> {
-                importFromClipboard()
-                true
-            }
-            R.id.action_import_file -> {
-                importFromFileLauncher.launch(arrayOf("application/json"))
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
-
-    val exportToFileLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        uri?.let { exportRulesToFile(it) }
-    }
-
-    private val importFromFileLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { importRulesFromFile(it) }
-    }
-
-    private fun exportToClipboard() {
-        try {
-            val repo = ModifierRepository(this)
-            val rulesJson = repo.getJavaCodeRulesJson()
-            copyToClipboard(rulesJson)
-        } catch (e: Exception) {
-            Toast.makeText(this, R.string.export_failed, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    fun exportToClipboard(rules: List<JavaCodeRule>) {
-        try {
-            copyToClipboard(rulesToJson(rules))
-        } catch (e: Exception) {
-            Toast.makeText(this, R.string.export_failed, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun copyToClipboard(json: String) {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("IntentModifierRules", json)
-        clipboard.setPrimaryClip(clip)
-        Toast.makeText(this, R.string.exported_to_clipboard, Toast.LENGTH_SHORT).show()
-    }
-
-    private fun exportRulesToFile(uri: Uri) {
-        try {
-            val rulesJson = if (pendingExportRules != null) {
-                rulesToJson(pendingExportRules!!).also { pendingExportRules = null }
-            } else {
-                val repo = ModifierRepository(this)
-                repo.getJavaCodeRulesJson()
-            }
-            contentResolver.openOutputStream(uri)?.use { os ->
-                os.write(rulesJson.toByteArray(Charsets.UTF_8))
-            }
-            Toast.makeText(this, R.string.export_success, Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            Toast.makeText(this, R.string.export_failed, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun rulesToJson(rules: List<JavaCodeRule>): String {
-        val arr = JSONArray()
-        for (rule in rules) {
-            val obj = JSONObject()
-            obj.put("enabled", rule.enabled)
-            obj.put("name", rule.name)
-            obj.put("imports", rule.imports)
-            obj.put("members", rule.members)
-            obj.put("condition", rule.condition)
-            obj.put("action", rule.action)
-            obj.put("priority", rule.priority)
-            arr.put(obj)
-        }
-        return arr.toString()
-    }
-
-    private fun importFromClipboard() {
-        try {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = clipboard.primaryClip
-            if (clip != null && clip.itemCount > 0) {
-                val text = clip.getItemAt(0).text.toString()
-                handleImportRules(text)
-            } else {
-                Toast.makeText(this, R.string.import_failed, Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, R.string.import_failed, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun importRulesFromFile(uri: Uri) {
-        try {
-            val inputStream = contentResolver.openInputStream(uri)
-            if (inputStream != null) {
-                val text = inputStream.bufferedReader().readText()
-                handleImportRules(text)
-                inputStream.close()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, R.string.import_failed, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun handleImportRules(jsonStr: String) {
-        try {
-            val importedRules = mutableListOf<JavaCodeRule>()
-            val arr = JSONArray(jsonStr)
-            for (i in 0 until arr.length()) {
-                val obj = arr.getJSONObject(i)
-                val name = obj.optString("name", "").trim()
-                if (name.isNotEmpty()) {
-                    importedRules.add(JavaCodeRule(
-                        enabled = obj.optBoolean("enabled", true),
-                        name = name,
-                        imports = obj.optString("imports", ""),
-                        members = obj.optString("members", ""),
-                        condition = obj.optString("condition", ""),
-                        action = obj.optString("action", ""),
-                        priority = obj.optInt("priority", 0)
-                    ))
-                }
-            }
-            if (importedRules.isEmpty()) {
-                Toast.makeText(this, R.string.import_failed, Toast.LENGTH_SHORT).show()
-                return
-            }
-
-            val repo = ModifierRepository(this)
-            val currentRules = repo.getJavaCodeRules().toMutableList()
-            val existingNames = currentRules.map { it.name }.toSet()
-
-            val newRules = importedRules.filter { it.name !in existingNames }
-            val conflictRules = importedRules.filter { it.name in existingNames }
-            val conflictCount = conflictRules.size
-
-            if (conflictCount > 0) {
-                MaterialAlertDialogBuilder(this)
-                    .setTitle(R.string.import_conflict_title)
-                    .setMessage(getString(R.string.import_conflict_message, conflictCount))
-                    .setPositiveButton(R.string.confirm) { _, _ ->
-                        showConflictResolutionDialog(conflictRules, currentRules, repo, newRules)
-                    }
-                    .setNegativeButton(R.string.cancel, null)
-                    .show()
-            } else {
-                currentRules.addAll(importedRules)
-                repo.saveJavaCodeRules(currentRules)
-                recompileRules()
-                Toast.makeText(this, getString(R.string.import_success, importedRules.size), Toast.LENGTH_SHORT).show()
-                refreshCurrentFragment()
-            }
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Import failed", e)
-            Toast.makeText(this, R.string.import_failed, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun showConflictResolutionDialog(
-        conflictRules: List<JavaCodeRule>,
-        currentRules: MutableList<JavaCodeRule>,
-        repo: ModifierRepository,
-        newRules: List<JavaCodeRule>
-    ) {
-        val conflictItems = conflictRules.map { ConflictItem(it, ConflictAction.NONE) }.toMutableList()
-        var applyToAll: ConflictAction? = null
-
-        val view = LayoutInflater.from(this).inflate(R.layout.dialog_conflict_resolution, null)
-        val recyclerView = view.findViewById<RecyclerView>(R.id.conflictRecyclerView)
-        val checkBoxApplyAll = view.findViewById<android.widget.CheckBox>(R.id.checkBoxApplyAll)
-        val spinnerApplyAll = view.findViewById<android.widget.Spinner>(R.id.spinnerApplyAll)
-        spinnerApplyAll.visibility = View.GONE
-
-        val adapter = ConflictResolutionAdapter(conflictItems) { index, action ->
-            conflictItems[index] = conflictItems[index].copy(action = action)
-        }
-        recyclerView.layoutManager = LinearLayoutManager(this)
-        recyclerView.adapter = adapter
-
-        val options = arrayOf(
-            getString(R.string.conflict_action_replace),
-            getString(R.string.conflict_action_ignore),
-            getString(R.string.conflict_action_rename_old),
-            getString(R.string.conflict_action_rename_new)
-        )
-        val spinnerAdapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, options)
-        spinnerApplyAll.adapter = spinnerAdapter
-        spinnerApplyAll.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (checkBoxApplyAll.isChecked && applyToAll != null) {
-                    applyToAll = ConflictAction.fromIndex(position)
-                    for (i in conflictItems.indices) {
-                        conflictItems[i] = conflictItems[i].copy(action = applyToAll!!)
-                    }
-                    adapter.notifyDataSetChanged()
-                }
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        }
-
-        checkBoxApplyAll.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                spinnerApplyAll.visibility = View.VISIBLE
-                val selectedIndex = spinnerApplyAll.selectedItemPosition
-                applyToAll = ConflictAction.fromIndex(selectedIndex)
-                for (i in conflictItems.indices) {
-                    conflictItems[i] = conflictItems[i].copy(action = applyToAll!!)
-                }
-                adapter.notifyDataSetChanged()
-            } else {
-                spinnerApplyAll.visibility = View.GONE
-                applyToAll = null
-            }
-        }
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.import_conflict_title)
-            .setView(view)
-            .setPositiveButton(R.string.confirm) { _, _ ->
-                var allResolved = true
-                for (item in conflictItems) {
-                    if (item.action == ConflictAction.NONE) {
-                        allResolved = false
-                        break
-                    }
-                }
-                if (!allResolved) {
-                    Toast.makeText(this, R.string.import_conflict_not_resolved, Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-
-                val resolvedRules = mutableListOf<JavaCodeRule>()
-                for (item in conflictItems) {
-                    when (item.action) {
-                        ConflictAction.REPLACE -> {
-                            currentRules.removeAll { it.name == item.rule.name }
-                            resolvedRules.add(item.rule)
-                        }
-                        ConflictAction.IGNORE -> { }
-                        ConflictAction.RENAME_OLD -> {
-                            val existingRule = currentRules.find { it.name == item.rule.name }
-                            if (existingRule != null) {
-                                currentRules.removeAll { it.name == item.rule.name }
-                                var newName = item.rule.name + "_old"
-                                var counter = 1
-                                while (currentRules.any { it.name == newName } || newRules.any { it.name == newName } || resolvedRules.any { it.name == newName }) {
-                                    newName = "${item.rule.name}_old_$counter"
-                                    counter++
-                                }
-                                resolvedRules.add(existingRule.copy(name = newName))
-                            }
-                            resolvedRules.add(item.rule)
-                        }
-                        ConflictAction.RENAME_NEW -> {
-                            var newName = item.rule.name + "_new"
-                            var counter = 1
-                            while (currentRules.any { it.name == newName } || newRules.any { it.name == newName } || resolvedRules.any { it.name == newName }) {
-                                newName = "${item.rule.name}_new_$counter"
-                                counter++
-                            }
-                            resolvedRules.add(item.rule.copy(name = newName))
-                        }
-                        else -> { }
-                    }
-                }
-
-                currentRules.addAll(newRules)
-                currentRules.addAll(resolvedRules)
-                repo.saveJavaCodeRules(currentRules)
-                recompileRules()
-                Toast.makeText(this, getString(R.string.import_success, newRules.size + resolvedRules.size), Toast.LENGTH_SHORT).show()
-                refreshCurrentFragment()
-            }
-            .setNegativeButton(R.string.cancel) { _, _ ->
-                Toast.makeText(this, R.string.import_cancelled, Toast.LENGTH_SHORT).show()
-            }
-            .show()
-    }
-
-    private fun recompileRules() {
-        val repo = ModifierRepository(this)
-        val rules = repo.getJavaCodeRules()
-            .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
-            .sortedByDescending { it.priority }
-            .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }, it.imports, it.members) }
-
-        if (rules.isEmpty()) {
-            return
-        }
-
-        CoroutineScope(Dispatchers.IO).launch {
-            val manager = RuleCompilationManager(this@MainActivity)
-            manager.compileAndStore(rules)
-        }
-    }
-
-    private fun refreshCurrentFragment() {
-        when (currentFragmentTag) {
-            "rules" -> showFragment(RulesFragment())
-            "launchers" -> showFragment(LaunchersFragment())
         }
     }
 }
 
-data class ConflictItem(val rule: JavaCodeRule, var action: ConflictAction)
+@Composable
+fun IntentModifierTheme(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val colorScheme = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            if (isSystemInDarkTheme()) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+        else -> {
+            if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
+        }
+    }
+    MaterialTheme(colorScheme = colorScheme, content = content)
+}
 
-enum class ConflictAction {
+// ─── Tab Navigation ──────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainScreen() {
+    var selectedTab by remember { mutableIntStateOf(0) }
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                    label = { Text(stringResource(R.string.nav_rules_title)) }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                    label = { Text(stringResource(R.string.nav_launchers_title)) }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    label = { Text(stringResource(R.string.nav_settings_title)) }
+                )
+            }
+        }
+    ) { padding ->
+        when (selectedTab) {
+            0 -> RulesScreen(modifier = Modifier.padding(padding))
+            1 -> LaunchersScreen(modifier = Modifier.padding(padding))
+            2 -> SettingsScreen(modifier = Modifier.padding(padding))
+        }
+    }
+}
+
+// ─── Data classes for import ─────────────────────────────────────────────────
+
+private data class ConflictItem(
+    val rule: JavaCodeRule,
+    var action: ConflictAction
+)
+
+private enum class ConflictAction {
     NONE, REPLACE, IGNORE, RENAME_OLD, RENAME_NEW;
 
     companion object {
         fun fromIndex(index: Int): ConflictAction = when (index) {
-            0 -> REPLACE
-            1 -> IGNORE
-            2 -> RENAME_OLD
-            3 -> RENAME_NEW
+            0 -> REPLACE; 1 -> IGNORE; 2 -> RENAME_OLD; 3 -> RENAME_NEW
             else -> NONE
         }
     }
 }
 
-class ConflictResolutionAdapter(
-    private val items: List<ConflictItem>,
-    private val onActionSelected: (Int, ConflictAction) -> Unit
-) : RecyclerView.Adapter<ConflictResolutionAdapter.ViewHolder>() {
+// ─── Rules Screen ─────────────────────────────────────────────────────────────
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_conflict_rule, parent, false)
-        return ViewHolder(view)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun RulesScreen(modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val repo = remember { ModifierRepository(ctx) }
+    var rules by remember { mutableStateOf(repo.getJavaCodeRules()) }
+    var isSelectionMode by remember { mutableStateOf(false) }
+    val selectedItems = remember { mutableStateListOf<Int>() }
+    var showMenu by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
+
+    // Import state
+    var importConflictState by remember { mutableStateOf<ImportConflictState?>(null) }
+
+    val scope = rememberCoroutineScope()
+    val activity = ctx as? ComponentActivity
+
+    val exportFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri?.let {
+            val selected = selectedItems.sorted().map { rules[it] }
+            exportRules(ctx, rules, if (selectedItems.isNotEmpty()) selected else null, it)
+            selectedItems.clear(); isSelectionMode = false
+        }
     }
 
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(position, items[position])
-    }
-
-    override fun getItemCount() = items.size
-
-    inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val textName: android.widget.TextView = itemView.findViewById(R.id.textRuleName)
-        private val textDetails: android.widget.TextView = itemView.findViewById(R.id.textRuleDetails)
-        private val buttonDetails: com.google.android.material.button.MaterialButton = itemView.findViewById(R.id.buttonDetails)
-        private val chipReplace: com.google.android.material.chip.Chip = itemView.findViewById(R.id.chipReplace)
-        private val chipIgnore: com.google.android.material.chip.Chip = itemView.findViewById(R.id.chipIgnore)
-        private val chipRenameOld: com.google.android.material.chip.Chip = itemView.findViewById(R.id.chipRenameOld)
-        private val chipRenameNew: com.google.android.material.chip.Chip = itemView.findViewById(R.id.chipRenameNew)
-
-        fun bind(position: Int, item: ConflictItem) {
-            textName.text = item.rule.name
-
-            val details = buildString {
-                if (item.rule.imports.isNotEmpty()) {
-                    appendLine("━━ Imports ━━")
-                    appendLine(item.rule.imports)
-                    appendLine()
+    val importFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            try {
+                val text = ctx.contentResolver.openInputStream(it)?.bufferedReader()?.readText() ?: return@let
+                handleImportText(ctx, text, repo) { result ->
+                    if (result is ImportResult.Success) {
+                        rules = result.rules
+                        selectedItems.clear()
+                        isSelectionMode = false
+                    } else if (result is ImportResult.Conflict) {
+                        importConflictState = ImportConflictState(
+                            conflictRules = result.conflictRules,
+                            currentRules = result.currentRules,
+                            newRules = result.newRules,
+                            repo = result.repo
+                        )
+                    }
                 }
-                if (item.rule.members.isNotEmpty()) {
-                    appendLine("━━ Members ━━")
-                    appendLine(item.rule.members)
-                    appendLine()
-                }
-                if (item.rule.condition.isNotEmpty()) {
-                    appendLine("━━ Condition ━━")
-                    appendLine(item.rule.condition)
-                    appendLine()
-                }
-                if (item.rule.action.isNotEmpty()) {
-                    appendLine("━━ Action ━━")
-                    appendLine(item.rule.action)
-                }
-            }.trim()
-
-            textDetails.text = details.ifEmpty { "(empty)" }
-
-            chipReplace.isChecked = item.action == ConflictAction.REPLACE
-            chipIgnore.isChecked = item.action == ConflictAction.IGNORE
-            chipRenameOld.isChecked = item.action == ConflictAction.RENAME_OLD
-            chipRenameNew.isChecked = item.action == ConflictAction.RENAME_NEW
-
-            val onChipCheckedListener = { action: ConflictAction ->
-                chipReplace.isChecked = action == ConflictAction.REPLACE
-                chipIgnore.isChecked = action == ConflictAction.IGNORE
-                chipRenameOld.isChecked = action == ConflictAction.RENAME_OLD
-                chipRenameNew.isChecked = action == ConflictAction.RENAME_NEW
-                onActionSelected(position, action)
-            }
-
-            chipReplace.setOnClickListener { onChipCheckedListener(ConflictAction.REPLACE) }
-            chipIgnore.setOnClickListener { onChipCheckedListener(ConflictAction.IGNORE) }
-            chipRenameOld.setOnClickListener { onChipCheckedListener(ConflictAction.RENAME_OLD) }
-            chipRenameNew.setOnClickListener { onChipCheckedListener(ConflictAction.RENAME_NEW) }
-
-            buttonDetails.setOnClickListener {
-                textDetails.visibility = if (textDetails.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            } catch (e: Exception) {
+                Toast.makeText(ctx, R.string.import_failed, Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    fun refresh() {
+        rules = repo.getJavaCodeRules()
+        selectedItems.clear()
+        isSelectionMode = false
+    }
+
+    fun toggleSelection(index: Int) {
+        if (index in selectedItems) selectedItems.remove(index) else selectedItems.add(index)
+        if (selectedItems.isEmpty()) isSelectionMode = false
+    }
+
+    Scaffold(
+        topBar = {
+            if (isSelectionMode) {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.selected_count, selectedItems.size)) },
+                    navigationIcon = {
+                        IconButton(onClick = { isSelectionMode = false; selectedItems.clear() }) {
+                            Icon(Icons.Default.Close, contentDescription = null)
+                        }
+                    },
+                    actions = {
+                        TextButton(onClick = {
+                            if (selectedItems.size == rules.size) {
+                                selectedItems.clear()
+                            } else {
+                                selectedItems.clear()
+                                selectedItems.addAll(rules.indices)
+                            }
+                        }) {
+                            Text(
+                                if (selectedItems.size == rules.size) stringResource(R.string.deselect_all)
+                                else stringResource(R.string.select_all)
+                            )
+                        }
+                        IconButton(onClick = {
+                            if (selectedItems.isNotEmpty()) showExportDialog = true
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = stringResource(R.string.export))
+                        }
+                    }
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.nav_rules_title)) },
+                    actions = {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = null)
+                        }
+                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.export_to_file)) },
+                                onClick = { showMenu = false; exportFileLauncher.launch("intent_modifier_rules.json") }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.export_to_clipboard)) },
+                                onClick = {
+                                    showMenu = false
+                                    copyToClipboard(ctx, repo.getJavaCodeRulesJson())
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.import_from_file)) },
+                                onClick = { showMenu = false; importFileLauncher.launch(arrayOf("application/json")) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.import_from_clipboard)) },
+                                onClick = {
+                                    showMenu = false
+                                    try {
+                                        val clip = (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip
+                                        if (clip != null && clip.itemCount > 0) {
+                                            handleImportText(ctx, clip.getItemAt(0).text.toString(), repo) { result ->
+                                                when (result) {
+                                                    is ImportResult.Success -> {
+                                                        rules = result.rules
+                                                        Toast.makeText(ctx, ctx.getString(R.string.import_success, result.count), Toast.LENGTH_SHORT).show()
+                                                    }
+                                                    is ImportResult.Conflict -> {
+                                                        importConflictState = ImportConflictState(
+                                                            conflictRules = result.conflictRules,
+                                                            currentRules = result.currentRules,
+                                                            newRules = result.newRules,
+                                                            repo = result.repo
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            Toast.makeText(ctx, R.string.import_failed, Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        Toast.makeText(ctx, R.string.import_failed, Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                )
+            }
+        },
+        floatingActionButton = {
+            if (!isSelectionMode) {
+                FloatingActionButton(onClick = {
+                    ctx.startActivity(Intent(ctx, JavaCodeRuleEditorActivity::class.java))
+                }) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                }
+            }
+        }
+    ) { padding ->
+        if (rules.isEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.no_rules_configured), style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.tap_to_add), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
+                itemsIndexed(rules, key = { _, r -> r.name }) { index, rule ->
+                    val isSelected = index in selectedItems
+                    Card(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .combinedClickable(
+                                onClick = { if (isSelectionMode) toggleSelection(index) },
+                                onLongClick = {
+                                    if (!isSelectionMode) {
+                                        isSelectionMode = true
+                                        selectedItems.add(index)
+                                    }
+                                }
+                            )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isSelectionMode) {
+                                    Checkbox(checked = isSelected, onCheckedChange = { toggleSelection(index) })
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                Text(rule.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                if (!isSelectionMode) {
+                                    Switch(checked = rule.enabled, onCheckedChange = { enabled ->
+                                        val updated = rules.toMutableList()
+                                        updated[index] = updated[index].copy(enabled = enabled)
+                                        repo.saveJavaCodeRules(updated)
+                                        rules = updated
+                                        scope.launch { recompileAll(ctx, repo) }
+                                    })
+                                }
+                            }
+                            Text(
+                                "${stringResource(R.string.priority)}: ${rule.priority}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                if (rule.condition.isNotEmpty()) rule.condition else stringResource(R.string.condition_empty),
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                maxLines = 2, overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                rule.action,
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (!isSelectionMode) {
+                                Spacer(Modifier.height(12.dp))
+                                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                    TextButton(onClick = {
+                                        val intent = Intent(ctx, JavaCodeRuleEditorActivity::class.java)
+                                        intent.putExtra(JavaCodeRuleEditorActivity.EXTRA_RULE_INDEX, index)
+                                        ctx.startActivity(intent)
+                                    }) {
+                                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                        Text(stringResource(R.string.edit))
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    TextButton(onClick = {
+                                        val updated = rules.toMutableList()
+                                        updated.removeAt(index)
+                                        repo.saveJavaCodeRules(updated)
+                                        rules = updated
+                                        scope.launch { recompileAll(ctx, repo) }
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                        Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Export dialog
+    if (showExportDialog && selectedItems.isNotEmpty()) {
+        val selected = selectedItems.sorted().map { rules[it] }
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            title = { Text(stringResource(R.string.export_selected_title, selected.size)) },
+            text = {
+                Column {
+                    TextButton(onClick = {
+                        showExportDialog = false
+                        activity?.let { exportFileLauncher.launch("intent_modifier_rules.json") }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.export_to_file))
+                    }
+                    TextButton(onClick = {
+                        showExportDialog = false
+                        copyToClipboard(ctx, rulesToJson(selected))
+                        selectedItems.clear()
+                        isSelectionMode = false
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.export_to_clipboard))
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showExportDialog = false }) { Text(stringResource(R.string.cancel)) } }
+        )
+    }
+
+    // Conflict resolution
+    importConflictState?.let { state ->
+        ConflictDialog(
+            conflictRules = state.conflictRules,
+            newRules = state.newRules,
+            currentRules = state.currentRules,
+            repo = state.repo,
+            onDismiss = { importConflictState = null },
+            onResolved = { updatedRules ->
+                rules = updatedRules
+                importConflictState = null
+                selectedItems.clear()
+                isSelectionMode = false
+            }
+        )
     }
 }
 
-class RulesFragment : Fragment() {
-    private lateinit var repo: ModifierRepository
-    private lateinit var recycler: RecyclerView
-    private lateinit var adapter: JavaCodeRuleAdapter
-    private lateinit var empty: View
-    private var actionMode: ActionMode? = null
-    private var toolbar: View? = null
+// ─── Import types ─────────────────────────────────────────────────────────────
 
-    private val editorLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
-        loadRules()
-    }
+private data class ImportConflictState(
+    val conflictRules: List<JavaCodeRule>,
+    val currentRules: MutableList<JavaCodeRule>,
+    val newRules: List<JavaCodeRule>,
+    val repo: ModifierRepository
+)
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        return inflater.inflate(R.layout.activity_settings, container, false)
-    }
+private sealed class ImportResult {
+    data class Success(val rules: List<JavaCodeRule>, val count: Int) : ImportResult()
+    data class Conflict(
+        val conflictRules: List<JavaCodeRule>,
+        val currentRules: MutableList<JavaCodeRule>,
+        val newRules: List<JavaCodeRule>,
+        val repo: ModifierRepository
+    ) : ImportResult()
+}
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
-            v.setPadding(0, insets.getInsets(WindowInsetsCompat.Type.statusBars()).top, 0, insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
-            insets
-        }
-
-        repo = ModifierRepository(requireContext())
-
-        val toolbar = view.findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
-        (requireActivity() as? AppCompatActivity)?.let {
-            it.setSupportActionBar(toolbar)
-            it.supportActionBar?.title = getString(R.string.nav_rules_title)
-        }
-
-        recycler = view.findViewById(R.id.recyclerView)
-        empty = view.findViewById(R.id.emptyView)
-        recycler.layoutManager = LinearLayoutManager(requireContext())
-
-        adapter = JavaCodeRuleAdapter(
-            onEdit = { index, rule ->
-                val intent = Intent(requireContext(), JavaCodeRuleEditorActivity::class.java)
-                intent.putExtra(JavaCodeRuleEditorActivity.EXTRA_RULE_INDEX, index)
-                editorLauncher.launch(intent)
-            },
-            onDelete = { index, rule ->
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle(R.string.delete)
-                    .setMessage(getString(R.string.delete_rule_confirm, rule.name))
-                    .setPositiveButton(R.string.delete) { _, _ ->
-                        val rules = repo.getJavaCodeRules().toMutableList()
-                        rules.removeAt(index)
-                        repo.saveJavaCodeRules(rules)
-                        loadRules()
-                        recompileRules()
-                    }
-                    .setNegativeButton(R.string.cancel, null).show()
-            },
-            onEnabledChange = { index, enabled ->
-                val rules = repo.getJavaCodeRules().toMutableList()
-                rules[index] = rules[index].copy(enabled = enabled)
-                repo.saveJavaCodeRules(rules)
-                recompileRules()
-            }
-        )
-        adapter.onLongClick = { position -> enterSelectionMode(position) }
-        adapter.onSelectionChanged = { updateActionMode() }
-        recycler.adapter = adapter
-
-        this.toolbar = view.findViewById(R.id.toolbar)
-
-        view.findViewById<FloatingActionButton>(R.id.fabAdd)?.setOnClickListener {
-            actionMode?.finish()
-            editorLauncher.launch(Intent(requireContext(), JavaCodeRuleEditorActivity::class.java))
-        }
-
-        loadRules()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        loadRules()
-    }
-
-    private fun enterSelectionMode(position: Int) {
-        if (actionMode == null) {
-            actionMode = (requireActivity() as AppCompatActivity)
-                .startSupportActionMode(actionModeCallback)
-        }
-        adapter.enterSelectionMode(position)
-        updateActionMode()
-    }
-
-    private fun updateActionMode() {
-        actionMode?.let { mode ->
-            val count = adapter.getSelectedCount()
-            mode.title = getString(R.string.selected_count, count)
-            mode.invalidate()
-        }
-    }
-
-    private val actionModeCallback = object : ActionMode.Callback {
-        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
-            mode.menuInflater.inflate(R.menu.menu_selection, menu)
-            toolbar?.visibility = View.GONE
-            (requireActivity() as MainActivity).isSelectionModeActive = true
-            requireActivity().invalidateOptionsMenu()
-            return true
-        }
-
-        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
-            val selectAll = menu.findItem(R.id.action_select_all)
-            if (adapter.getSelectedCount() == adapter.getRules().size) {
-                selectAll?.title = getString(R.string.deselect_all)
-            } else {
-                selectAll?.title = getString(R.string.select_all)
-            }
-            return true
-        }
-
-        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
-            return when (item.itemId) {
-                R.id.action_select_all -> {
-                    val rules = adapter.getRules()
-                    if (adapter.selectedItems.size == rules.size) {
-                        adapter.clearSelection()
-                    } else {
-                        adapter.selectAll()
-                    }
-                    true
-                }
-                R.id.action_export -> {
-                    showExportSelectedDialog()
-                    true
-                }
-                else -> false
+private fun handleImportText(ctx: Context, jsonStr: String, repo: ModifierRepository, onResult: (ImportResult) -> Unit) {
+    try {
+        val imported = mutableListOf<JavaCodeRule>()
+        val arr = JSONArray(jsonStr)
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            val name = obj.optString("name", "").trim()
+            if (name.isNotEmpty()) {
+                imported.add(JavaCodeRule(
+                    enabled = obj.optBoolean("enabled", true),
+                    name = name,
+                    imports = obj.optString("imports", ""),
+                    members = obj.optString("members", ""),
+                    condition = obj.optString("condition", ""),
+                    action = obj.optString("action", ""),
+                    priority = obj.optInt("priority", 0)
+                ))
             }
         }
-
-        override fun onDestroyActionMode(mode: ActionMode) {
-            actionMode = null
-            adapter.exitSelectionMode()
-            toolbar?.visibility = View.VISIBLE
-            (requireActivity() as MainActivity).isSelectionModeActive = false
-            requireActivity().invalidateOptionsMenu()
-        }
-    }
-
-    private fun showExportSelectedDialog() {
-        val selected = adapter.getSelectedRules()
-        if (selected.isEmpty()) return
-        val items = arrayOf(getString(R.string.export_to_file), getString(R.string.export_to_clipboard))
-        val activity = requireActivity() as MainActivity
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(getString(R.string.export_selected_title, selected.size))
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> {
-                        activity.pendingExportRules = selected
-                        activity.exportToFileLauncher.launch("intent_modifier_rules.json")
-                    }
-                    1 -> activity.exportToClipboard(selected)
-                }
-                actionMode?.finish()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
-    private fun loadRules() {
-        val rules = repo.getJavaCodeRules()
-        adapter.submitList(rules)
-        empty.visibility = if (rules.isEmpty()) View.VISIBLE else View.GONE
-        recycler.visibility = if (rules.isEmpty()) View.GONE else View.VISIBLE
-        actionMode?.finish()
-    }
-
-    private fun recompileRules() {
-        val rules = repo.getJavaCodeRules()
-            .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
-            .sortedByDescending { it.priority }
-            .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }) }
-
-        if (rules.isEmpty()) {
+        if (imported.isEmpty()) {
+            Toast.makeText(ctx, R.string.import_failed, Toast.LENGTH_SHORT).show()
             return
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
-            val manager = RuleCompilationManager(requireContext())
-            manager.compileAndStore(rules)
-        }
-    }
-}
+        val currentRules = repo.getJavaCodeRules().toMutableList()
+        val existingNames = currentRules.map { it.name }.toSet()
+        val newRules = imported.filter { it.name !in existingNames }
+        val conflictRules = imported.filter { it.name in existingNames }
 
-class JavaCodeRuleAdapter(
-    private val onEdit: (Int, JavaCodeRule) -> Unit,
-    private val onDelete: (Int, JavaCodeRule) -> Unit,
-    private val onEnabledChange: (Int, Boolean) -> Unit
-) : RecyclerView.Adapter<JavaCodeRuleAdapter.ViewHolder>() {
-
-    private var rules: List<JavaCodeRule> = emptyList()
-    var selectedItems = mutableSetOf<Int>()
-        private set
-    var isSelectionMode = false
-    var onLongClick: ((Int) -> Unit)? = null
-    var onSelectionChanged: (() -> Unit)? = null
-
-    fun submitList(newRules: List<JavaCodeRule>) {
-        rules = newRules
-        selectedItems.clear()
-        isSelectionMode = false
-        notifyDataSetChanged()
-    }
-
-    fun getRules(): List<JavaCodeRule> = rules
-    fun getSelectedRules(): List<JavaCodeRule> = selectedItems.sorted().map { rules[it] }
-    fun getSelectedCount(): Int = selectedItems.size
-
-    fun toggleSelection(position: Int) {
-        if (position in selectedItems) {
-            selectedItems.remove(position)
+        if (conflictRules.isNotEmpty()) {
+            onResult(ImportResult.Conflict(conflictRules, currentRules, newRules, repo))
         } else {
-            selectedItems.add(position)
+            currentRules.addAll(imported)
+            repo.saveJavaCodeRules(currentRules)
+            onResult(ImportResult.Success(currentRules, imported.size))
+            Toast.makeText(ctx, ctx.getString(R.string.import_success, imported.size), Toast.LENGTH_SHORT).show()
         }
-        notifyItemChanged(position)
-        onSelectionChanged?.invoke()
-    }
-
-    fun selectAll() {
-        selectedItems = rules.indices.toMutableSet()
-        notifyDataSetChanged()
-        onSelectionChanged?.invoke()
-    }
-
-    fun clearSelection() {
-        selectedItems.clear()
-        notifyDataSetChanged()
-        onSelectionChanged?.invoke()
-    }
-
-    fun enterSelectionMode(position: Int) {
-        isSelectionMode = true
-        selectedItems.add(position)
-        notifyDataSetChanged()
-        onSelectionChanged?.invoke()
-    }
-
-    fun exitSelectionMode() {
-        isSelectionMode = false
-        selectedItems.clear()
-        notifyDataSetChanged()
-        onSelectionChanged?.invoke()
-    }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_java_rule, parent, false)
-        return ViewHolder(view)
-    }
-
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(rules[position], position)
-    }
-
-    override fun getItemCount() = rules.size
-
-    inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val card: com.google.android.material.card.MaterialCardView = itemView as com.google.android.material.card.MaterialCardView
-        private val checkSelect: CheckBox = itemView.findViewById(R.id.checkSelect)
-        private val textName: TextView = itemView.findViewById(R.id.textRuleName)
-        private val textPriority: TextView = itemView.findViewById(R.id.textRulePriority)
-        private val textCondition: TextView = itemView.findViewById(R.id.textConditionPreview)
-        private val textAction: TextView = itemView.findViewById(R.id.textActionPreview)
-        private val switchEnabled: com.google.android.material.materialswitch.MaterialSwitch = itemView.findViewById(R.id.switchEnabled)
-        private val buttonEdit: View = itemView.findViewById(R.id.buttonEdit)
-        private val buttonDelete: View = itemView.findViewById(R.id.buttonDelete)
-
-        fun bind(rule: JavaCodeRule, position: Int) {
-            textName.text = rule.name
-            textPriority.text = itemView.context.getString(R.string.priority) + ": " + rule.priority
-            textCondition.text = if (rule.condition.isNotEmpty()) rule.condition else itemView.context.getString(R.string.condition_empty)
-            textAction.text = rule.action
-
-            val isSelected = position in selectedItems
-
-            checkSelect.visibility = if (isSelectionMode) View.VISIBLE else View.GONE
-            checkSelect.isChecked = isSelected
-
-            switchEnabled.visibility = if (isSelectionMode) View.GONE else View.VISIBLE
-            switchEnabled.isChecked = rule.enabled
-            buttonEdit.visibility = if (isSelectionMode) View.GONE else View.VISIBLE
-            buttonDelete.visibility = if (isSelectionMode) View.GONE else View.VISIBLE
-
-            card.isChecked = isSelected
-
-            checkSelect.setOnClickListener {
-                if (isSelectionMode) {
-                    toggleSelection(position)
-                }
-            }
-
-            itemView.setOnLongClickListener {
-                if (!isSelectionMode) {
-                    onLongClick?.invoke(position)
-                    true
-                } else {
-                    false
-                }
-            }
-
-            itemView.setOnClickListener {
-                if (isSelectionMode) {
-                    toggleSelection(position)
-                }
-            }
-
-            switchEnabled.setOnCheckedChangeListener(null)
-            switchEnabled.setOnCheckedChangeListener { _, isChecked ->
-                val pos = bindingAdapterPosition
-                if (pos != RecyclerView.NO_POSITION) {
-                    onEnabledChange(pos, isChecked)
-                }
-            }
-            buttonEdit.setOnClickListener {
-                val pos = bindingAdapterPosition
-                if (pos != RecyclerView.NO_POSITION) {
-                    onEdit(pos, rules[pos])
-                }
-            }
-            buttonDelete.setOnClickListener {
-                val pos = bindingAdapterPosition
-                if (pos != RecyclerView.NO_POSITION) {
-                    onDelete(pos, rules[pos])
-                }
-            }
-        }
+    } catch (e: Exception) {
+        Toast.makeText(ctx, R.string.import_failed, Toast.LENGTH_SHORT).show()
     }
 }
 
-class SettingsFragment : Fragment() {
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        return inflater.inflate(R.layout.fragment_settings, container, false)
+// ─── Conflict Dialog ──────────────────────────────────────────────────────────
+
+@Composable
+private fun ConflictDialog(
+    conflictRules: List<JavaCodeRule>,
+    newRules: List<JavaCodeRule>,
+    currentRules: MutableList<JavaCodeRule>,
+    repo: ModifierRepository,
+    onDismiss: () -> Unit,
+    onResolved: (List<JavaCodeRule>) -> Unit
+) {
+    val ctx = LocalContext.current
+    var conflictItems = remember { mutableStateListOf<ConflictItem>() }
+    var applyToAll by remember { mutableStateOf(false) }
+    var applyAllAction by remember { mutableIntStateOf(0) }
+
+    // Initialize conflict items
+    if (conflictItems.isEmpty()) {
+        conflictItems.addAll(conflictRules.map { ConflictItem(it, ConflictAction.NONE) })
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
-            v.setPadding(0, insets.getInsets(WindowInsetsCompat.Type.statusBars()).top, 0, 0)
-            insets
-        }
-
-        val toolbar = view.findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
-        (requireActivity() as? AppCompatActivity)?.let {
-            it.setSupportActionBar(toolbar)
-            it.supportActionBar?.title = getString(R.string.settings)
-        }
-
-        view.findViewById<View>(R.id.languageContainer)?.setOnClickListener { showLangDialog() }
-        updateLangText(view)
+    fun getShortLabel(action: ConflictAction): String = when (action) {
+        ConflictAction.REPLACE -> ctx.getString(R.string.conflict_action_replace_short)
+        ConflictAction.IGNORE -> ctx.getString(R.string.conflict_action_ignore_short)
+        ConflictAction.RENAME_OLD -> ctx.getString(R.string.conflict_action_rename_old_short)
+        ConflictAction.RENAME_NEW -> ctx.getString(R.string.conflict_action_rename_new_short)
+        else -> "—"
     }
 
-    private fun showLangDialog() {
-        val langs = arrayOf(getString(R.string.language_system), getString(R.string.language_english), getString(R.string.language_chinese))
-        val cur = when (getLang()) { "en" -> 1; "zh" -> 2; else -> 0 }
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.language)
-            .setSingleChoiceItems(langs, cur) { d, w ->
-                setLang(when (w) { 1 -> "en"; 2 -> "zh"; else -> "system" })
-                d.dismiss()
-                requireActivity().recreate()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.import_conflict_title)) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.import_conflict_message, conflictRules.size))
+                Spacer(Modifier.height(12.dp))
+
+                LazyColumn(modifier = Modifier.height(300.dp)) {
+                    itemsIndexed(conflictItems, key = { _, item -> item.rule.name }) { index, item ->
+                        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(item.rule.name, style = MaterialTheme.typography.titleSmall)
+
+                                val details = buildString {
+                                    if (item.rule.imports.isNotEmpty()) { appendLine("━━ Imports ━━"); appendLine(item.rule.imports); appendLine() }
+                                    if (item.rule.members.isNotEmpty()) { appendLine("━━ Members ━━"); appendLine(item.rule.members); appendLine() }
+                                    if (item.rule.condition.isNotEmpty()) { appendLine("━━ Condition ━━"); appendLine(item.rule.condition); appendLine() }
+                                    if (item.rule.action.isNotEmpty()) { appendLine("━━ Action ━━"); appendLine(item.rule.action) }
+                                }.trim().ifEmpty { "(empty)" }
+
+                                Text(details, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+
+                                Spacer(Modifier.height(8.dp))
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    val actions = listOf(
+                                        ConflictAction.REPLACE to ctx.getString(R.string.conflict_action_replace_short),
+                                        ConflictAction.IGNORE to ctx.getString(R.string.conflict_action_ignore_short),
+                                        ConflictAction.RENAME_OLD to ctx.getString(R.string.conflict_action_rename_old_short),
+                                        ConflictAction.RENAME_NEW to ctx.getString(R.string.conflict_action_rename_new_short)
+                                    )
+                                    actions.forEach { (action, label) ->
+                                        TextButton(
+                                            onClick = {
+                                                conflictItems[index] = conflictItems[index].copy(action = action)
+                                            },
+                                            content = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = applyToAll, onCheckedChange = { checked ->
+                        applyToAll = checked
+                        if (checked) {
+                            val action = ConflictAction.fromIndex(applyAllAction)
+                            for (i in conflictItems.indices) {
+                                conflictItems[i] = conflictItems[i].copy(action = action)
+                            }
+                        }
+                    })
+                    Text(stringResource(R.string.import_conflict_apply_to_all), modifier = Modifier.weight(1f))
+
+                    if (applyToAll) {
+                        val allActions = listOf(
+                            ConflictAction.REPLACE to ctx.getString(R.string.conflict_action_replace_short),
+                            ConflictAction.IGNORE to ctx.getString(R.string.conflict_action_ignore_short),
+                            ConflictAction.RENAME_OLD to ctx.getString(R.string.conflict_action_rename_old_short),
+                            ConflictAction.RENAME_NEW to ctx.getString(R.string.conflict_action_rename_new_short)
+                        )
+                        var showActions by remember { mutableStateOf(false) }
+                        TextButton(onClick = { showActions = true }) {
+                            Text(allActions[applyAllAction].second)
+                        }
+                        DropdownMenu(expanded = showActions, onDismissRequest = { showActions = false }) {
+                            allActions.forEachIndexed { i, (_, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        applyAllAction = i
+                                        showActions = false
+                                        val action = ConflictAction.fromIndex(i)
+                                        for (j in conflictItems.indices) {
+                                            conflictItems[j] = conflictItems[j].copy(action = action)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             }
-            .setNegativeButton(R.string.cancel, null).show()
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                var allResolved = true
+                for (item in conflictItems) {
+                    if (item.action == ConflictAction.NONE) { allResolved = false; break }
+                }
+                if (!allResolved) {
+                    Toast.makeText(ctx, R.string.import_conflict_not_resolved, Toast.LENGTH_SHORT).show()
+                    return@TextButton
+                }
 
-    private fun getLang() = requireContext().getSharedPreferences("settings", Context.MODE_PRIVATE).getString("language", "system") ?: "system"
-    private fun setLang(l: String) = requireContext().getSharedPreferences("settings", Context.MODE_PRIVATE).edit().putString("language", l).apply()
+                val resolvedRules = mutableListOf<JavaCodeRule>()
+                val workingCurrent = currentRules.toMutableList()
+                val workingNew = newRules.toMutableList()
 
-    private fun updateLangText(v: View) {
-        v.findViewById<android.widget.TextView>(R.id.languageText)?.text = when (getLang()) {
-            "en" -> getString(R.string.language_english)
-            "zh" -> getString(R.string.language_chinese)
-            else -> getString(R.string.language_system)
-        }
-    }
+                for (item in conflictItems) {
+                    when (item.action) {
+                        ConflictAction.REPLACE -> {
+                            workingCurrent.removeAll { it.name == item.rule.name }
+                            resolvedRules.add(item.rule)
+                        }
+                        ConflictAction.IGNORE -> {}
+                        ConflictAction.RENAME_OLD -> {
+                            val existing = workingCurrent.find { it.name == item.rule.name }
+                            if (existing != null) {
+                                workingCurrent.removeAll { it.name == item.rule.name }
+                                var newName = "${item.rule.name}_old"
+                                var counter = 1
+                                while (workingCurrent.any { it.name == newName } || workingNew.any { it.name == newName } || resolvedRules.any { it.name == newName }) {
+                                    newName = "${item.rule.name}_old_$counter"; counter++
+                                }
+                                resolvedRules.add(existing.copy(name = newName))
+                            }
+                            resolvedRules.add(item.rule)
+                        }
+                        ConflictAction.RENAME_NEW -> {
+                            var newName = "${item.rule.name}_new"
+                            var counter = 1
+                            while (workingCurrent.any { it.name == newName } || workingNew.any { it.name == newName } || resolvedRules.any { it.name == newName }) {
+                                newName = "${item.rule.name}_new_$counter"; counter++
+                            }
+                            resolvedRules.add(item.rule.copy(name = newName))
+                        }
+                        else -> {}
+                    }
+                }
+
+                workingCurrent.addAll(workingNew)
+                workingCurrent.addAll(resolvedRules)
+                repo.saveJavaCodeRules(workingCurrent)
+                onResolved(workingCurrent)
+                Toast.makeText(ctx, ctx.getString(R.string.import_success, newRules.size + resolvedRules.size), Toast.LENGTH_SHORT).show()
+            }) {
+                Text(stringResource(R.string.confirm))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+    )
 }
 
-class LaunchersFragment : Fragment() {
-    private lateinit var repo: ModifierRepository
-    private lateinit var recycler: RecyclerView
-    private lateinit var adapter: LauncherHookAdapter
-    private lateinit var empty: View
+// ─── Launchers Screen ─────────────────────────────────────────────────────────
 
-    private val pickerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LaunchersScreen(modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val repo = remember { ModifierRepository(ctx) }
+    var hooks by remember { mutableStateOf(repo.getLauncherHooks()) }
+    var showHookDialog by remember { mutableStateOf(false) }
+    var hookDialogPkg by remember { mutableStateOf("") }
+    var hookDialogExisting by remember { mutableStateOf<LauncherHook?>(null) }
+
+    val pickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.getStringExtra("package")?.let { pkg ->
-                showHookTypeDialog(pkg, null)
+                hookDialogPkg = pkg
+                hookDialogExisting = null
+                showHookDialog = true
             }
         }
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        return inflater.inflate(R.layout.activity_settings, container, false)
+    fun refresh() {
+        hooks = repo.getLauncherHooks()
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
-            v.setPadding(0, insets.getInsets(WindowInsetsCompat.Type.statusBars()).top, 0, insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
-            insets
-        }
-
-        repo = ModifierRepository(requireContext())
-
-        val toolbar = view.findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
-        (requireActivity() as? AppCompatActivity)?.let {
-            it.setSupportActionBar(toolbar)
-            it.supportActionBar?.title = getString(R.string.nav_launchers_title)
-        }
-
-        recycler = view.findViewById(R.id.recyclerView)
-        empty = view.findViewById(R.id.emptyView)
-        recycler.layoutManager = LinearLayoutManager(requireContext())
-
-        adapter = LauncherHookAdapter(
-            onEdit = { pkg, hook -> showHookTypeDialog(pkg, hook) },
-            onDelete = { pkg ->
-                MaterialAlertDialogBuilder(requireContext())
-                    .setTitle(R.string.delete)
-                    .setMessage(getString(R.string.delete_launcher_message, pkg))
-                    .setPositiveButton(R.string.delete) { _, _ -> repo.removeLauncherHook(pkg); loadHooks() }
-                    .setNegativeButton(R.string.cancel, null).show()
+    Scaffold(
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_launchers_title)) }) },
+        floatingActionButton = {
+            FloatingActionButton(onClick = {
+                pickerLauncher.launch(Intent(ctx, AppPickerActivity::class.java))
+            }) {
+                Icon(Icons.Default.Add, contentDescription = null)
             }
-        )
-        recycler.adapter = adapter
-
-        view.findViewById<View>(R.id.fabAdd)?.setOnClickListener {
-            pickerLauncher.launch(Intent(requireContext(), AppPickerActivity::class.java))
         }
-
-        loadHooks()
-    }
-
-    private fun loadHooks() {
-        val hooks = repo.getLauncherHooks()
-        adapter.submitList(hooks)
-        empty.visibility = if (hooks.isEmpty()) View.VISIBLE else View.GONE
-        recycler.visibility = if (hooks.isEmpty()) View.GONE else View.VISIBLE
-    }
-
-    private fun showHookTypeDialog(pkg: String, existingHook: LauncherHook?) {
-        val hookTypes = arrayOf(
-            getString(R.string.hook_instrumentation),
-            getString(R.string.hook_launcher3)
-        )
-        val currentSelection = when (existingHook?.hookType) {
-            HOOK_LAUNCHER3 -> 1
-            else -> 0
-        }
-        var selected = currentSelection
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(pkg)
-            .setSingleChoiceItems(hookTypes, currentSelection) { _, which -> selected = which }
-            .setPositiveButton(R.string.save) { _, _ ->
-                val hookType = when (selected) { 1 -> HOOK_LAUNCHER3 else -> HOOK_INSTRUMENTATION }
-                repo.setLauncherHook(LauncherHook(pkg, hookType))
-                loadHooks()
-                Toast.makeText(requireContext(), R.string.saved, Toast.LENGTH_SHORT).show()
+    ) { padding ->
+        if (hooks.isEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.no_rules_configured), style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.tap_to_add), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
             }
-            .setNegativeButton(R.string.cancel, null).show()
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
+                itemsIndexed(hooks.entries.toList(), key = { _, (pkg, _) -> pkg }) { _, (pkg, hook) ->
+                    val appName = try {
+                        ctx.packageManager.getApplicationInfo(pkg, 0).loadLabel(ctx.packageManager).toString()
+                    } catch (e: Exception) { pkg }
+
+                    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(appName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(pkg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                when (hook.hookType) {
+                                    HOOK_LAUNCHER3 -> stringResource(R.string.hook_launcher3)
+                                    else -> stringResource(R.string.hook_instrumentation)
+                                },
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                TextButton(onClick = {
+                                    hookDialogPkg = pkg
+                                    hookDialogExisting = hook
+                                    showHookDialog = true
+                                }) {
+                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                    Text(stringResource(R.string.edit))
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = {
+                                    repo.removeLauncherHook(pkg)
+                                    refresh()
+                                }) {
+                                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showHookDialog) {
+            HookTypeDialog(
+                pkg = hookDialogPkg,
+                existingHook = hookDialogExisting,
+                onDismiss = { showHookDialog = false },
+                onSave = { type ->
+                    repo.setLauncherHook(LauncherHook(hookDialogPkg, type))
+                    refresh()
+                    showHookDialog = false
+                    Toast.makeText(ctx, R.string.saved, Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
     }
 }
 
-class LauncherHookAdapter(
-    private val onEdit: (String, LauncherHook) -> Unit,
-    private val onDelete: (String) -> Unit
-) : RecyclerView.Adapter<LauncherHookAdapter.ViewHolder>() {
+// ─── Hook Type Dialog ─────────────────────────────────────────────────────────
 
-    private var hooks: Map<String, LauncherHook> = emptyMap()
-
-    fun submitList(newHooks: Map<String, LauncherHook>) {
-        hooks = newHooks
-        notifyDataSetChanged()
+@Composable
+private fun HookTypeDialog(pkg: String, existingHook: LauncherHook?, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    val options = listOf(
+        stringResource(R.string.hook_instrumentation),
+        stringResource(R.string.hook_launcher3)
+    )
+    val currentSelection = when (existingHook?.hookType) {
+        HOOK_LAUNCHER3 -> 1; else -> 0
     }
+    var selected by remember { mutableIntStateOf(currentSelection) }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_launcher_hook, parent, false)
-        return ViewHolder(view)
-    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(pkg) },
+        text = {
+            Column {
+                options.forEachIndexed { index, label ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        RadioButton(selected = selected == index, onClick = { selected = index })
+                        Text(label, modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(if (selected == 1) HOOK_LAUNCHER3 else HOOK_INSTRUMENTATION) }) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+    )
+}
 
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val (packageName, hook) = hooks.entries.toList()[position]
-        holder.bind(packageName, hook)
-    }
+// ─── Settings Screen ──────────────────────────────────────────────────────────
 
-    override fun getItemCount() = hooks.size
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsScreen(modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    var showLangDialog by remember { mutableStateOf(false) }
+    val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    var currentLang by remember { mutableStateOf(prefs.getString("language", "system") ?: "system") }
 
-    inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val container = itemView as com.google.android.material.card.MaterialCardView
-        private val appNameText: android.widget.TextView
-        private val pkgText: android.widget.TextView
-        private val summaryText: android.widget.TextView
-        private val editButton: View
-        private val deleteButton: View
-        private val switchEnabled: com.google.android.material.materialswitch.MaterialSwitch
-
-        init {
-            appNameText = container.findViewById(R.id.textAppName)
-            pkgText = container.findViewById(R.id.textPackageName)
-            summaryText = container.findViewById(R.id.textSummary)
-            editButton = container.findViewById(R.id.buttonEdit)
-            deleteButton = container.findViewById(R.id.buttonDelete)
-            switchEnabled = container.findViewById(R.id.switchEnabled)
+    Scaffold(
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }) }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { showLangDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.language), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            when (currentLang) {
+                                "en" -> stringResource(R.string.language_english)
+                                "zh" -> stringResource(R.string.language_chinese)
+                                else -> stringResource(R.string.language_system)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
 
-        fun bind(packageName: String, hook: LauncherHook) {
-            val appName = try {
-                itemView.context.packageManager.getApplicationInfo(packageName, 0).loadLabel(itemView.context.packageManager).toString()
-            } catch (e: Exception) {
-                packageName
-            }
-            appNameText.text = appName
-            pkgText.text = packageName
-            switchEnabled.visibility = View.GONE
-            summaryText.text = when (hook.hookType) {
-                HOOK_LAUNCHER3 -> itemView.context.getString(R.string.hook_launcher3)
-                else -> itemView.context.getString(R.string.hook_instrumentation)
-            }
-
-            editButton.setOnClickListener { onEdit(packageName, hook) }
-            deleteButton.setOnClickListener { onDelete(packageName) }
+        if (showLangDialog) {
+            LanguageDialog(
+                currentLang = currentLang,
+                onDismiss = { showLangDialog = false },
+                onSelect = { lang ->
+                    currentLang = lang
+                    prefs.edit().putString("language", lang).apply()
+                    showLangDialog = false
+                    (ctx as? ComponentActivity)?.recreate()
+                }
+            )
         }
+    }
+}
+
+// ─── Language Dialog ──────────────────────────────────────────────────────────
+
+@Composable
+private fun LanguageDialog(currentLang: String, onDismiss: () -> Unit, onSelect: (String) -> Unit) {
+    val options = listOf(
+        stringResource(R.string.language_system),
+        stringResource(R.string.language_english),
+        stringResource(R.string.language_chinese)
+    )
+    val values = listOf("system", "en", "zh")
+    val currentIndex = when (currentLang) { "en" -> 1; "zh" -> 2; else -> 0 }
+    var selected by remember { mutableIntStateOf(currentIndex) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.language)) },
+        text = {
+            Column {
+                options.forEachIndexed { index, label ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        RadioButton(selected = selected == index, onClick = { selected = index })
+                        Text(label, modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSelect(values[selected]) }) { Text(stringResource(R.string.confirm)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+    )
+}
+
+// ─── Recompile helper ─────────────────────────────────────────────────────────
+
+private suspend fun recompileAll(ctx: Context, repo: ModifierRepository) {
+    val rules = repo.getJavaCodeRules()
+        .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
+        .sortedByDescending { it.priority }
+        .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }, it.imports, it.members) }
+
+    if (rules.isEmpty()) return
+
+    withContext(Dispatchers.IO) {
+        RuleCompilationManager(ctx).compileAndStore(rules)
+    }
+}
+
+// ─── Export helpers ───────────────────────────────────────────────────────────
+
+private fun rulesToJson(rules: List<JavaCodeRule>): String {
+    val arr = JSONArray()
+    for (rule in rules) {
+        val obj = JSONObject()
+        obj.put("enabled", rule.enabled)
+        obj.put("name", rule.name)
+        obj.put("imports", rule.imports)
+        obj.put("members", rule.members)
+        obj.put("condition", rule.condition)
+        obj.put("action", rule.action)
+        obj.put("priority", rule.priority)
+        arr.put(obj)
+    }
+    return arr.toString()
+}
+
+private fun copyToClipboard(ctx: Context, json: String) {
+    val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("IntentModifierRules", json))
+    Toast.makeText(ctx, R.string.exported_to_clipboard, Toast.LENGTH_SHORT).show()
+}
+
+private fun exportRules(ctx: Context, rules: List<JavaCodeRule>, selected: List<JavaCodeRule>?, uri: Uri) {
+    try {
+        val toExport = selected ?: rules
+        val json = rulesToJson(toExport)
+        ctx.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+        Toast.makeText(ctx, R.string.export_success, Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        Toast.makeText(ctx, R.string.export_failed, Toast.LENGTH_SHORT).show()
     }
 }
