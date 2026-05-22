@@ -1,5 +1,6 @@
 package io.github.nobooooody.intent_modifier.ui
 
+import android.app.Activity
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
@@ -94,6 +95,7 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
                             currentRules.add(rule)
                         }
                         repo.saveJavaCodeRules(currentRules)
+                        setResult(Activity.RESULT_OK)
                         finish()
                     }
                 )

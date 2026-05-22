@@ -347,27 +347,34 @@ private fun RuleContentCard(label: String, rule: JavaCodeRule?, modifier: Modifi
             )
             Spacer(Modifier.height(4.dp))
 
-            val content = rule?.let { r ->
-                buildString {
-                    appendLine("$labelImports:")
-                    appendLine(if (r.imports.isNotBlank()) r.imports else labelNone)
-                    appendLine()
-                    appendLine("$labelMembers:")
-                    appendLine(if (r.members.isNotBlank()) r.members else labelNone)
-                    appendLine()
-                    appendLine("$labelCondition:")
-                    appendLine(if (r.condition.isNotBlank()) r.condition else labelNone)
-                    appendLine()
-                    appendLine("$labelAction:")
-                    append(if (r.action.isNotBlank()) r.action else labelNone)
-                }
-            } ?: labelNotFound
-
-            Text(
-                content,
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (rule != null) {
+                FieldSection(label = labelImports, code = rule.imports, placeholder = labelNone)
+                FieldSection(label = labelMembers, code = rule.members, placeholder = labelNone)
+                FieldSection(label = labelCondition, code = rule.condition, placeholder = labelNone)
+                FieldSection(label = labelAction, code = rule.action, placeholder = labelNone)
+            } else {
+                Text(
+                    labelNotFound,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun FieldSection(label: String, code: String, placeholder: String) {
+    Spacer(Modifier.height(4.dp))
+    Text(
+        label,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.secondary
+    )
+    Spacer(Modifier.height(2.dp))
+    Text(
+        code.ifBlank { placeholder },
+        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }

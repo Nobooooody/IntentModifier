@@ -189,6 +189,14 @@ private fun RulesScreen() {
         isSelectionMode = false
     }
 
+    val editorLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            refresh()
+        }
+    }
+
     val conflictLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -334,7 +342,7 @@ private fun RulesScreen() {
         floatingActionButton = {
             if (!isSelectionMode) {
                 FloatingActionButton(onClick = {
-                    ctx.startActivity(Intent(ctx, JavaCodeRuleEditorActivity::class.java))
+                    editorLauncher.launch(Intent(ctx, JavaCodeRuleEditorActivity::class.java))
                 }) {
                     Icon(Icons.Default.Add, contentDescription = null)
                 }
@@ -409,7 +417,7 @@ private fun RulesScreen() {
                                     TextButton(onClick = {
                                         val intent = Intent(ctx, JavaCodeRuleEditorActivity::class.java)
                                         intent.putExtra(JavaCodeRuleEditorActivity.EXTRA_RULE_INDEX, index)
-                                        ctx.startActivity(intent)
+                                        editorLauncher.launch(intent)
                                     }) {
                                         Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
                                         Text(stringResource(R.string.edit))
