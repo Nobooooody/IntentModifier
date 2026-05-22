@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App name -->
+    <string name="app_name">Intent Modifier</string>
 
     <!-- Settings -->
     <string name="settings_title">Intent Modifier</string>
@@ -18,6 +19,10 @@
     <!-- Extras -->
 
     <!-- Extra types -->
+
+    <!-- Hints -->
+    <string name="rule_name_hint">e.g., Redirect Baidu</string>
+    <string name="priority_hint">Higher value = higher priority</string>
 
     <!-- Validation errors -->
     <string name="error_key_required">Key required</string>
