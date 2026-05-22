@@ -1,73 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- App name -->
-    <string name="app_name">Intent Modifier</string>
 
     <!-- Settings -->
     <string name="settings_title">Intent Modifier</string>
-    <string name="add_rule">添加应用规则</string>
-    <string name="enable_module">启用 Intent Modifier</string>
 
     <!-- Rule editing -->
-    <string name="delete_rule">删除规则</string>
-    <string name="delete_rule_message">删除 %1$s 的规则？</string>
     <string name="delete">删除</string>
     <string name="cancel">取消</string>
     <string name="confirm">确认</string>
     <string name="save">保存</string>
-    <string name="close">关闭</string>
     <string name="saved">已保存</string>
-    <string name="no_modifications">未配置修改</string>
 
     <!-- Fields -->
-    <string name="custom_action">自定义 Action</string>
-    <string name="custom_action_hint">例如: android.intent.action.VIEW</string>
-    <string name="custom_data">自定义 Data (URI)</string>
-    <string name="custom_data_hint">例如: content://com.example.app</string>
-    <string name="custom_package">自定义 Package</string>
-    <string name="custom_package_hint">例如: com.custom.package</string>
-    <string name="custom_class">自定义 Class</string>
-    <string name="custom_class_hint">例如: com.custom.package.MainActivity</string>
     <string name="enabled">启用</string>
 
     <!-- Extras -->
-    <string name="extra_key">Extra 键</string>
-    <string name="extra_key_hint">例如: custom_param</string>
-    <string name="extra_value">Extra 值</string>
-    <string name="extra_value_hint">例如: value</string>
-    <string name="extra_type">Extra 类型</string>
-    <string name="add_extra">添加 Extra</string>
-    <string name="add_array_item">添加项</string>
-    <string name="remove">移除</string>
-    <string name="remove_extra">移除</string>
 
     <!-- Extra types -->
-    <string name="type_boolean">布尔值</string>
-    <string name="type_integer">整数</string>
-    <string name="type_long">长整数</string>
-    <string name="type_decimal">小数</string>
-    <string name="type_string">字符串</string>
-    <string name="type_uri">URI</string>
-    <string name="type_component">ComponentName</string>
-    <string name="type_null">空</string>
-    <string-array name="extra_types">
-        <item>布尔值</item>
-        <item>ComponentName</item>
-        <item>小数</item>
-        <item>整数</item>
-        <item>长整数</item>
-        <item>空</item>
-        <item>字符串</item>
-        <item>URI</item>
-    </string-array>
 
     <!-- Validation errors -->
     <string name="error_key_required">键不能为空</string>
-    <string name="error_value_required">值不能为空</string>
-    <string name="error_invalid_integer">无效的整数</string>
-    <string name="error_invalid_long">无效的长整数</string>
-    <string name="error_invalid_number">无效的数字</string>
-    <string name="error_invalid_uri">无效的 URI</string>
 
     <!-- App picker -->
     <string name="select_app">选择应用</string>
@@ -76,10 +29,6 @@
     <string name="refresh">刷新</string>
 
     <!-- Summary -->
-    <string name="summary_action">Action: %1$s</string>
-    <string name="summary_to">目标: %1$s</string>
-    <string name="summary_class">/%1$s</string>
-    <string name="summary_extras">Extras: %1$d</string>
 
     <!-- Common -->
     <string name="edit">编辑</string>
@@ -91,7 +40,6 @@
     <string name="export_to_file">导出到文件</string>
     <string name="export_to_clipboard">导出到剪贴板</string>
     <string name="exported_to_clipboard">已导出到剪贴板</string>
-    <string name="exported_to_file">已导出到 %1$s</string>
     <string name="export_success">导出成功</string>
     <string name="export_failed">导出失败</string>
 
@@ -118,7 +66,6 @@
     <string name="import_success">已导入 %1$d 条规则</string>
     <string name="import_failed">导入失败</string>
     <string name="import_cancelled">导入已取消</string>
-    <string name="action_import">导入</string>
 
     <!-- Navigation -->
     <string name="nav_rules_title">规则</string>
@@ -139,7 +86,6 @@
     <string name="new_rule">新规则</string>
     <string name="edit_rule">编辑规则</string>
     <string name="rule_name">规则名称</string>
-    <string name="rule_name_hint">例如：重定向百度</string>
     <string name="priority">优先级</string>
     <string name="condition_code">条件代码</string>
     <string name="condition_hint">必须返回 boolean，每条语句以分号结尾。例如：\nintent.getPackage().contains("com.baidu");\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n注意：某些启动器可能不设置 getPackage()，可使用：\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
@@ -152,17 +98,12 @@
     <string name="test_compile">测试编译</string>
     <string name="compile_success">编译成功！</string>
     <string name="compile_failed">编译失败</string>
-    <string name="no_java_rules">暂无规则</string>
-    <string name="tap_to_add_rule">点击 + 添加新规则</string>
-    <string name="add_new_rule">添加规则</string>
     <string name="delete_rule_confirm">删除规则 \"%1$s\"？</string>
     <string name="condition_empty">条件为空，将匹配所有 Intent</string>
-    <string name="priority_hint">数字越大优先级越高</string>
     <string name="compiling">编译中...</string>
     <string name="compiling_all_rules">正在编译所有规则...</string>
     <string name="no_rules_to_compile">没有可编译的规则</string>
     <string name="saved_and_compiled">已保存并编译</string>
-    <string name="saved_but_compile_failed">已保存但编译失败</string>
 
     <!-- Selection mode -->
     <string name="select_all">全选</string>
