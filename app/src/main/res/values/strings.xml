@@ -168,4 +168,10 @@
     <string name="no_rules_to_compile">没有可编译的规则</string>
     <string name="saved_and_compiled">已保存并编译</string>
     <string name="saved_but_compile_failed">已保存但编译失败</string>
+
+    <!-- Selection mode -->
+    <string name="select_all">Select all</string>
+    <string name="deselect_all">Deselect all</string>
+    <string name="selected_count">%1$d selected</string>
+    <string name="export_selected_title">Export %1$d rules</string>
 </resources>

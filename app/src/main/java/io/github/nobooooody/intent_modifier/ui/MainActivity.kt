@@ -14,6 +14,8 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
+import androidx.appcompat.view.ActionMode
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,6 +41,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -81,6 +84,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var currentFragmentTag: String? = null
+    var pendingExportRules: List<JavaCodeRule>? = null
+    var isSelectionModeActive = false
 
     private fun showFragment(fragment: Fragment) {
         currentFragmentTag = when (fragment) {
@@ -95,7 +100,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
         menu.clear()
-        if (currentFragmentTag == "rules") {
+        if (currentFragmentTag == "rules" && !isSelectionModeActive) {
             menuInflater.inflate(R.menu.menu_rules, menu)
         }
         return super.onPrepareOptionsMenu(menu)
@@ -130,7 +135,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val exportToFileLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    val exportToFileLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { exportRulesToFile(it) }
     }
 
@@ -142,19 +147,35 @@ class MainActivity : AppCompatActivity() {
         try {
             val repo = ModifierRepository(this)
             val rulesJson = repo.getJavaCodeRulesJson()
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("IntentModifierRules", rulesJson)
-            clipboard.setPrimaryClip(clip)
-            Toast.makeText(this, R.string.exported_to_clipboard, Toast.LENGTH_SHORT).show()
+            copyToClipboard(rulesJson)
         } catch (e: Exception) {
             Toast.makeText(this, R.string.export_failed, Toast.LENGTH_SHORT).show()
         }
     }
 
+    fun exportToClipboard(rules: List<JavaCodeRule>) {
+        try {
+            copyToClipboard(rulesToJson(rules))
+        } catch (e: Exception) {
+            Toast.makeText(this, R.string.export_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun copyToClipboard(json: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("IntentModifierRules", json)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(this, R.string.exported_to_clipboard, Toast.LENGTH_SHORT).show()
+    }
+
     private fun exportRulesToFile(uri: Uri) {
         try {
-            val repo = ModifierRepository(this)
-            val rulesJson = repo.getJavaCodeRulesJson()
+            val rulesJson = if (pendingExportRules != null) {
+                rulesToJson(pendingExportRules!!).also { pendingExportRules = null }
+            } else {
+                val repo = ModifierRepository(this)
+                repo.getJavaCodeRulesJson()
+            }
             contentResolver.openOutputStream(uri)?.use { os ->
                 os.write(rulesJson.toByteArray(Charsets.UTF_8))
             }
@@ -162,6 +183,22 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, R.string.export_failed, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun rulesToJson(rules: List<JavaCodeRule>): String {
+        val arr = JSONArray()
+        for (rule in rules) {
+            val obj = JSONObject()
+            obj.put("enabled", rule.enabled)
+            obj.put("name", rule.name)
+            obj.put("imports", rule.imports)
+            obj.put("members", rule.members)
+            obj.put("condition", rule.condition)
+            obj.put("action", rule.action)
+            obj.put("priority", rule.priority)
+            arr.put(obj)
+        }
+        return arr.toString()
     }
 
     private fun importFromClipboard() {
@@ -490,6 +527,8 @@ class RulesFragment : Fragment() {
     private lateinit var recycler: RecyclerView
     private lateinit var adapter: JavaCodeRuleAdapter
     private lateinit var empty: View
+    private var actionMode: ActionMode? = null
+    private var toolbar: View? = null
 
     private val editorLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
         loadRules()
@@ -545,9 +584,14 @@ class RulesFragment : Fragment() {
                 recompileRules()
             }
         )
+        adapter.onLongClick = { position -> enterSelectionMode(position) }
+        adapter.onSelectionChanged = { updateActionMode() }
         recycler.adapter = adapter
 
+        this.toolbar = view.findViewById(R.id.toolbar)
+
         view.findViewById<FloatingActionButton>(R.id.fabAdd)?.setOnClickListener {
+            actionMode?.finish()
             editorLauncher.launch(Intent(requireContext(), JavaCodeRuleEditorActivity::class.java))
         }
 
@@ -559,11 +603,97 @@ class RulesFragment : Fragment() {
         loadRules()
     }
 
+    private fun enterSelectionMode(position: Int) {
+        if (actionMode == null) {
+            actionMode = (requireActivity() as AppCompatActivity)
+                .startSupportActionMode(actionModeCallback)
+        }
+        adapter.enterSelectionMode(position)
+        updateActionMode()
+    }
+
+    private fun updateActionMode() {
+        actionMode?.let { mode ->
+            val count = adapter.getSelectedCount()
+            mode.title = getString(R.string.selected_count, count)
+            mode.invalidate()
+        }
+    }
+
+    private val actionModeCallback = object : ActionMode.Callback {
+        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+            mode.menuInflater.inflate(R.menu.menu_selection, menu)
+            toolbar?.visibility = View.GONE
+            (requireActivity() as MainActivity).isSelectionModeActive = true
+            requireActivity().invalidateOptionsMenu()
+            return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+            val selectAll = menu.findItem(R.id.action_select_all)
+            if (adapter.getSelectedCount() == adapter.getRules().size) {
+                selectAll?.title = getString(R.string.deselect_all)
+            } else {
+                selectAll?.title = getString(R.string.select_all)
+            }
+            return true
+        }
+
+        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+            return when (item.itemId) {
+                R.id.action_select_all -> {
+                    val rules = adapter.getRules()
+                    if (adapter.selectedItems.size == rules.size) {
+                        adapter.clearSelection()
+                    } else {
+                        adapter.selectAll()
+                    }
+                    true
+                }
+                R.id.action_export -> {
+                    showExportSelectedDialog()
+                    true
+                }
+                else -> false
+            }
+        }
+
+        override fun onDestroyActionMode(mode: ActionMode) {
+            actionMode = null
+            adapter.exitSelectionMode()
+            toolbar?.visibility = View.VISIBLE
+            (requireActivity() as MainActivity).isSelectionModeActive = false
+            requireActivity().invalidateOptionsMenu()
+        }
+    }
+
+    private fun showExportSelectedDialog() {
+        val selected = adapter.getSelectedRules()
+        if (selected.isEmpty()) return
+        val items = arrayOf(getString(R.string.export_to_file), getString(R.string.export_to_clipboard))
+        val activity = requireActivity() as MainActivity
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(getString(R.string.export_selected_title, selected.size))
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> {
+                        activity.pendingExportRules = selected
+                        activity.exportToFileLauncher.launch("intent_modifier_rules.json")
+                    }
+                    1 -> activity.exportToClipboard(selected)
+                }
+                actionMode?.finish()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     private fun loadRules() {
         val rules = repo.getJavaCodeRules()
         adapter.submitList(rules)
         empty.visibility = if (rules.isEmpty()) View.VISIBLE else View.GONE
         recycler.visibility = if (rules.isEmpty()) View.GONE else View.VISIBLE
+        actionMode?.finish()
     }
 
     private fun recompileRules() {
@@ -590,10 +720,57 @@ class JavaCodeRuleAdapter(
 ) : RecyclerView.Adapter<JavaCodeRuleAdapter.ViewHolder>() {
 
     private var rules: List<JavaCodeRule> = emptyList()
+    var selectedItems = mutableSetOf<Int>()
+        private set
+    var isSelectionMode = false
+    var onLongClick: ((Int) -> Unit)? = null
+    var onSelectionChanged: (() -> Unit)? = null
 
     fun submitList(newRules: List<JavaCodeRule>) {
         rules = newRules
+        selectedItems.clear()
+        isSelectionMode = false
         notifyDataSetChanged()
+    }
+
+    fun getRules(): List<JavaCodeRule> = rules
+    fun getSelectedRules(): List<JavaCodeRule> = selectedItems.sorted().map { rules[it] }
+    fun getSelectedCount(): Int = selectedItems.size
+
+    fun toggleSelection(position: Int) {
+        if (position in selectedItems) {
+            selectedItems.remove(position)
+        } else {
+            selectedItems.add(position)
+        }
+        notifyItemChanged(position)
+        onSelectionChanged?.invoke()
+    }
+
+    fun selectAll() {
+        selectedItems = rules.indices.toMutableSet()
+        notifyDataSetChanged()
+        onSelectionChanged?.invoke()
+    }
+
+    fun clearSelection() {
+        selectedItems.clear()
+        notifyDataSetChanged()
+        onSelectionChanged?.invoke()
+    }
+
+    fun enterSelectionMode(position: Int) {
+        isSelectionMode = true
+        selectedItems.add(position)
+        notifyDataSetChanged()
+        onSelectionChanged?.invoke()
+    }
+
+    fun exitSelectionMode() {
+        isSelectionMode = false
+        selectedItems.clear()
+        notifyDataSetChanged()
+        onSelectionChanged?.invoke()
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -603,12 +780,14 @@ class JavaCodeRuleAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(rules[position])
+        holder.bind(rules[position], position)
     }
 
     override fun getItemCount() = rules.size
 
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val card: com.google.android.material.card.MaterialCardView = itemView as com.google.android.material.card.MaterialCardView
+        private val checkSelect: CheckBox = itemView.findViewById(R.id.checkSelect)
         private val textName: TextView = itemView.findViewById(R.id.textRuleName)
         private val textPriority: TextView = itemView.findViewById(R.id.textRulePriority)
         private val textCondition: TextView = itemView.findViewById(R.id.textConditionPreview)
@@ -617,12 +796,44 @@ class JavaCodeRuleAdapter(
         private val buttonEdit: View = itemView.findViewById(R.id.buttonEdit)
         private val buttonDelete: View = itemView.findViewById(R.id.buttonDelete)
 
-        fun bind(rule: JavaCodeRule) {
+        fun bind(rule: JavaCodeRule, position: Int) {
             textName.text = rule.name
             textPriority.text = itemView.context.getString(R.string.priority) + ": " + rule.priority
             textCondition.text = if (rule.condition.isNotEmpty()) rule.condition else itemView.context.getString(R.string.condition_empty)
             textAction.text = rule.action
+
+            val isSelected = position in selectedItems
+
+            checkSelect.visibility = if (isSelectionMode) View.VISIBLE else View.GONE
+            checkSelect.isChecked = isSelected
+
+            switchEnabled.visibility = if (isSelectionMode) View.GONE else View.VISIBLE
             switchEnabled.isChecked = rule.enabled
+            buttonEdit.visibility = if (isSelectionMode) View.GONE else View.VISIBLE
+            buttonDelete.visibility = if (isSelectionMode) View.GONE else View.VISIBLE
+
+            card.isChecked = isSelected
+
+            checkSelect.setOnClickListener {
+                if (isSelectionMode) {
+                    toggleSelection(position)
+                }
+            }
+
+            itemView.setOnLongClickListener {
+                if (!isSelectionMode) {
+                    onLongClick?.invoke(position)
+                    true
+                } else {
+                    false
+                }
+            }
+
+            itemView.setOnClickListener {
+                if (isSelectionMode) {
+                    toggleSelection(position)
+                }
+            }
 
             switchEnabled.setOnCheckedChangeListener(null)
             switchEnabled.setOnCheckedChangeListener { _, isChecked ->

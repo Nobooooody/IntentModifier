@@ -103,6 +103,11 @@
     <string name="import_failed">导入失败</string>
     <string name="action_import">导入</string>
 
+    <string name="select_all">全选</string>
+    <string name="deselect_all">取消全选</string>
+    <string name="selected_count">已选 %1$d 项</string>
+    <string name="export_selected_title">导出 %1$d 条规则</string>
+
     <string-array name="extra_types">
         <item>布尔值</item>
         <item>组件名</item>

@@ -129,4 +129,10 @@
     <string name="hook_instrumentation">Instrumentation (默认)</string>
     <string name="hook_launcher3">Launcher3 startActivitySafely</string>
     <string name="delete_launcher_message">删除 %1$s 的Hook设置?</string>
+
+    <!-- Selection mode -->
+    <string name="select_all">全选</string>
+    <string name="deselect_all">取消全选</string>
+    <string name="selected_count">已选 %1$d 项</string>
+    <string name="export_selected_title">导出 %1$d 条规则</string>
 </resources>
