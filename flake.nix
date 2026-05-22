@@ -42,6 +42,8 @@
             ];
             ANDROID_SDK_ROOT = "${androidSdk.androidsdk}/libexec/android-sdk";
             ANDROID_HOME = "${androidSdk.androidsdk}/libexec/android-sdk";
+            GRADLE_OPTS =
+              "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/aapt2";
             JAVA_HOME = "${pkgs.jdk17}";
             shellHook = ''
               mkdir -p $HOME/.android
