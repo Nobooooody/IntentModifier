@@ -68,6 +68,16 @@
     <string name="conflict_action_rename_old_short">旧→_old</string>
     <string name="conflict_action_rename_new_short">新→_new</string>
 
+    <string name="conflict_existing">已存在</string>
+    <string name="conflict_imported">导入</string>
+    <string name="conflict_choose_action">选择操作</string>
+    <string name="conflict_not_found">(未找到)</string>
+    <string name="field_imports">导入</string>
+    <string name="field_members">成员</string>
+    <string name="field_condition">条件</string>
+    <string name="field_action">动作</string>
+    <string name="field_none">(无)</string>
+
     <string name="import_success">已导入 %1$d 条规则</string>
     <string name="import_failed">导入失败</string>
     <string name="import_cancelled">导入已取消</string>

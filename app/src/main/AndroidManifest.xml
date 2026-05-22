@@ -29,6 +29,11 @@
             android:theme="@style/AppTheme"
             android:windowSoftInputMode="adjustPan" />
 
+        <activity
+            android:name=".ui.ConflictResolutionActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+
         <provider
             android:name=".ui.provider.RuleProvider"
             android:authorities="io.github.nobooooody.intent_modifier.provider"

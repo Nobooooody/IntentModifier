@@ -17,6 +17,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -74,8 +75,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
 import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.HOOK_INSTRUMENTATION
 import io.github.nobooooody.intent_modifier.data.HOOK_LAUNCHER3
@@ -135,52 +136,33 @@ fun IntentModifierTheme(content: @Composable () -> Unit) {
 private fun MainScreen() {
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    icon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                    label = { Text(stringResource(R.string.nav_rules_title)) }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                    label = { Text(stringResource(R.string.nav_launchers_title)) }
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text(stringResource(R.string.nav_settings_title)) }
-                )
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f)) {
+            when (selectedTab) {
+                0 -> RulesScreen()
+                1 -> LaunchersScreen()
+                2 -> SettingsScreen()
             }
         }
-    ) { padding ->
-        when (selectedTab) {
-            0 -> RulesScreen(modifier = Modifier.padding(padding))
-            1 -> LaunchersScreen(modifier = Modifier.padding(padding))
-            2 -> SettingsScreen(modifier = Modifier.padding(padding))
-        }
-    }
-}
-
-// ─── Data classes for import ─────────────────────────────────────────────────
-
-private data class ConflictItem(
-    val rule: JavaCodeRule,
-    var action: ConflictAction
-)
-
-private enum class ConflictAction {
-    NONE, REPLACE, IGNORE, RENAME_OLD, RENAME_NEW;
-
-    companion object {
-        fun fromIndex(index: Int): ConflictAction = when (index) {
-            0 -> REPLACE; 1 -> IGNORE; 2 -> RENAME_OLD; 3 -> RENAME_NEW
-            else -> NONE
+        NavigationBar {
+            NavigationBarItem(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                icon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                label = { Text(stringResource(R.string.nav_rules_title)) }
+            )
+            NavigationBarItem(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                label = { Text(stringResource(R.string.nav_launchers_title)) }
+            )
+            NavigationBarItem(
+                selected = selectedTab == 2,
+                onClick = { selectedTab = 2 },
+                icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                label = { Text(stringResource(R.string.nav_settings_title)) }
+            )
         }
     }
 }
@@ -189,7 +171,7 @@ private enum class ConflictAction {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun RulesScreen(modifier: Modifier = Modifier) {
+private fun RulesScreen() {
     val ctx = LocalContext.current
     val repo = remember { ModifierRepository(ctx) }
     var rules by remember { mutableStateOf(repo.getJavaCodeRules()) }
@@ -198,11 +180,22 @@ private fun RulesScreen(modifier: Modifier = Modifier) {
     var showMenu by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
 
-    // Import state
-    var importConflictState by remember { mutableStateOf<ImportConflictState?>(null) }
-
     val scope = rememberCoroutineScope()
     val activity = ctx as? ComponentActivity
+
+    fun refresh() {
+        rules = repo.getJavaCodeRules()
+        selectedItems.clear()
+        isSelectionMode = false
+    }
+
+    val conflictLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            refresh()
+        }
+    }
 
     val exportFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -221,17 +214,20 @@ private fun RulesScreen(modifier: Modifier = Modifier) {
             try {
                 val text = ctx.contentResolver.openInputStream(it)?.bufferedReader()?.readText() ?: return@let
                 handleImportText(ctx, text, repo) { result ->
-                    if (result is ImportResult.Success) {
-                        rules = result.rules
-                        selectedItems.clear()
-                        isSelectionMode = false
-                    } else if (result is ImportResult.Conflict) {
-                        importConflictState = ImportConflictState(
-                            conflictRules = result.conflictRules,
-                            currentRules = result.currentRules,
-                            newRules = result.newRules,
-                            repo = result.repo
-                        )
+                    when (result) {
+                        is ImportResult.Success -> {
+                            rules = result.rules
+                            selectedItems.clear()
+                            isSelectionMode = false
+                        }
+                        is ImportResult.Conflict -> {
+                            val intent = Intent(ctx, ConflictResolutionActivity::class.java).apply {
+                                putExtra(ConflictResolutionActivity.EXTRA_CONFLICT_RULES, rulesToJson(result.conflictRules))
+                                putExtra(ConflictResolutionActivity.EXTRA_CURRENT_RULES, rulesToJson(result.currentRules))
+                                putExtra(ConflictResolutionActivity.EXTRA_NEW_RULES, rulesToJson(result.newRules))
+                            }
+                            conflictLauncher.launch(intent)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -240,19 +236,12 @@ private fun RulesScreen(modifier: Modifier = Modifier) {
         }
     }
 
-    fun refresh() {
-        rules = repo.getJavaCodeRules()
-        selectedItems.clear()
-        isSelectionMode = false
-    }
-
     fun toggleSelection(index: Int) {
         if (index in selectedItems) selectedItems.remove(index) else selectedItems.add(index)
         if (selectedItems.isEmpty()) isSelectionMode = false
     }
 
-    Scaffold(modifier = modifier,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             if (isSelectionMode) {
                 TopAppBar(
@@ -320,12 +309,12 @@ private fun RulesScreen(modifier: Modifier = Modifier) {
                                                         Toast.makeText(ctx, ctx.getString(R.string.import_success, result.count), Toast.LENGTH_SHORT).show()
                                                     }
                                                     is ImportResult.Conflict -> {
-                                                        importConflictState = ImportConflictState(
-                                                            conflictRules = result.conflictRules,
-                                                            currentRules = result.currentRules,
-                                                            newRules = result.newRules,
-                                                            repo = result.repo
-                                                        )
+                                                        val intent = Intent(ctx, ConflictResolutionActivity::class.java).apply {
+                                                            putExtra(ConflictResolutionActivity.EXTRA_CONFLICT_RULES, rulesToJson(result.conflictRules))
+                                                            putExtra(ConflictResolutionActivity.EXTRA_CURRENT_RULES, rulesToJson(result.currentRules))
+                                                            putExtra(ConflictResolutionActivity.EXTRA_NEW_RULES, rulesToJson(result.newRules))
+                                                        }
+                                                        conflictLauncher.launch(intent)
                                                     }
                                                 }
                                             }
@@ -474,32 +463,9 @@ private fun RulesScreen(modifier: Modifier = Modifier) {
         )
     }
 
-    // Conflict resolution
-    importConflictState?.let { state ->
-        ConflictDialog(
-            conflictRules = state.conflictRules,
-            newRules = state.newRules,
-            currentRules = state.currentRules,
-            repo = state.repo,
-            onDismiss = { importConflictState = null },
-            onResolved = { updatedRules ->
-                rules = updatedRules
-                importConflictState = null
-                selectedItems.clear()
-                isSelectionMode = false
-            }
-        )
-    }
 }
 
 // ─── Import types ─────────────────────────────────────────────────────────────
-
-private data class ImportConflictState(
-    val conflictRules: List<JavaCodeRule>,
-    val currentRules: MutableList<JavaCodeRule>,
-    val newRules: List<JavaCodeRule>,
-    val repo: ModifierRepository
-)
 
 private sealed class ImportResult {
     data class Success(val rules: List<JavaCodeRule>, val count: Int) : ImportResult()
@@ -553,191 +519,12 @@ private fun handleImportText(ctx: Context, jsonStr: String, repo: ModifierReposi
     }
 }
 
-// ─── Conflict Dialog ──────────────────────────────────────────────────────────
-
-@Composable
-private fun ConflictDialog(
-    conflictRules: List<JavaCodeRule>,
-    newRules: List<JavaCodeRule>,
-    currentRules: MutableList<JavaCodeRule>,
-    repo: ModifierRepository,
-    onDismiss: () -> Unit,
-    onResolved: (List<JavaCodeRule>) -> Unit
-) {
-    val ctx = LocalContext.current
-    var conflictItems = remember { mutableStateListOf<ConflictItem>() }
-    var applyToAll by remember { mutableStateOf(false) }
-    var applyAllAction by remember { mutableIntStateOf(0) }
-
-    // Initialize conflict items
-    if (conflictItems.isEmpty()) {
-        conflictItems.addAll(conflictRules.map { ConflictItem(it, ConflictAction.NONE) })
-    }
-
-    fun getShortLabel(action: ConflictAction): String = when (action) {
-        ConflictAction.REPLACE -> ctx.getString(R.string.conflict_action_replace_short)
-        ConflictAction.IGNORE -> ctx.getString(R.string.conflict_action_ignore_short)
-        ConflictAction.RENAME_OLD -> ctx.getString(R.string.conflict_action_rename_old_short)
-        ConflictAction.RENAME_NEW -> ctx.getString(R.string.conflict_action_rename_new_short)
-        else -> "—"
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.import_conflict_title)) },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.import_conflict_message, conflictRules.size))
-                Spacer(Modifier.height(12.dp))
-
-                LazyColumn(modifier = Modifier.height(300.dp)) {
-                    itemsIndexed(conflictItems, key = { _, item -> item.rule.name }) { index, item ->
-                        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(item.rule.name, style = MaterialTheme.typography.titleSmall)
-
-                                val details = buildString {
-                                    if (item.rule.imports.isNotEmpty()) { appendLine("━━ Imports ━━"); appendLine(item.rule.imports); appendLine() }
-                                    if (item.rule.members.isNotEmpty()) { appendLine("━━ Members ━━"); appendLine(item.rule.members); appendLine() }
-                                    if (item.rule.condition.isNotEmpty()) { appendLine("━━ Condition ━━"); appendLine(item.rule.condition); appendLine() }
-                                    if (item.rule.action.isNotEmpty()) { appendLine("━━ Action ━━"); appendLine(item.rule.action) }
-                                }.trim().ifEmpty { "(empty)" }
-
-                                Text(details, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
-
-                                Spacer(Modifier.height(8.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    val actions = listOf(
-                                        ConflictAction.REPLACE to ctx.getString(R.string.conflict_action_replace_short),
-                                        ConflictAction.IGNORE to ctx.getString(R.string.conflict_action_ignore_short),
-                                        ConflictAction.RENAME_OLD to ctx.getString(R.string.conflict_action_rename_old_short),
-                                        ConflictAction.RENAME_NEW to ctx.getString(R.string.conflict_action_rename_new_short)
-                                    )
-                                    actions.forEach { (action, label) ->
-                                        TextButton(
-                                            onClick = {
-                                                conflictItems[index] = conflictItems[index].copy(action = action)
-                                            },
-                                            content = { Text(label, style = MaterialTheme.typography.labelSmall) }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = applyToAll, onCheckedChange = { checked ->
-                        applyToAll = checked
-                        if (checked) {
-                            val action = ConflictAction.fromIndex(applyAllAction)
-                            for (i in conflictItems.indices) {
-                                conflictItems[i] = conflictItems[i].copy(action = action)
-                            }
-                        }
-                    })
-                    Text(stringResource(R.string.import_conflict_apply_to_all), modifier = Modifier.weight(1f))
-
-                    if (applyToAll) {
-                        val allActions = listOf(
-                            ConflictAction.REPLACE to ctx.getString(R.string.conflict_action_replace_short),
-                            ConflictAction.IGNORE to ctx.getString(R.string.conflict_action_ignore_short),
-                            ConflictAction.RENAME_OLD to ctx.getString(R.string.conflict_action_rename_old_short),
-                            ConflictAction.RENAME_NEW to ctx.getString(R.string.conflict_action_rename_new_short)
-                        )
-                        var showActions by remember { mutableStateOf(false) }
-                        TextButton(onClick = { showActions = true }) {
-                            Text(allActions[applyAllAction].second)
-                        }
-                        DropdownMenu(expanded = showActions, onDismissRequest = { showActions = false }) {
-                            allActions.forEachIndexed { i, (_, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = {
-                                        applyAllAction = i
-                                        showActions = false
-                                        val action = ConflictAction.fromIndex(i)
-                                        for (j in conflictItems.indices) {
-                                            conflictItems[j] = conflictItems[j].copy(action = action)
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                var allResolved = true
-                for (item in conflictItems) {
-                    if (item.action == ConflictAction.NONE) { allResolved = false; break }
-                }
-                if (!allResolved) {
-                    Toast.makeText(ctx, R.string.import_conflict_not_resolved, Toast.LENGTH_SHORT).show()
-                    return@TextButton
-                }
-
-                val resolvedRules = mutableListOf<JavaCodeRule>()
-                val workingCurrent = currentRules.toMutableList()
-                val workingNew = newRules.toMutableList()
-
-                for (item in conflictItems) {
-                    when (item.action) {
-                        ConflictAction.REPLACE -> {
-                            workingCurrent.removeAll { it.name == item.rule.name }
-                            resolvedRules.add(item.rule)
-                        }
-                        ConflictAction.IGNORE -> {}
-                        ConflictAction.RENAME_OLD -> {
-                            val existing = workingCurrent.find { it.name == item.rule.name }
-                            if (existing != null) {
-                                workingCurrent.removeAll { it.name == item.rule.name }
-                                var newName = "${item.rule.name}_old"
-                                var counter = 1
-                                while (workingCurrent.any { it.name == newName } || workingNew.any { it.name == newName } || resolvedRules.any { it.name == newName }) {
-                                    newName = "${item.rule.name}_old_$counter"; counter++
-                                }
-                                resolvedRules.add(existing.copy(name = newName))
-                            }
-                            resolvedRules.add(item.rule)
-                        }
-                        ConflictAction.RENAME_NEW -> {
-                            var newName = "${item.rule.name}_new"
-                            var counter = 1
-                            while (workingCurrent.any { it.name == newName } || workingNew.any { it.name == newName } || resolvedRules.any { it.name == newName }) {
-                                newName = "${item.rule.name}_new_$counter"; counter++
-                            }
-                            resolvedRules.add(item.rule.copy(name = newName))
-                        }
-                        else -> {}
-                    }
-                }
-
-                workingCurrent.addAll(workingNew)
-                workingCurrent.addAll(resolvedRules)
-                repo.saveJavaCodeRules(workingCurrent)
-                onResolved(workingCurrent)
-                Toast.makeText(ctx, ctx.getString(R.string.import_success, newRules.size + resolvedRules.size), Toast.LENGTH_SHORT).show()
-            }) {
-                Text(stringResource(R.string.confirm))
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
-    )
-}
 
 // ─── Launchers Screen ─────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LaunchersScreen(modifier: Modifier = Modifier) {
+private fun LaunchersScreen() {
     val ctx = LocalContext.current
     val repo = remember { ModifierRepository(ctx) }
     var hooks by remember { mutableStateOf(repo.getLauncherHooks()) }
@@ -759,8 +546,7 @@ private fun LaunchersScreen(modifier: Modifier = Modifier) {
         hooks = repo.getLauncherHooks()
     }
 
-    Scaffold(modifier = modifier,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_launchers_title)) }) },
         floatingActionButton = {
             FloatingActionButton(onClick = {
@@ -881,14 +667,13 @@ private fun HookTypeDialog(pkg: String, existingHook: LauncherHook?, onDismiss: 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(modifier: Modifier = Modifier) {
+private fun SettingsScreen() {
     val ctx = LocalContext.current
     var showLangDialog by remember { mutableStateOf(false) }
     val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
     var currentLang by remember { mutableStateOf(prefs.getString("language", "system") ?: "system") }
 
-    Scaffold(modifier = modifier,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }) }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {

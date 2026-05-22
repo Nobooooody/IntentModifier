@@ -140,6 +140,7 @@ private fun RuleEditorScreen(
                 value = name, onValueChange = { name = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.rule_name)) },
+                placeholder = { Text(stringResource(R.string.rule_name_hint)) },
                 singleLine = true
             )
 
@@ -156,6 +157,7 @@ private fun RuleEditorScreen(
                 value = priority, onValueChange = { priority = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.priority)) },
+                placeholder = { Text(stringResource(R.string.priority_hint)) },
                 singleLine = true
             )
 
@@ -245,8 +247,14 @@ private fun RuleEditorScreen(
                                     val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
                                     Pair(if (result.errorRuleName != null) "${result.errorRuleName}:\n$msg" else msg, Color(0xFFF44336))
                                 }
+                                if (result.success) {
+                                    Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
+                                }
                             } catch (e: Exception) {
                                 compileResult = Pair("${ctx.getString(R.string.compile_failed)}: ${e.message}", Color(0xFFF44336))
+                                Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
                             }
                             isCompiling = false
                         }

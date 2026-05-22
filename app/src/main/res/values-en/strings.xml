@@ -68,6 +68,16 @@
     <string name="conflict_action_rename_old_short">Old→_old</string>
     <string name="conflict_action_rename_new_short">New→_new</string>
 
+    <string name="conflict_existing">Existing</string>
+    <string name="conflict_imported">Imported</string>
+    <string name="conflict_choose_action">Choose action</string>
+    <string name="conflict_not_found">(not found)</string>
+    <string name="field_imports">Imports</string>
+    <string name="field_members">Members</string>
+    <string name="field_condition">Condition</string>
+    <string name="field_action">Action</string>
+    <string name="field_none">(none)</string>
+
     <string name="import_success">Imported %1$d rules</string>
     <string name="import_failed">Import failed</string>
     <string name="import_cancelled">Import cancelled</string>
