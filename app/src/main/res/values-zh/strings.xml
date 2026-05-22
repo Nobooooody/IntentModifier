@@ -10,7 +10,7 @@
 
     <!-- Rule editing -->
     <string name="delete_rule">删除规则</string>
-    <string name="delete_rule_message">删除 %1$s 的规则?</string>
+    <string name="delete_rule_message">删除 %1$s 的规则？</string>
     <string name="delete">删除</string>
     <string name="cancel">取消</string>
     <string name="confirm">确认</string>
@@ -37,6 +37,8 @@
     <string name="extra_value_hint">例如: value</string>
     <string name="extra_type">Extra 类型</string>
     <string name="add_extra">添加 Extra</string>
+    <string name="add_array_item">添加项</string>
+    <string name="remove">移除</string>
     <string name="remove_extra">移除</string>
 
     <!-- Extra types -->
@@ -70,6 +72,8 @@
     <!-- App picker -->
     <string name="select_app">选择应用</string>
     <string name="search_apps">搜索应用</string>
+    <string name="loading_apps">正在加载应用...</string>
+    <string name="refresh">刷新</string>
 
     <!-- Summary -->
     <string name="summary_action">Action: %1$s</string>
@@ -77,7 +81,7 @@
     <string name="summary_class">/%1$s</string>
     <string name="summary_extras">Extras: %1$d</string>
 
-    <!-- Added missing -->
+    <!-- Common -->
     <string name="edit">编辑</string>
     <string name="no_rules_configured">未配置应用规则</string>
     <string name="tap_to_add">点击 + 添加应用规则</string>
@@ -99,11 +103,12 @@
     <string name="import_conflict_message">发现 %1$d 条冲突规则。是否继续处理？</string>
     <string name="import_conflict_apply_to_all">对所有冲突应用</string>
     <string name="import_conflict_not_resolved">请在确认前处理所有冲突</string>
+    <string name="details">详情</string>
 
     <string name="conflict_action_replace">替换旧规则</string>
     <string name="conflict_action_ignore">忽略（保留旧）</string>
-    <string name="conflict_action_rename_old">旧规则重命名→_old, 新规则保持原名</string>
-    <string name="conflict_action_rename_new">新规则重命名→_new, 旧规则保持原名</string>
+    <string name="conflict_action_rename_old">旧规则重命名→_old，新规则保持原名</string>
+    <string name="conflict_action_rename_new">新规则重命名→_new，旧规则保持原名</string>
 
     <string name="conflict_action_replace_short">替换</string>
     <string name="conflict_action_ignore_short">忽略</string>
@@ -126,9 +131,38 @@
     <string name="language_chinese">中文</string>
 
     <!-- Hook types -->
-    <string name="hook_instrumentation">Instrumentation (默认)</string>
+    <string name="hook_instrumentation">Instrumentation（默认）</string>
     <string name="hook_launcher3">Launcher3 startActivitySafely</string>
-    <string name="delete_launcher_message">删除 %1$s 的Hook设置?</string>
+    <string name="delete_launcher_message">删除 %1$s 的 Hook 设置？</string>
+
+    <!-- Java Code Rules -->
+    <string name="new_rule">新规则</string>
+    <string name="edit_rule">编辑规则</string>
+    <string name="rule_name">规则名称</string>
+    <string name="rule_name_hint">例如：重定向百度</string>
+    <string name="priority">优先级</string>
+    <string name="condition_code">条件代码</string>
+    <string name="condition_hint">必须返回 boolean，每条语句以分号结尾。例如：\nintent.getPackage().contains("com.baidu");\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n注意：某些启动器可能不设置 getPackage()，可使用：\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
+    <string name="imports_code">导入语句</string>
+    <string name="imports_hint">例如：\nimport android.util.Log;\nimport java.text.SimpleDateFormat;</string>
+    <string name="members_code">成员代码</string>
+    <string name="members_hint">类成员变量和方法。例如：\nprivate static final String TAG = "MyApp";\nprivate boolean checkExtra(Intent intent) { return intent.hasExtra("key"); }</string>
+    <string name="action_code">动作代码</string>
+    <string name="action_hint">每条语句以分号结尾。例如：result.setPackage("com.custom.package");\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n示例：ctx.startActivity(result);</string>
+    <string name="test_compile">测试编译</string>
+    <string name="compile_success">编译成功！</string>
+    <string name="compile_failed">编译失败</string>
+    <string name="no_java_rules">暂无规则</string>
+    <string name="tap_to_add_rule">点击 + 添加新规则</string>
+    <string name="add_new_rule">添加规则</string>
+    <string name="delete_rule_confirm">删除规则 \"%1$s\"？</string>
+    <string name="condition_empty">条件为空，将匹配所有 Intent</string>
+    <string name="priority_hint">数字越大优先级越高</string>
+    <string name="compiling">编译中...</string>
+    <string name="compiling_all_rules">正在编译所有规则...</string>
+    <string name="no_rules_to_compile">没有可编译的规则</string>
+    <string name="saved_and_compiled">已保存并编译</string>
+    <string name="saved_but_compile_failed">已保存但编译失败</string>
 
     <!-- Selection mode -->
     <string name="select_all">全选</string>
