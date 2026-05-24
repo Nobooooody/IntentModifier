@@ -73,6 +73,7 @@ import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.data.NormalRule
 import io.github.nobooooody.intent_modifier.engine.RuleCompilationManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -810,6 +811,7 @@ private fun NormalRuleEditorScreen(
                                 if (javaRules.isEmpty() && normalRules.isEmpty()) {
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(ctx, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
+                                        delay(500)
                                         (ctx as? ComponentActivity)?.finish()
                                     }
                                 } else {
@@ -822,12 +824,14 @@ private fun NormalRuleEditorScreen(
                                             val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
                                             Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()
                                         }
+                                        delay(500)
                                         (ctx as? ComponentActivity)?.finish()
                                     }
                                 }
                             } catch (e: Exception) {
                                 withContext(Dispatchers.Main) {
                                     Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
+                                    delay(500)
                                     (ctx as? ComponentActivity)?.finish()
                                 }
                             }
