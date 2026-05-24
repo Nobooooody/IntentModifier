@@ -192,7 +192,7 @@
     <string name="select_activity">从 %s 选择 Activity</string>
     <string name="loading_activities">正在加载 Activity…</string>
     <string name="search_activities">搜索 Activity</string>
-    <string name="pick_activity">选择</string>
+    <string name="pick_activity">选择活动</string>
     <string name="no_package_to_browse">请先设置 Match 或 Custom 包名</string>
 
     <!-- Delete confirmation -->
