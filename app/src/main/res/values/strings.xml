@@ -171,7 +171,7 @@
 
     <!-- Target apps (compilation scope) -->
     <string name="target_apps_title">Compilation Scope (Target Apps)</string>
-    <string name="target_apps_hint">Select which apps this rule compiles into. Leave empty to compile into shared DEX (applies to all apps).</string>
+    <string name="target_apps_hint">Select which apps this rule compiles into. Leave empty to compile into shared DEX (applies to all in-scope apps).</string>
     <string name="target_apps_pick">Pick Apps</string>
     <string name="target_apps_add">Add</string>
 
