@@ -244,7 +244,6 @@ private fun RulesScreen() {
     var rules by remember { mutableStateOf(repo.getJavaCodeRules()) }
     var normalRules by remember { mutableStateOf(repo.getNormalRules()) }
     var isSelectionMode by remember { mutableStateOf(false) }
-    var showAddMenu by remember { mutableStateOf(false) }
     val selectedDisplayIndices = remember { mutableStateListOf<Int>() }
     var showMenu by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -280,6 +279,14 @@ private fun RulesScreen() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             normalRules = repo.getNormalRules()
+        }
+    }
+
+    val tabbedEditorLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            refresh()
         }
     }
 
@@ -442,20 +449,10 @@ private fun RulesScreen() {
         },
         floatingActionButton = {
             if (!isSelectionMode) {
-                Box {
-                    FloatingActionButton(onClick = { showAddMenu = true }) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                    }
-                    DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.java_code_rule)) },
-                            onClick = { showAddMenu = false; editorLauncher.launch(Intent(ctx, JavaCodeRuleEditorActivity::class.java)) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.normal_rule)) },
-                            onClick = { showAddMenu = false; normalRuleEditorLauncher.launch(Intent(ctx, NormalRuleEditorActivity::class.java)) }
-                        )
-                    }
+                FloatingActionButton(onClick = {
+                    tabbedEditorLauncher.launch(Intent(ctx, TabbedRuleEditorActivity::class.java))
+                }) {
+                    Icon(Icons.Default.Add, contentDescription = null)
                 }
             }
         }

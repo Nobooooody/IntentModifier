@@ -109,20 +109,35 @@ class NormalRuleEditorActivity : ComponentActivity() {
             }
         }
         setContent {
+            @OptIn(ExperimentalMaterial3Api::class)
             IntentModifierTheme {
-                NormalRuleEditorScreen(
-                    editingRule = editingRule,
-                    onSave = { rule ->
-                        val currentRules = repo.getNormalRules().toMutableList()
-                        if (editingRule != null) {
-                            val idx = currentRules.indexOfFirst { it.id == editingRule!!.id }
-                            if (idx >= 0) currentRules[idx] = rule
-                        } else {
-                            currentRules.add(rule)
-                        }
-                        repo.saveNormalRules(currentRules)
+                Scaffold(
+                    topBar = {
+                        TopAppBar(
+                            title = { Text(if (editingRule != null) stringResource(R.string.edit_rule) else stringResource(R.string.new_rule)) },
+                            navigationIcon = {
+                                IconButton(onClick = { finish() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                }
+                            }
+                        )
                     }
-                )
+                ) { padding ->
+                    NormalRuleForm(
+                        editingRule = editingRule,
+                        onSave = { rule ->
+                            val currentRules = repo.getNormalRules().toMutableList()
+                            if (editingRule != null) {
+                                val idx = currentRules.indexOfFirst { it.id == editingRule!!.id }
+                                if (idx >= 0) currentRules[idx] = rule
+                            } else {
+                                currentRules.add(rule)
+                            }
+                            repo.saveNormalRules(currentRules)
+                        },
+                        modifier = Modifier.padding(padding)
+                    )
+                }
             }
         }
     }
@@ -130,9 +145,10 @@ class NormalRuleEditorActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun NormalRuleEditorScreen(
+fun NormalRuleForm(
     editingRule: NormalRule?,
-    onSave: (NormalRule) -> Unit
+    onSave: (NormalRule) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
     var name by remember { mutableStateOf(editingRule?.name ?: "") }
@@ -213,22 +229,10 @@ private fun NormalRuleEditorScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (editingRule != null) stringResource(R.string.edit_rule) else stringResource(R.string.new_rule)) },
-                navigationIcon = {
-                    IconButton(onClick = { (ctx as? ComponentActivity)?.finish() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState())
-        ) {
-            // 名称
+    Column(
+        modifier = modifier.padding(16.dp).verticalScroll(rememberScrollState())
+    ) {
+        // 名称
             OutlinedTextField(
                 value = name, onValueChange = { name = it },
                 modifier = Modifier.fillMaxWidth(),
@@ -848,7 +852,6 @@ private fun NormalRuleEditorScreen(
             }
         }
     }
-}
 
 @Composable
 private fun CategoryListEditor(

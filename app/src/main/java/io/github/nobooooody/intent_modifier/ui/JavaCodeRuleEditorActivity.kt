@@ -97,20 +97,35 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
             }
         }
         setContent {
+            @OptIn(ExperimentalMaterial3Api::class)
             IntentModifierTheme {
-                RuleEditorScreen(
-                    editingRule = editingRule,
-                    onSave = { rule ->
-                        val currentRules = repo.getJavaCodeRules().toMutableList()
-                        if (editingRule != null) {
-                            val idx = currentRules.indexOfFirst { it.name == editingRule!!.name }
-                            if (idx >= 0) currentRules[idx] = rule
-                        } else {
-                            currentRules.add(rule)
-                        }
-                        repo.saveJavaCodeRules(currentRules)
+                Scaffold(
+                    topBar = {
+                        TopAppBar(
+                            title = { Text(if (editingRule != null) stringResource(R.string.edit_rule) else stringResource(R.string.new_rule)) },
+                            navigationIcon = {
+                                IconButton(onClick = { finish() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                }
+                            }
+                        )
                     }
-                )
+                ) { padding ->
+                    JavaCodeRuleForm(
+                        editingRule = editingRule,
+                        onSave = { rule ->
+                            val currentRules = repo.getJavaCodeRules().toMutableList()
+                            if (editingRule != null) {
+                                val idx = currentRules.indexOfFirst { it.name == editingRule!!.name }
+                                if (idx >= 0) currentRules[idx] = rule
+                            } else {
+                                currentRules.add(rule)
+                            }
+                            repo.saveJavaCodeRules(currentRules)
+                        },
+                        modifier = Modifier.padding(padding)
+                    )
+                }
             }
         }
     }
@@ -118,9 +133,10 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun RuleEditorScreen(
+fun JavaCodeRuleForm(
     editingRule: JavaCodeRule?,
-    onSave: (JavaCodeRule) -> Unit
+    onSave: (JavaCodeRule) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
     var name by remember { mutableStateOf(editingRule?.name ?: "") }
@@ -149,21 +165,9 @@ private fun RuleEditorScreen(
 
     val packageManager = ctx.packageManager
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (editingRule != null) stringResource(R.string.edit_rule) else stringResource(R.string.new_rule)) },
-                navigationIcon = {
-                    IconButton(onClick = { (ctx as? ComponentActivity)?.finish() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState())
-        ) {
+    Column(
+        modifier = modifier.padding(16.dp).verticalScroll(rememberScrollState())
+    ) {
             // 名称
             OutlinedTextField(
                 value = name, onValueChange = { name = it },
@@ -420,4 +424,3 @@ private fun RuleEditorScreen(
             }
         }
     }
-}
