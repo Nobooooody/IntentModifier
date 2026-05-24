@@ -184,7 +184,7 @@
     <!-- Conflict resolution: NormalRule fields -->
     <string name="match_categories_short">匹配分类</string>
     <string name="custom_categories_short">自定义分类</string>
-    <string name="block_subsequent">阻止后续</string>
+    <string name="block_subsequent">阻止后续规则执行</string>
     <string name="target_packages">目标包</string>
     <string name="extras">附加项</string>
 
