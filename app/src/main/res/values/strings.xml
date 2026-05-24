@@ -184,7 +184,7 @@
     <!-- Conflict resolution: NormalRule fields -->
     <string name="match_categories_short">Match Categories</string>
     <string name="custom_categories_short">Custom Categories</string>
-    <string name="block_subsequent">Block Subsequent</string>
+    <string name="block_subsequent">Block Subsequent Rules</string>
     <string name="target_packages">Target Packages</string>
     <string name="extras">Extras</string>
 
