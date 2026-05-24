@@ -26,9 +26,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,21 +53,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import io.github.nobooooody.intent_modifier.R
-import io.github.nobooooody.intent_modifier.data.JavaCodeRule
+import io.github.nobooooody.intent_modifier.data.ExtraItem
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
+import io.github.nobooooody.intent_modifier.data.NormalRule
 import io.github.nobooooody.intent_modifier.engine.RuleCompilationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class JavaCodeRuleEditorActivity : ComponentActivity() {
+class NormalRuleEditorActivity : ComponentActivity() {
 
     private lateinit var repo: ModifierRepository
-    private var editingRule: JavaCodeRule? = null
+    private var editingRule: NormalRule? = null
 
     companion object {
         const val EXTRA_RULE_INDEX = "rule_index"
@@ -89,24 +90,24 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
         repo = ModifierRepository(this)
         val index = intent.getIntExtra(EXTRA_RULE_INDEX, -1)
         if (index >= 0) {
-            val rules = repo.getJavaCodeRules()
+            val rules = repo.getNormalRules()
             if (index < rules.size) {
                 editingRule = rules[index]
             }
         }
         setContent {
             IntentModifierTheme {
-                RuleEditorScreen(
+                NormalRuleEditorScreen(
                     editingRule = editingRule,
                     onSave = { rule ->
-                        val currentRules = repo.getJavaCodeRules().toMutableList()
+                        val currentRules = repo.getNormalRules().toMutableList()
                         if (editingRule != null) {
-                            val idx = currentRules.indexOfFirst { it.name == editingRule!!.name }
+                            val idx = currentRules.indexOfFirst { it.id == editingRule!!.id }
                             if (idx >= 0) currentRules[idx] = rule
                         } else {
                             currentRules.add(rule)
                         }
-                        repo.saveJavaCodeRules(currentRules)
+                        repo.saveNormalRules(currentRules)
                         setResult(Activity.RESULT_OK)
                         finish()
                     }
@@ -118,9 +119,9 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun RuleEditorScreen(
-    editingRule: JavaCodeRule?,
-    onSave: (JavaCodeRule) -> Unit
+private fun NormalRuleEditorScreen(
+    editingRule: NormalRule?,
+    onSave: (NormalRule) -> Unit
 ) {
     val ctx = LocalContext.current
     var name by remember { mutableStateOf(editingRule?.name ?: "") }
@@ -128,14 +129,30 @@ private fun RuleEditorScreen(
     var blockSubsequent by remember { mutableStateOf(editingRule?.blockSubsequent ?: true) }
     var priority by remember { mutableStateOf(editingRule?.priority?.toString() ?: "0") }
     var targetPackages by remember { mutableStateOf(editingRule?.targetPackages ?: emptyList()) }
-    var imports by remember { mutableStateOf(editingRule?.imports ?: "") }
-    var members by remember { mutableStateOf(editingRule?.members ?: "") }
-    var condition by remember { mutableStateOf(editingRule?.condition ?: "") }
-    var action by remember { mutableStateOf(editingRule?.action ?: "") }
+
+    var matchPackage by remember { mutableStateOf(editingRule?.matchPackage ?: "") }
+    var matchAction by remember { mutableStateOf(editingRule?.matchAction ?: "") }
+    var matchClass by remember { mutableStateOf(editingRule?.matchClass ?: "") }
+    var matchData by remember { mutableStateOf(editingRule?.matchData ?: "") }
+    var matchCategories by remember { mutableStateOf(editingRule?.matchCategories?.joinToString(", ") ?: "") }
+    var matchType by remember { mutableStateOf(editingRule?.matchType ?: "") }
+
+    var customPackage by remember { mutableStateOf(editingRule?.customPackage ?: "") }
+    var customAction by remember { mutableStateOf(editingRule?.customAction ?: "") }
+    var customClass by remember { mutableStateOf(editingRule?.customClass ?: "") }
+    var customData by remember { mutableStateOf(editingRule?.customData ?: "") }
+    var customCategories by remember { mutableStateOf(editingRule?.customCategories?.joinToString(", ") ?: "") }
+    var customType by remember { mutableStateOf(editingRule?.customType ?: "") }
+    var customFlags by remember { mutableStateOf(editingRule?.customFlags?.toString() ?: "") }
+
+    var extras by remember { mutableStateOf(editingRule?.extras ?: emptyList()) }
+
     var compileResult by remember { mutableStateOf<Pair<String, Color>?>(null) }
     var isCompiling by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    val packageManager = ctx.packageManager
 
     val appPickerLauncher = rememberLauncherForActivityResult<Intent, ActivityResult>(
         ActivityResultContracts.StartActivityForResult()
@@ -147,8 +164,6 @@ private fun RuleEditorScreen(
             }
         }
     }
-
-    val packageManager = ctx.packageManager
 
     Scaffold(
         topBar = {
@@ -242,69 +257,161 @@ private fun RuleEditorScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // Imports
+            // 匹配条件
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(stringResource(R.string.imports_code), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.imports_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("匹配条件", style = MaterialTheme.typography.titleMedium)
+                    Text("留空表示不检查该字段", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = imports, onValueChange = { imports = it },
+                        value = matchPackage, onValueChange = { matchPackage = it },
                         modifier = Modifier.fillMaxWidth(),
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                        minLines = 2
+                        label = { Text("Package") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = matchAction, onValueChange = { matchAction = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Action") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = matchClass, onValueChange = { matchClass = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Class") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = matchData, onValueChange = { matchData = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Data") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = matchCategories, onValueChange = { matchCategories = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Categories（逗号分隔）") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = matchType, onValueChange = { matchType = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("MIME Type") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
                 }
             }
 
             Spacer(Modifier.height(16.dp))
 
-            // Members
+            // 自定义 Intent
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(stringResource(R.string.members_code), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.members_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("自定义 Intent", style = MaterialTheme.typography.titleMedium)
+                    Text("覆盖匹配 Intent 的字段", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = members, onValueChange = { members = it },
+                        value = customPackage, onValueChange = { customPackage = it },
                         modifier = Modifier.fillMaxWidth(),
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                        minLines = 3
+                        label = { Text("Custom Package") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = customAction, onValueChange = { customAction = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Custom Action") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = customClass, onValueChange = { customClass = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Custom Class") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = customData, onValueChange = { customData = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Custom Data") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = customCategories, onValueChange = { customCategories = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Custom Categories（逗号分隔）") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = customType, onValueChange = { customType = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Custom MIME Type") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = customFlags, onValueChange = { customFlags = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Custom Flags（数字）") },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
                 }
             }
 
             Spacer(Modifier.height(16.dp))
 
-            // Condition
+            // Extras
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(stringResource(R.string.condition_code), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.condition_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = condition, onValueChange = { condition = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                        minLines = 3
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Action
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(stringResource(R.string.action_code), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.action_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = action, onValueChange = { action = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                        minLines = 6
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Extra", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { extras = extras + ExtraItem("", "string") }) {
+                            Icon(Icons.Default.Add, contentDescription = "添加 Extra")
+                        }
+                    }
+                    extras.forEachIndexed { idx, extra ->
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = extra.key, onValueChange = { newKey ->
+                                    val list = extras.toMutableList()
+                                    list[idx] = extra.copy(key = newKey)
+                                    extras = list
+                                },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Key") },
+                                singleLine = true
+                            )
+                            IconButton(onClick = {
+                                val list = extras.toMutableList()
+                                list.removeAt(idx)
+                                extras = list
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "删除")
+                            }
+                        }
+                    }
                 }
             }
 
@@ -314,21 +421,29 @@ private fun RuleEditorScreen(
             Row(modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = {
-                        if (condition.isBlank() && action.isBlank()) {
-                            Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
-                            return@OutlinedButton
-                        }
                         isCompiling = true
                         compileResult = Pair(ctx.getString(R.string.compiling), Color(0xFFFF9800))
                         scope.launch {
                             try {
                                 val manager = RuleCompilationManager(ctx)
-                                val testRule = JavaCodeRule(
+                                val testRule = NormalRule(
                                     enabled = true, name = "Test",
-                                    condition = condition.trim(), action = action.trim(),
-                                    imports = imports.trim(), members = members.trim()
+                                    matchPackage = matchPackage.trim().ifBlank { null },
+                                    matchAction = matchAction.trim().ifBlank { null },
+                                    matchClass = matchClass.trim().ifBlank { null },
+                                    matchData = matchData.trim().ifBlank { null },
+                                    matchCategories = matchCategories.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                                    matchType = matchType.trim().ifBlank { null },
+                                    customPackage = customPackage.trim().ifBlank { null },
+                                    customAction = customAction.trim().ifBlank { null },
+                                    customClass = customClass.trim().ifBlank { null },
+                                    customData = customData.trim().ifBlank { null },
+                                    customCategories = customCategories.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                                    customType = customType.trim().ifBlank { null },
+                                    customFlags = customFlags.trim().toIntOrNull(),
+                                    extras = extras
                                 )
-                                val result = withContext(Dispatchers.IO) { manager.compileAllRules(listOf(testRule), emptyList()) }
+                                val result = withContext(Dispatchers.IO) { manager.compileAllRules(emptyList(), listOf(testRule)) }
                                 compileResult = if (result.success) {
                                     Pair(ctx.getString(R.string.compile_success), Color(0xFF4CAF50))
                                 } else {
@@ -363,16 +478,27 @@ private fun RuleEditorScreen(
                             return@Button
                         }
                         isSaving = true
-                        val rule = JavaCodeRule(
+                        val rule = NormalRule(
+                            id = editingRule?.id ?: java.util.UUID.randomUUID().toString(),
                             enabled = enabled,
                             name = trimmedName,
                             targetPackages = targetPackages,
                             blockSubsequent = blockSubsequent,
-                            imports = imports.trim(),
-                            members = members.trim(),
-                            condition = condition.trim(),
-                            action = action.trim(),
-                            priority = priority.toIntOrNull() ?: 0
+                            priority = priority.toIntOrNull() ?: 0,
+                            matchPackage = matchPackage.trim().ifBlank { null },
+                            matchAction = matchAction.trim().ifBlank { null },
+                            matchClass = matchClass.trim().ifBlank { null },
+                            matchData = matchData.trim().ifBlank { null },
+                            matchCategories = matchCategories.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                            matchType = matchType.trim().ifBlank { null },
+                            customPackage = customPackage.trim().ifBlank { null },
+                            customAction = customAction.trim().ifBlank { null },
+                            customClass = customClass.trim().ifBlank { null },
+                            customData = customData.trim().ifBlank { null },
+                            customCategories = customCategories.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                            customType = customType.trim().ifBlank { null },
+                            customFlags = customFlags.trim().toIntOrNull(),
+                            extras = extras
                         )
                         onSave(rule)
 

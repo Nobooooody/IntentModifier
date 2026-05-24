@@ -82,9 +82,9 @@ import io.github.nobooooody.intent_modifier.data.HOOK_INSTRUMENTATION
 import io.github.nobooooody.intent_modifier.data.HOOK_LAUNCHER3
 import io.github.nobooooody.intent_modifier.data.JavaCodeRule
 import io.github.nobooooody.intent_modifier.data.LauncherHook
+import io.github.nobooooody.intent_modifier.data.NormalRule
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.engine.RuleCompilationManager
-import io.github.nobooooody.intent_modifier.engine.RuleSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -175,7 +175,9 @@ private fun RulesScreen() {
     val ctx = LocalContext.current
     val repo = remember { ModifierRepository(ctx) }
     var rules by remember { mutableStateOf(repo.getJavaCodeRules()) }
+    var normalRules by remember { mutableStateOf(repo.getNormalRules()) }
     var isSelectionMode by remember { mutableStateOf(false) }
+    var showAddMenu by remember { mutableStateOf(false) }
     val selectedItems = remember { mutableStateListOf<Int>() }
     var showMenu by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
@@ -185,6 +187,7 @@ private fun RulesScreen() {
 
     fun refresh() {
         rules = repo.getJavaCodeRules()
+        normalRules = repo.getNormalRules()
         selectedItems.clear()
         isSelectionMode = false
     }
@@ -194,6 +197,14 @@ private fun RulesScreen() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             refresh()
+        }
+    }
+
+    val normalRuleEditorLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            normalRules = repo.getNormalRules()
         }
     }
 
@@ -341,15 +352,25 @@ private fun RulesScreen() {
         },
         floatingActionButton = {
             if (!isSelectionMode) {
-                FloatingActionButton(onClick = {
-                    editorLauncher.launch(Intent(ctx, JavaCodeRuleEditorActivity::class.java))
-                }) {
-                    Icon(Icons.Default.Add, contentDescription = null)
+                Box {
+                    FloatingActionButton(onClick = { showAddMenu = true }) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                    }
+                    DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Java Code Rule") },
+                            onClick = { showAddMenu = false; editorLauncher.launch(Intent(ctx, JavaCodeRuleEditorActivity::class.java)) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Normal Rule") },
+                            onClick = { showAddMenu = false; normalRuleEditorLauncher.launch(Intent(ctx, NormalRuleEditorActivity::class.java)) }
+                        )
+                    }
                 }
             }
         }
     ) { padding ->
-        if (rules.isEmpty()) {
+        if (rules.isEmpty() && normalRules.isEmpty()) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -432,6 +453,66 @@ private fun RulesScreen() {
                                     }) {
                                         Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
                                         Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (normalRules.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Normal Rules",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    itemsIndexed(normalRules, key = { _, r -> r.id }) { index, rule ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(rule.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                    if (!isSelectionMode) {
+                                        Switch(checked = rule.enabled, onCheckedChange = { enabled ->
+                                            val updated = normalRules.toMutableList()
+                                            updated[index] = updated[index].copy(enabled = enabled)
+                                            repo.saveNormalRules(updated)
+                                            normalRules = updated
+                                            scope.launch { recompileAll(ctx, repo) }
+                                        })
+                                    }
+                                }
+                                Text(
+                                    "${stringResource(R.string.priority)}: ${rule.priority}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (!isSelectionMode) {
+                                    Spacer(Modifier.height(12.dp))
+                                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                        TextButton(onClick = {
+                                            val intent = Intent(ctx, NormalRuleEditorActivity::class.java)
+                                            intent.putExtra(NormalRuleEditorActivity.EXTRA_RULE_INDEX, index)
+                                            normalRuleEditorLauncher.launch(intent)
+                                        }) {
+                                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                            Text(stringResource(R.string.edit))
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        TextButton(onClick = {
+                                            val updated = normalRules.toMutableList()
+                                            updated.removeAt(index)
+                                            repo.saveNormalRules(updated)
+                                            normalRules = updated
+                                            scope.launch { recompileAll(ctx, repo) }
+                                        }) {
+                                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                            Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                                        }
                                     }
                                 }
                             }
@@ -758,15 +839,15 @@ private fun LanguageDialog(currentLang: String, onDismiss: () -> Unit, onSelect:
 // ─── Recompile helper ─────────────────────────────────────────────────────────
 
 private suspend fun recompileAll(ctx: Context, repo: ModifierRepository) {
-    val rules = repo.getJavaCodeRules()
+    val javaRules = repo.getJavaCodeRules()
         .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
         .sortedByDescending { it.priority }
-        .map { RuleSource(it.condition.ifBlank { null }, it.action.ifBlank { null }, it.imports, it.members) }
+    val normalRules = repo.getNormalRules().filter { it.enabled }
 
-    if (rules.isEmpty()) return
+    if (javaRules.isEmpty() && normalRules.isEmpty()) return
 
     withContext(Dispatchers.IO) {
-        RuleCompilationManager(ctx).compileAndStore(rules)
+        RuleCompilationManager(ctx).compileAllRules(javaRules, normalRules)
     }
 }
 

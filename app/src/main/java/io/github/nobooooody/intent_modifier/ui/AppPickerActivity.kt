@@ -17,8 +17,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -46,13 +49,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class AppPickerActivity : ComponentActivity() {
+
+    companion object {
+        const val EXTRA_MULTI_SELECT = "multi_select"
+        const val EXTRA_SELECTED_PACKAGES = "selected_packages"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val multiSelect = intent.getBooleanExtra(EXTRA_MULTI_SELECT, false)
+
         setContent {
             IntentModifierTheme {
                 AppPickerScreen(
-                    onAppSelected = { pkg ->
+                    multiSelect = multiSelect,
+                    onSingleSelect = { pkg ->
                         val result = Intent().putExtra("package", pkg)
+                        setResult(RESULT_OK, result)
+                        finish()
+                    },
+                    onMultiSelect = { packages ->
+                        val result = Intent().putStringArrayListExtra(EXTRA_SELECTED_PACKAGES, ArrayList(packages))
                         setResult(RESULT_OK, result)
                         finish()
                     }
@@ -66,10 +83,15 @@ data class AppInfo(val packageName: String, val label: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppPickerScreen(onAppSelected: (String) -> Unit) {
+private fun AppPickerScreen(
+    multiSelect: Boolean,
+    onSingleSelect: (String) -> Unit,
+    onMultiSelect: (List<String>) -> Unit
+) {
     var isLoading by remember { mutableStateOf(true) }
     var query by remember { mutableStateOf("") }
     val allApps = remember { mutableStateListOf<AppInfo>() }
+    val selected = remember { mutableStateListOf<String>() }
     val ctx = LocalContext.current
 
     LaunchedEffect(Unit) {
@@ -93,15 +115,23 @@ private fun AppPickerScreen(onAppSelected: (String) -> Unit) {
                 title = { Text(stringResource(R.string.select_app)) },
                 navigationIcon = {
                     IconButton(onClick = { (ctx as? ComponentActivity)?.finish() }) {
-                        Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 },
                 actions = {
+                    if (multiSelect) {
+                        IconButton(onClick = {
+                            if (selected.isNotEmpty()) onMultiSelect(selected.toList())
+                        }) {
+                            Icon(Icons.Default.Check, contentDescription = stringResource(R.string.confirm))
+
+                        }
+                    }
                     IconButton(onClick = {
                         isLoading = true
                         (ctx as? ComponentActivity)?.recreate()
                     }) {
-                        Icon(androidx.compose.material.icons.Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
                     }
                 }
             )
@@ -131,9 +161,28 @@ private fun AppPickerScreen(onAppSelected: (String) -> Unit) {
                 ) {
                     items(filtered, key = { it.packageName }) { app ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable { onAppSelected(app.packageName) }.padding(vertical = 12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (multiSelect) {
+                                        if (app.packageName in selected) selected.remove(app.packageName)
+                                        else selected.add(app.packageName)
+                                    } else {
+                                        onSingleSelect(app.packageName)
+                                    }
+                                }
+                                .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            if (multiSelect) {
+                                Checkbox(
+                                    checked = app.packageName in selected,
+                                    onCheckedChange = {
+                                        if (app.packageName in selected) selected.remove(app.packageName)
+                                        else selected.add(app.packageName)
+                                    }
+                                )
+                            }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(app.label, style = MaterialTheme.typography.bodyLarge)
                                 Text(
