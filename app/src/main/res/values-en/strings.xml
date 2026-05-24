@@ -124,6 +124,7 @@
     <!-- Normal rule: match conditions -->
     <string name="match_condition_title">Match Conditions</string>
     <string name="match_condition_hint">Leave empty to skip this check</string>
+    <string name="match_advanced">More match options</string>
     <string name="match_package">Package</string>
     <string name="match_action">Action</string>
     <string name="match_class">Class</string>
@@ -134,6 +135,7 @@
     <!-- Normal rule: custom intent -->
     <string name="custom_intent_title">Custom Intent</string>
     <string name="custom_intent_hint">Override matched Intent fields</string>
+    <string name="custom_advanced">More custom options</string>
     <string name="custom_package">Custom Package</string>
     <string name="custom_action">Custom Action</string>
     <string name="custom_class">Custom Class</string>

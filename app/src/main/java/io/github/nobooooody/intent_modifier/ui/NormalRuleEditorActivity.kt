@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -195,13 +198,15 @@ private fun NormalRuleEditorScreen(
         }
     }
 
+    var pendingClassField by remember { mutableStateOf("") }
     val activityPickerLauncher = rememberLauncherForActivityResult<Intent, ActivityResult>(
         ActivityResultContracts.StartActivityForResult()
     ) { result: ActivityResult ->
         if (result.resultCode == Activity.RESULT_OK) {
             val activity = result.data?.getStringExtra(ActivityPickerActivity.EXTRA_SELECTED_ACTIVITY)
             if (activity != null) {
-                customClass = activity
+                if (pendingClassField == "match") matchClass = activity
+                else customClass = activity
             }
         }
     }
@@ -321,21 +326,30 @@ private fun NormalRuleEditorScreen(
                         }
                     }
                     Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = matchAction, onValueChange = { matchAction = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.match_action)) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = matchClass, onValueChange = { matchClass = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.match_class)) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = matchClass, onValueChange = { matchClass = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(stringResource(R.string.match_class)) },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(onClick = {
+                            val pkg = matchPackage.trim().ifBlank { null }
+                            if (pkg != null) {
+                                pendingClassField = "match"
+                                val intent = Intent(ctx, ActivityPickerActivity::class.java).apply {
+                                    putExtra(ActivityPickerActivity.EXTRA_PACKAGE_NAME, pkg)
+                                }
+                                activityPickerLauncher.launch(intent)
+                            } else {
+                                Toast.makeText(ctx, R.string.no_package_to_browse, Toast.LENGTH_SHORT).show()
+                            }
+                        }) {
+                            Text(stringResource(R.string.pick_activity))
+                        }
+                    }
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = matchData, onValueChange = { matchData = it },
@@ -344,20 +358,49 @@ private fun NormalRuleEditorScreen(
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
+
+                    var showMatchAdvanced by remember { mutableStateOf(false) }
                     Spacer(Modifier.height(4.dp))
-                    CategoryListEditor(
-                        items = matchCategories,
-                        onItemsChange = { matchCategories = it },
-                        label = stringResource(R.string.match_categories)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = matchType, onValueChange = { matchType = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.match_type)) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { showMatchAdvanced = !showMatchAdvanced },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            stringResource(R.string.match_advanced),
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            if (showMatchAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null
+                        )
+                    }
+                    AnimatedVisibility(visible = showMatchAdvanced) {
+                        Column {
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = matchAction, onValueChange = { matchAction = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.match_action)) },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            CategoryListEditor(
+                                items = matchCategories,
+                                onItemsChange = { matchCategories = it },
+                                label = stringResource(R.string.match_categories)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = matchType, onValueChange = { matchType = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.match_type)) },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -384,14 +427,6 @@ private fun NormalRuleEditorScreen(
                             Text(stringResource(R.string.target_apps_pick))
                         }
                     }
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = customAction, onValueChange = { customAction = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.custom_action)) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
@@ -424,39 +459,68 @@ private fun NormalRuleEditorScreen(
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
+
+                    var showCustomAdvanced by remember { mutableStateOf(false) }
                     Spacer(Modifier.height(4.dp))
-                    CategoryListEditor(
-                        items = customCategories,
-                        onItemsChange = { customCategories = it },
-                        label = stringResource(R.string.custom_categories)
-                    )
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        modifier = Modifier.fillMaxWidth().clickable { showCustomAdvanced = !showCustomAdvanced },
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(stringResource(R.string.replace_categories))
-                        Switch(
-                            checked = replaceCategories,
-                            onCheckedChange = { replaceCategories = it }
+                        Text(
+                            stringResource(R.string.custom_advanced),
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            if (showCustomAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null
                         )
                     }
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = customType, onValueChange = { customType = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.custom_type)) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = customFlags, onValueChange = { customFlags = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.custom_flags)) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
+                    AnimatedVisibility(visible = showCustomAdvanced) {
+                        Column {
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = customAction, onValueChange = { customAction = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.custom_action)) },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            CategoryListEditor(
+                                items = customCategories,
+                                onItemsChange = { customCategories = it },
+                                label = stringResource(R.string.custom_categories)
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(stringResource(R.string.replace_categories))
+                                Switch(
+                                    checked = replaceCategories,
+                                    onCheckedChange = { replaceCategories = it }
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = customType, onValueChange = { customType = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.custom_type)) },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = customFlags, onValueChange = { customFlags = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.custom_flags)) },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                            )
+                        }
+                    }
                 }
             }
 

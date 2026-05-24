@@ -124,6 +124,7 @@
     <!-- Normal rule: match conditions -->
     <string name="match_condition_title">匹配条件</string>
     <string name="match_condition_hint">留空表示不检查该字段</string>
+    <string name="match_advanced">更多匹配选项</string>
     <string name="match_package">Package</string>
     <string name="match_action">Action</string>
     <string name="match_class">Class</string>
@@ -134,6 +135,7 @@
     <!-- Normal rule: custom intent -->
     <string name="custom_intent_title">自定义 Intent</string>
     <string name="custom_intent_hint">覆盖匹配 Intent 的字段</string>
+    <string name="custom_advanced">更多自定义选项</string>
     <string name="custom_package">Custom Package</string>
     <string name="custom_action">Custom Action</string>
     <string name="custom_class">Custom Class</string>
