@@ -317,7 +317,7 @@ private fun NormalRuleEditorScreen(
                             value = matchPackage, onValueChange = { matchPackage = it },
                             modifier = Modifier.weight(1f),
                             label = { Text(stringResource(R.string.match_package)) },
-                            singleLine = true,
+                            minLines = 1,
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -333,7 +333,7 @@ private fun NormalRuleEditorScreen(
                             value = matchClass, onValueChange = { matchClass = it },
                             modifier = Modifier.weight(1f),
                             label = { Text(stringResource(R.string.match_class)) },
-                            singleLine = true,
+                            minLines = 1,
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -357,7 +357,7 @@ private fun NormalRuleEditorScreen(
                         value = matchData, onValueChange = { matchData = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text(stringResource(R.string.match_data)) },
-                        singleLine = true,
+                        minLines = 1,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
 
@@ -391,7 +391,7 @@ private fun NormalRuleEditorScreen(
                                 value = matchAction, onValueChange = { matchAction = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text(stringResource(R.string.match_action)) },
-                                singleLine = true,
+                                minLines = 1,
                                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                             )
                             Spacer(Modifier.height(4.dp))
@@ -405,7 +405,7 @@ private fun NormalRuleEditorScreen(
                                 value = matchType, onValueChange = { matchType = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text(stringResource(R.string.match_type)) },
-                                singleLine = true,
+                                minLines = 1,
                                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                             )
                         }
@@ -426,7 +426,7 @@ private fun NormalRuleEditorScreen(
                             value = customPackage, onValueChange = { customPackage = it },
                             modifier = Modifier.weight(1f),
                             label = { Text(stringResource(R.string.custom_package)) },
-                            singleLine = true,
+                            minLines = 1,
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -442,7 +442,7 @@ private fun NormalRuleEditorScreen(
                             value = customClass, onValueChange = { customClass = it },
                             modifier = Modifier.weight(1f),
                             label = { Text(stringResource(R.string.custom_class)) },
-                            singleLine = true,
+                            minLines = 1,
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -465,7 +465,7 @@ private fun NormalRuleEditorScreen(
                         value = customData, onValueChange = { customData = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text(stringResource(R.string.custom_data)) },
-                        singleLine = true,
+                        minLines = 1,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
 
@@ -499,7 +499,7 @@ private fun NormalRuleEditorScreen(
                                 value = customAction, onValueChange = { customAction = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text(stringResource(R.string.custom_action)) },
-                                singleLine = true,
+                                minLines = 1,
                                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                             )
                             Spacer(Modifier.height(4.dp))
@@ -524,7 +524,7 @@ private fun NormalRuleEditorScreen(
                                 value = customType, onValueChange = { customType = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text(stringResource(R.string.custom_type)) },
-                                singleLine = true,
+                                minLines = 1,
                                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                             )
                             Spacer(Modifier.height(4.dp))
@@ -532,7 +532,7 @@ private fun NormalRuleEditorScreen(
                                 value = customFlags, onValueChange = { customFlags = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text(stringResource(R.string.custom_flags)) },
-                                singleLine = true,
+                                minLines = 1,
                                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                             )
                         }
@@ -659,7 +659,7 @@ private fun NormalRuleEditorScreen(
                                             },
                                             modifier = Modifier.fillMaxWidth(),
                                             label = { Text(stringResource(R.string.extra_value)) },
-                                            singleLine = true,
+                                            minLines = 1,
                                             keyboardOptions = KeyboardOptions(
                                                 keyboardType = when (extra.type) {
                                                     "integer", "long" -> KeyboardType.Number
@@ -874,7 +874,7 @@ private fun CategoryListEditor(
                             onItemsChange(list)
                         },
                         modifier = Modifier.weight(1f),
-                        singleLine = true,
+                        minLines = 1,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
                     IconButton(onClick = {

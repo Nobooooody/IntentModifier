@@ -198,4 +198,6 @@
     <!-- Delete confirmation -->
     <string name="delete_confirm_title">Delete Rule</string>
     <string name="delete_confirm_message">Are you sure you want to delete \"%1$s\"?</string>
+    <string name="batch_delete_confirm_title">Delete Rules</string>
+    <string name="batch_delete_confirm_message">Are you sure you want to delete %1$d rules?</string>
 </resources>

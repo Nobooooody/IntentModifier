@@ -248,6 +248,7 @@ private fun RulesScreen() {
     val selectedDisplayIndices = remember { mutableStateListOf<Int>() }
     var showMenu by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var showBatchDeleteDialog by remember { mutableStateOf(false) }
     var pendingDeleteRule by remember { mutableStateOf<DisplayRule?>(null) }
 
     val displayRules = remember(rules, normalRules) {
@@ -368,6 +369,11 @@ private fun RulesScreen() {
                             if (selectedDisplayIndices.isNotEmpty()) showExportDialog = true
                         }) {
                             Icon(Icons.Default.Share, contentDescription = stringResource(R.string.export))
+                        }
+                        IconButton(onClick = {
+                            if (selectedDisplayIndices.isNotEmpty()) showBatchDeleteDialog = true
+                        }) {
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
                         }
                     }
                 )
@@ -530,24 +536,22 @@ private fun RulesScreen() {
                                         maxLines = 2, overflow = TextOverflow.Ellipsis,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    if (!isSelectionMode) {
-                                        Spacer(Modifier.height(12.dp))
-                                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                            TextButton(onClick = {
-                                                val intent = Intent(ctx, JavaCodeRuleEditorActivity::class.java)
-                                                intent.putExtra(JavaCodeRuleEditorActivity.EXTRA_RULE_INDEX, displayItem.index)
-                                                editorLauncher.launch(intent)
-                                            }) {
-                                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                                                Text(stringResource(R.string.edit))
-                                            }
-                                            Spacer(Modifier.width(8.dp))
-                                            TextButton(onClick = {
-                                                pendingDeleteRule = displayItem
-                                            }) {
-                                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                                                Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
-                                            }
+                                    Spacer(Modifier.height(12.dp))
+                                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                        TextButton(onClick = {
+                                            val intent = Intent(ctx, JavaCodeRuleEditorActivity::class.java)
+                                            intent.putExtra(JavaCodeRuleEditorActivity.EXTRA_RULE_INDEX, displayItem.index)
+                                            editorLauncher.launch(intent)
+                                        }, enabled = !isSelectionMode) {
+                                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                            Text(stringResource(R.string.edit))
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        TextButton(onClick = {
+                                            pendingDeleteRule = displayItem
+                                        }, enabled = !isSelectionMode) {
+                                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                            Text(stringResource(R.string.delete), color = if (isSelectionMode) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.error)
                                         }
                                     }
                                 }
@@ -595,24 +599,22 @@ private fun RulesScreen() {
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    if (!isSelectionMode) {
-                                        Spacer(Modifier.height(12.dp))
-                                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                            TextButton(onClick = {
-                                                val intent = Intent(ctx, NormalRuleEditorActivity::class.java)
-                                                intent.putExtra(NormalRuleEditorActivity.EXTRA_RULE_INDEX, displayItem.index)
-                                                normalRuleEditorLauncher.launch(intent)
-                                            }) {
-                                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                                                Text(stringResource(R.string.edit))
-                                            }
-                                            Spacer(Modifier.width(8.dp))
-                                            TextButton(onClick = {
-                                                pendingDeleteRule = displayItem
-                                            }) {
-                                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                                                Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
-                                            }
+                                    Spacer(Modifier.height(12.dp))
+                                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                        TextButton(onClick = {
+                                            val intent = Intent(ctx, NormalRuleEditorActivity::class.java)
+                                            intent.putExtra(NormalRuleEditorActivity.EXTRA_RULE_INDEX, displayItem.index)
+                                            normalRuleEditorLauncher.launch(intent)
+                                        }, enabled = !isSelectionMode) {
+                                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                            Text(stringResource(R.string.edit))
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        TextButton(onClick = {
+                                            pendingDeleteRule = displayItem
+                                        }, enabled = !isSelectionMode) {
+                                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                            Text(stringResource(R.string.delete), color = if (isSelectionMode) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) else MaterialTheme.colorScheme.error)
                                         }
                                     }
                                 }
@@ -658,6 +660,49 @@ private fun RulesScreen() {
             },
             dismissButton = {
                 TextButton(onClick = { pendingDeleteRule = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    // Batch delete confirmation dialog
+    if (showBatchDeleteDialog && selectedDisplayIndices.isNotEmpty()) {
+        val count = selectedDisplayIndices.size
+        AlertDialog(
+            onDismissRequest = { showBatchDeleteDialog = false },
+            title = { Text(stringResource(R.string.batch_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.batch_delete_confirm_message, count)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val selectedJava = mutableListOf<Pair<Int, DisplayRule.Java>>()
+                    val selectedNormal = mutableListOf<Pair<Int, DisplayRule.Normal>>()
+                    selectedDisplayIndices.sorted().forEach { idx ->
+                        when (val dr = displayRules[idx]) {
+                            is DisplayRule.Java -> selectedJava.add(dr.index to dr)
+                            is DisplayRule.Normal -> selectedNormal.add(dr.index to dr)
+                        }
+                    }
+                    selectedJava.sortByDescending { it.first }
+                    selectedNormal.sortByDescending { it.first }
+                    val javaUpdated = rules.toMutableList()
+                    selectedJava.forEach { (i, _) -> if (i < javaUpdated.size) javaUpdated.removeAt(i) }
+                    repo.saveJavaCodeRules(javaUpdated)
+                    rules = javaUpdated
+                    val normalUpdated = normalRules.toMutableList()
+                    selectedNormal.forEach { (i, _) -> if (i < normalUpdated.size) normalUpdated.removeAt(i) }
+                    repo.saveNormalRules(normalUpdated)
+                    normalRules = normalUpdated
+                    showBatchDeleteDialog = false
+                    selectedDisplayIndices.clear()
+                    isSelectionMode = false
+                    scope.launch { recompileAll(ctx, repo) }
+                }) {
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchDeleteDialog = false }) {
                     Text(stringResource(R.string.cancel))
                 }
             }
