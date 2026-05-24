@@ -18,6 +18,7 @@ data class JavaCodeRule(
     val enabled: Boolean = true,
     val name: String = "",
     val targetPackages: List<String> = emptyList(),  // 空 = 全局
+    val blockSubsequent: Boolean = true,  // true = 命中后阻断后续规则
     val imports: String = "",
     val members: String = "",
     val condition: String = "",
@@ -34,6 +35,7 @@ data class NormalRule(
     val enabled: Boolean = true,
     val name: String = "",
     val targetPackages: List<String> = emptyList(),  // 空 = 全局（分发范围）
+    val blockSubsequent: Boolean = true,  // true = 命中后阻断后续规则
     val priority: Int = 0,
 
     // === 匹配条件（AND 精确匹配，空 = 跳过）===
@@ -105,9 +107,9 @@ SharedPreferences 与 ContentProvider 返回内容对齐，无各自独有的字
 [输入] List<JavaCodeRule> + List<NormalRule>
 
 1. 对所有启用规则，统一起始索引
-2. 每条规则 → buildRuleTemplate() → ECJ 编译 → .class 文件
-   - JavaCodeRule → 模板含 user imports/members/condition/action
-   - NormalRule → 模板含自动生成的 condition（AND 精确匹配）+ action
+ 2. 每条规则 → buildRuleTemplate() → ECJ 编译 → .class 文件
+    - JavaCodeRule → 模板含 user imports/members/condition/action；`execute()` 末尾由 blockSubsequent 决定 `return true/false`
+    - NormalRule → 模板含自动生成的 match* 逻辑（AND 精确匹配）+ custom* 修改动作；`execute()` 末尾由 blockSubsequent 决定 `return true/false`
 3. 按 targetPackages 分组：
    - shared 组：targetPackages 为空的规则
    - per-app 组：按每个 packageName 分组（一条规则可同时属于多个 app 组）
@@ -207,7 +209,7 @@ public class Rule_{UUID8} {
         return matches;
     }
 
-    public static void execute(Context ctx, Intent intent, Intent result) {
+    public static boolean execute(Context ctx, Intent intent, Intent result) {
         // 用 CUSTOM_* 字段修改 result（空 = 不改）
         if (!CUSTOM_ACTION.isEmpty()) result.setAction(CUSTOM_ACTION);
         if (!CUSTOM_DATA.isEmpty()) result.setData(Uri.parse(CUSTOM_DATA));
@@ -216,6 +218,7 @@ public class Rule_{UUID8} {
         if (CUSTOM_FLAGS != 0) result.addFlags(CUSTOM_FLAGS);
         if (!CUSTOM_TYPE.isEmpty()) result.setType(CUSTOM_TYPE);
         // customCategories, extras 同理...
+        return {blockSubsequent};  // true = 阻断, false = 继续执行后续规则
     }
 }
 ```
@@ -266,20 +269,24 @@ loadRulesIfNeeded(lpparam, ctx):
 
   allRules.sortByDescending { it[1] as Int }  // 按 priority 降序
 
-  // 8. 加载每条规则的方法
+  // 8. 加载每条规则的方法（execute 返回 Boolean，用于判断是否阻断）
   loadedRules = allRules.map { (className, _) ->
     clazz = classLoader.loadClass(className as String)
     LoadedRule(
       evaluateMethod = clazz.getMethod("evaluate", Context, Intent, Intent),
-      executeMethod = clazz.getMethod("execute", Context, Intent, Intent)
+      executeMethod = clazz.getMethod("execute", Context, Intent, Intent)  // 返回 Boolean
     )
   }
   compiledRules = CompiledRules(loadedRules)
 ```
 
 > 排序在每次 `loadRulesIfNeeded()` 触发重载时执行（包括进程首次加载、热更新版本变化后重新下载 DEX）。
+>
+> `execute()` 统一返回 `boolean`，不兼容旧版 `void execute`。无需兼容代码 — DEX 总是编译时新生成的，旧 DEX 不会在运行时出现。
 
 ## 规则执行
+
+`execute()` 统一返回 `boolean`：`true` = 阻断后续规则，`false` = 继续执行。
 
 ```kotlin
 fun applyRules(intent: Intent): Intent {
@@ -288,11 +295,11 @@ fun applyRules(intent: Intent): Intent {
     for (rule in rules.list) {
         val matched = rule.evaluateMethod.invoke(null, ctx, intent, result) as? Boolean ?: false
         if (matched) {
-            rule.executeMethod.invoke(null, ctx, intent, result)
-            return result  // 一条规则命中后即返回（break 逻辑不变）
+            val shouldBlock = rule.executeMethod.invoke(null, ctx, intent, result) as? Boolean ?: true
+            if (shouldBlock) break
         }
     }
-    return intent
+    return result
 }
 ```
 
@@ -320,9 +327,10 @@ beforeHookedMethod
        → 版本变化则下载 DEX
        → DexClassLoader (shared + app DEX，: 分隔)
        → 合并 RuleRegistry → 按 priority 排序 → 加载方法
-  → applyRules(intent)
-       → 遍历 rules → evaluate → execute → break
-       → 返回修改后的 Intent
+   → applyRules(intent)
+        → 遍历 rules → evaluate → execute (返回是否阻断)
+        → 阻断→break，不阻断→继续下一规则
+        → 返回修改后的 result Intent
 ```
 
 ## UI 设计
