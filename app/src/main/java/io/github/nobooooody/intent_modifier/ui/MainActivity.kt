@@ -169,6 +169,16 @@ private fun MainScreen() {
 
 // ─── Rules Screen ─────────────────────────────────────────────────────────────
 
+private sealed interface DisplayRule {
+    val priority: Int
+    data class Java(val index: Int, val rule: JavaCodeRule) : DisplayRule {
+        override val priority get() = rule.priority
+    }
+    data class Normal(val index: Int, val rule: NormalRule) : DisplayRule {
+        override val priority get() = rule.priority
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun RulesScreen() {
@@ -358,11 +368,11 @@ private fun RulesScreen() {
                     }
                     DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }) {
                         DropdownMenuItem(
-                            text = { Text("Java Code Rule") },
+                            text = { Text(stringResource(R.string.java_code_rule)) },
                             onClick = { showAddMenu = false; editorLauncher.launch(Intent(ctx, JavaCodeRuleEditorActivity::class.java)) }
                         )
                         DropdownMenuItem(
-                            text = { Text("Normal Rule") },
+                            text = { Text(stringResource(R.string.normal_rule)) },
                             onClick = { showAddMenu = false; normalRuleEditorLauncher.launch(Intent(ctx, NormalRuleEditorActivity::class.java)) }
                         )
                     }
@@ -383,135 +393,149 @@ private fun RulesScreen() {
                 Text(stringResource(R.string.tap_to_add), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
             }
         } else {
+            val displayRules = remember(rules, normalRules) {
+                val javaItems = rules.mapIndexed { i, r -> DisplayRule.Java(i, r) }
+                val normalItems = normalRules.mapIndexed { i, r -> DisplayRule.Normal(i, r) }
+                (javaItems + normalItems).sortedByDescending { it.priority }
+            }
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
-                itemsIndexed(rules, key = { _, r -> r.name }) { index, rule ->
-                    val isSelected = index in selectedItems
-                    Card(
-                        modifier = Modifier.fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .combinedClickable(
-                                onClick = { if (isSelectionMode) toggleSelection(index) },
-                                onLongClick = {
+                itemsIndexed(displayRules, key = { _, dr ->
+                    when (dr) {
+                        is DisplayRule.Java -> "java_${dr.rule.name}"
+                        is DisplayRule.Normal -> "normal_${dr.rule.id}"
+                    }
+                }) { _, dr ->
+                    when (dr) {
+                        is DisplayRule.Java -> {
+                            val index = dr.index
+                            val rule = dr.rule
+                            val isSelected = index in selectedItems
+                            Card(
+                                modifier = Modifier.fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .combinedClickable(
+                                        onClick = { if (isSelectionMode) toggleSelection(index) },
+                                        onLongClick = {
+                                            if (!isSelectionMode) {
+                                                isSelectionMode = true
+                                                selectedItems.add(index)
+                                            }
+                                        }
+                                    )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (isSelectionMode) {
+                                            Checkbox(checked = isSelected, onCheckedChange = { toggleSelection(index) })
+                                            Spacer(Modifier.width(8.dp))
+                                        }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(rule.name, style = MaterialTheme.typography.titleMedium)
+                                            Text(stringResource(R.string.java_code_rule), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                        if (!isSelectionMode) {
+                                            Switch(checked = rule.enabled, onCheckedChange = { enabled ->
+                                                val updated = rules.toMutableList()
+                                                updated[index] = updated[index].copy(enabled = enabled)
+                                                repo.saveJavaCodeRules(updated)
+                                                rules = updated
+                                                scope.launch { recompileAll(ctx, repo) }
+                                            })
+                                        }
+                                    }
+                                    Text(
+                                        "${stringResource(R.string.priority)}: ${rule.priority}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        if (rule.condition.isNotEmpty()) rule.condition else stringResource(R.string.condition_empty),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                        maxLines = 2, overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        rule.action,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                     if (!isSelectionMode) {
-                                        isSelectionMode = true
-                                        selectedItems.add(index)
-                                    }
-                                }
-                            )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (isSelectionMode) {
-                                    Checkbox(checked = isSelected, onCheckedChange = { toggleSelection(index) })
-                                    Spacer(Modifier.width(8.dp))
-                                }
-                                Text(rule.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                                if (!isSelectionMode) {
-                                    Switch(checked = rule.enabled, onCheckedChange = { enabled ->
-                                        val updated = rules.toMutableList()
-                                        updated[index] = updated[index].copy(enabled = enabled)
-                                        repo.saveJavaCodeRules(updated)
-                                        rules = updated
-                                        scope.launch { recompileAll(ctx, repo) }
-                                    })
-                                }
-                            }
-                            Text(
-                                "${stringResource(R.string.priority)}: ${rule.priority}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                if (rule.condition.isNotEmpty()) rule.condition else stringResource(R.string.condition_empty),
-                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                maxLines = 2, overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                rule.action,
-                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (!isSelectionMode) {
-                                Spacer(Modifier.height(12.dp))
-                                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                    TextButton(onClick = {
-                                        val intent = Intent(ctx, JavaCodeRuleEditorActivity::class.java)
-                                        intent.putExtra(JavaCodeRuleEditorActivity.EXTRA_RULE_INDEX, index)
-                                        editorLauncher.launch(intent)
-                                    }) {
-                                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                                        Text(stringResource(R.string.edit))
-                                    }
-                                    Spacer(Modifier.width(8.dp))
-                                    TextButton(onClick = {
-                                        val updated = rules.toMutableList()
-                                        updated.removeAt(index)
-                                        repo.saveJavaCodeRules(updated)
-                                        rules = updated
-                                        scope.launch { recompileAll(ctx, repo) }
-                                    }) {
-                                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                                        Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                                        Spacer(Modifier.height(12.dp))
+                                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                            TextButton(onClick = {
+                                                val intent = Intent(ctx, JavaCodeRuleEditorActivity::class.java)
+                                                intent.putExtra(JavaCodeRuleEditorActivity.EXTRA_RULE_INDEX, index)
+                                                editorLauncher.launch(intent)
+                                            }) {
+                                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                                Text(stringResource(R.string.edit))
+                                            }
+                                            Spacer(Modifier.width(8.dp))
+                                            TextButton(onClick = {
+                                                val updated = rules.toMutableList()
+                                                updated.removeAt(index)
+                                                repo.saveJavaCodeRules(updated)
+                                                rules = updated
+                                                scope.launch { recompileAll(ctx, repo) }
+                                            }) {
+                                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                                Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                }
-                if (normalRules.isNotEmpty()) {
-                    item {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Normal Rules",
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                    itemsIndexed(normalRules, key = { _, r -> r.id }) { index, rule ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(rule.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                                    if (!isSelectionMode) {
-                                        Switch(checked = rule.enabled, onCheckedChange = { enabled ->
-                                            val updated = normalRules.toMutableList()
-                                            updated[index] = updated[index].copy(enabled = enabled)
-                                            repo.saveNormalRules(updated)
-                                            normalRules = updated
-                                            scope.launch { recompileAll(ctx, repo) }
-                                        })
-                                    }
-                                }
-                                Text(
-                                    "${stringResource(R.string.priority)}: ${rule.priority}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (!isSelectionMode) {
-                                    Spacer(Modifier.height(12.dp))
-                                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                        TextButton(onClick = {
-                                            val intent = Intent(ctx, NormalRuleEditorActivity::class.java)
-                                            intent.putExtra(NormalRuleEditorActivity.EXTRA_RULE_INDEX, index)
-                                            normalRuleEditorLauncher.launch(intent)
-                                        }) {
-                                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                                            Text(stringResource(R.string.edit))
+                        is DisplayRule.Normal -> {
+                            val index = dr.index
+                            val rule = dr.rule
+                            Card(
+                                modifier = Modifier.fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(rule.name, style = MaterialTheme.typography.titleMedium)
+                                            Text(stringResource(R.string.normal_rule), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                                         }
-                                        Spacer(Modifier.width(8.dp))
-                                        TextButton(onClick = {
-                                            val updated = normalRules.toMutableList()
-                                            updated.removeAt(index)
-                                            repo.saveNormalRules(updated)
-                                            normalRules = updated
-                                            scope.launch { recompileAll(ctx, repo) }
-                                        }) {
-                                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
-                                            Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                                        if (!isSelectionMode) {
+                                            Switch(checked = rule.enabled, onCheckedChange = { enabled ->
+                                                val updated = normalRules.toMutableList()
+                                                updated[index] = updated[index].copy(enabled = enabled)
+                                                repo.saveNormalRules(updated)
+                                                normalRules = updated
+                                                scope.launch { recompileAll(ctx, repo) }
+                                            })
+                                        }
+                                    }
+                                    Text(
+                                        "${stringResource(R.string.priority)}: ${rule.priority}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (!isSelectionMode) {
+                                        Spacer(Modifier.height(12.dp))
+                                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                            TextButton(onClick = {
+                                                val intent = Intent(ctx, NormalRuleEditorActivity::class.java)
+                                                intent.putExtra(NormalRuleEditorActivity.EXTRA_RULE_INDEX, index)
+                                                normalRuleEditorLauncher.launch(intent)
+                                            }) {
+                                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                                Text(stringResource(R.string.edit))
+                                            }
+                                            Spacer(Modifier.width(8.dp))
+                                            TextButton(onClick = {
+                                                val updated = normalRules.toMutableList()
+                                                updated.removeAt(index)
+                                                repo.saveNormalRules(updated)
+                                                normalRules = updated
+                                                scope.launch { recompileAll(ctx, repo) }
+                                            }) {
+                                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
+                                                Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                                            }
                                         }
                                     }
                                 }

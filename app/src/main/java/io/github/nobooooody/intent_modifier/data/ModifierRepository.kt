@@ -87,7 +87,6 @@ class ModifierRepository(private val context: Context) {
                     enabled = obj.optBoolean("enabled", true),
                     name = obj.optString("name", ""),
                     targetPackages = optStringList(obj, "targetPackages"),
-                    blockSubsequent = obj.optBoolean("blockSubsequent", true),
                     imports = obj.optString("imports", ""),
                     members = obj.optString("members", ""),
                     condition = obj.optString("condition", ""),
@@ -109,7 +108,6 @@ class ModifierRepository(private val context: Context) {
                 put("enabled", rule.enabled)
                 put("name", rule.name)
                 put("targetPackages", JSONArray(rule.targetPackages))
-                put("blockSubsequent", rule.blockSubsequent)
                 put("imports", rule.imports)
                 put("members", rule.members)
                 put("condition", rule.condition)

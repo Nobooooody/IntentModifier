@@ -18,3 +18,4 @@ app/build
 .idea
 .direnv/
 compiler-jdk8/build
+.kotlin/

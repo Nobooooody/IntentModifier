@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -125,7 +126,6 @@ private fun RuleEditorScreen(
     val ctx = LocalContext.current
     var name by remember { mutableStateOf(editingRule?.name ?: "") }
     var enabled by remember { mutableStateOf(editingRule?.enabled ?: true) }
-    var blockSubsequent by remember { mutableStateOf(editingRule?.blockSubsequent ?: true) }
     var priority by remember { mutableStateOf(editingRule?.priority?.toString() ?: "0") }
     var targetPackages by remember { mutableStateOf(editingRule?.targetPackages ?: emptyList()) }
     var imports by remember { mutableStateOf(editingRule?.imports ?: "") }
@@ -182,11 +182,6 @@ private fun RuleEditorScreen(
                 Switch(checked = enabled, onCheckedChange = { enabled = it })
             }
 
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("阻断后续规则", modifier = Modifier.weight(1f))
-                Switch(checked = blockSubsequent, onCheckedChange = { blockSubsequent = it })
-            }
-
             Spacer(Modifier.height(16.dp))
 
             // 优先级
@@ -200,21 +195,21 @@ private fun RuleEditorScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // 目标应用
+            // Target apps (compilation scope)
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("目标应用", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        Text(stringResource(R.string.target_apps_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         OutlinedButton(onClick = {
                             val intent = Intent(ctx, AppPickerActivity::class.java).apply {
                                 putExtra(AppPickerActivity.EXTRA_MULTI_SELECT, true)
                             }
                             appPickerLauncher.launch(intent)
                         }) {
-                            Text(if (targetPackages.isEmpty()) "选择应用" else "添加")
+                            Text(if (targetPackages.isEmpty()) stringResource(R.string.target_apps_pick) else stringResource(R.string.target_apps_add))
                         }
                     }
-                    Text("留空则对所有应用生效", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.target_apps_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (targetPackages.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
                         FlowRow(
@@ -229,9 +224,10 @@ private fun RuleEditorScreen(
                                     onClick = {},
                                     label = { Text("$label ($pkg)", maxLines = 1, style = MaterialTheme.typography.bodySmall) },
                                     trailingIcon = {
-                                        IconButton(onClick = { targetPackages = targetPackages - pkg }) {
-                                            Icon(Icons.Default.Close, contentDescription = "移除", modifier = Modifier.padding(0.dp))
-                                        }
+                                        Icon(
+                                            Icons.Default.Close, contentDescription = stringResource(R.string.remove),
+                                            modifier = Modifier.clickable { targetPackages = targetPackages - pkg }.padding(4.dp)
+                                        )
                                     }
                                 )
                             }
@@ -367,7 +363,6 @@ private fun RuleEditorScreen(
                             enabled = enabled,
                             name = trimmedName,
                             targetPackages = targetPackages,
-                            blockSubsequent = blockSubsequent,
                             imports = imports.trim(),
                             members = members.trim(),
                             condition = condition.trim(),

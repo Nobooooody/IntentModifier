@@ -100,16 +100,18 @@
     <!-- Java Code Rules -->
     <string name="new_rule">New Rule</string>
     <string name="edit_rule">Edit Rule</string>
+    <string name="java_code_rule">Java Code Rule</string>
+    <string name="normal_rule">Normal Rule</string>
     <string name="rule_name">Rule Name</string>
     <string name="priority">Priority</string>
     <string name="condition_code">Condition Code</string>
-    <string name="condition_hint">Must return boolean. Each statement must end with a semicolon. Example:\nintent.getPackage().contains(\"com.example\");\n\nBuilt-in variables: ctx (Context), intent (original Intent), result (modified Intent)\n\nNote: some launchers may not set getPackage(), use:\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
+    <string name="condition_hint">You MUST return a boolean (true = match, execute action; false = skip to next rule).\nEach statement must end with a semicolon.\n\nBuilt-in variables: ctx (Context), intent (original Intent), result (modified Intent)\n\nExample:\nintent.getPackage().contains(\"com.example\");\n\nNote: some launchers may not set getPackage(), use:\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
     <string name="imports_code">Import Statements</string>
     <string name="imports_hint">Example:\nimport android.util.Log;\nimport java.text.SimpleDateFormat;</string>
     <string name="members_code">Member Code</string>
     <string name="members_hint">Class fields and methods. Example:\nprivate static final String TAG = \"MyApp\";\nprivate boolean checkExtra(Intent intent) { return intent.hasExtra(\"key\"); }</string>
     <string name="action_code">Action Code</string>
-    <string name="action_hint">Each statement must end with a semicolon. Example: result.setPackage(\"com.custom.package\");\n\nBuilt-in variables: ctx (Context), intent (original Intent), result (modified Intent)\n\nExample: Toast.makeText(ctx, \"Matched: \" + intent.getAction(), Toast.LENGTH_SHORT).show();</string>
+    <string name="action_hint">You MUST return a boolean (true = block subsequent rules, false = continue).\nEach statement must end with a semicolon.\n\nBuilt-in variables: ctx (Context), intent (original Intent), result (modified Intent)\n\nExample:\nresult.setPackage(\"com.custom.package\");\nreturn true;</string>
     <string name="test_compile">Test Compile</string>
     <string name="compile_success">Compile successful!</string>
     <string name="compile_failed">Compile failed</string>
@@ -119,6 +121,40 @@
     <string name="compiling_all_rules">Compiling all rules...</string>
     <string name="no_rules_to_compile">No rules to compile</string>
     <string name="saved_and_compiled">Saved and compiled</string>
+
+    <!-- Normal rule: match conditions -->
+    <string name="match_condition_title">Match Conditions</string>
+    <string name="match_condition_hint">Leave empty to skip this check</string>
+    <string name="match_package">Package</string>
+    <string name="match_action">Action</string>
+    <string name="match_class">Class</string>
+    <string name="match_data">Data</string>
+    <string name="match_categories">Categories (comma-separated)</string>
+    <string name="match_type">MIME Type</string>
+
+    <!-- Normal rule: custom intent -->
+    <string name="custom_intent_title">Custom Intent</string>
+    <string name="custom_intent_hint">Override matched Intent fields</string>
+    <string name="custom_package">Custom Package</string>
+    <string name="custom_action">Custom Action</string>
+    <string name="custom_class">Custom Class</string>
+    <string name="custom_data">Custom Data</string>
+    <string name="custom_categories">Custom Categories (comma-separated)</string>
+    <string name="custom_type">Custom MIME Type</string>
+    <string name="custom_flags">Custom Flags (number)</string>
+
+    <!-- Normal rule: extras -->
+    <string name="extra_title">Extra</string>
+    <string name="extra_add">Add Extra</string>
+    <string name="extra_key">Key</string>
+    <string name="extra_delete">Delete</string>
+    <string name="remove">Remove</string>
+
+    <!-- Target apps (compilation scope) -->
+    <string name="target_apps_title">Compilation Scope (Target Apps)</string>
+    <string name="target_apps_hint">Select which apps this rule compiles into. Leave empty to compile into shared DEX (applies to all apps).</string>
+    <string name="target_apps_pick">Pick Apps</string>
+    <string name="target_apps_add">Add</string>
 
     <!-- Selection mode -->
     <string name="select_all">Select all</string>

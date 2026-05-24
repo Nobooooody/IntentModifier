@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -165,6 +167,28 @@ private fun NormalRuleEditorScreen(
         }
     }
 
+    val singleAppPickerLauncher = rememberLauncherForActivityResult<Intent, ActivityResult>(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result: ActivityResult ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val pkg = result.data?.getStringExtra("package")
+            if (pkg != null) {
+                customPackage = pkg
+            }
+        }
+    }
+
+    val matchAppPickerLauncher = rememberLauncherForActivityResult<Intent, ActivityResult>(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result: ActivityResult ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val pkg = result.data?.getStringExtra("package")
+            if (pkg != null) {
+                matchPackage = pkg
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -215,21 +239,21 @@ private fun NormalRuleEditorScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // 目标应用
+            // Target apps (compilation scope)
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("目标应用", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        Text(stringResource(R.string.target_apps_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         OutlinedButton(onClick = {
                             val intent = Intent(ctx, AppPickerActivity::class.java).apply {
                                 putExtra(AppPickerActivity.EXTRA_MULTI_SELECT, true)
                             }
                             appPickerLauncher.launch(intent)
                         }) {
-                            Text(if (targetPackages.isEmpty()) "选择应用" else "添加")
+                            Text(if (targetPackages.isEmpty()) stringResource(R.string.target_apps_pick) else stringResource(R.string.target_apps_add))
                         }
                     }
-                    Text("留空则对所有应用生效", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.target_apps_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (targetPackages.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
                         FlowRow(
@@ -244,9 +268,10 @@ private fun NormalRuleEditorScreen(
                                     onClick = {},
                                     label = { Text("$label ($pkg)", maxLines = 1, style = MaterialTheme.typography.bodySmall) },
                                     trailingIcon = {
-                                        IconButton(onClick = { targetPackages = targetPackages - pkg }) {
-                                            Icon(Icons.Default.Close, contentDescription = "移除", modifier = Modifier.padding(0.dp))
-                                        }
+                                        Icon(
+                                            Icons.Default.Close, contentDescription = stringResource(R.string.remove),
+                                            modifier = Modifier.clickable { targetPackages = targetPackages - pkg }.padding(4.dp)
+                                        )
                                     }
                                 )
                             }
@@ -257,24 +282,32 @@ private fun NormalRuleEditorScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // 匹配条件
+            // Match Conditions
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("匹配条件", style = MaterialTheme.typography.titleMedium)
-                    Text("留空表示不检查该字段", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.match_condition_title), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.match_condition_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = matchPackage, onValueChange = { matchPackage = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Package") },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = matchPackage, onValueChange = { matchPackage = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(stringResource(R.string.match_package)) },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(onClick = {
+                            matchAppPickerLauncher.launch(Intent(ctx, AppPickerActivity::class.java))
+                        }) {
+                            Text(stringResource(R.string.target_apps_pick))
+                        }
+                    }
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = matchAction, onValueChange = { matchAction = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Action") },
+                        label = { Text(stringResource(R.string.match_action)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -282,7 +315,7 @@ private fun NormalRuleEditorScreen(
                     OutlinedTextField(
                         value = matchClass, onValueChange = { matchClass = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Class") },
+                        label = { Text(stringResource(R.string.match_class)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -290,7 +323,7 @@ private fun NormalRuleEditorScreen(
                     OutlinedTextField(
                         value = matchData, onValueChange = { matchData = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Data") },
+                        label = { Text(stringResource(R.string.match_data)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -298,7 +331,7 @@ private fun NormalRuleEditorScreen(
                     OutlinedTextField(
                         value = matchCategories, onValueChange = { matchCategories = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Categories（逗号分隔）") },
+                        label = { Text(stringResource(R.string.match_categories)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -306,7 +339,7 @@ private fun NormalRuleEditorScreen(
                     OutlinedTextField(
                         value = matchType, onValueChange = { matchType = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("MIME Type") },
+                        label = { Text(stringResource(R.string.match_type)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -315,24 +348,32 @@ private fun NormalRuleEditorScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // 自定义 Intent
+            // Custom Intent
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("自定义 Intent", style = MaterialTheme.typography.titleMedium)
-                    Text("覆盖匹配 Intent 的字段", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.custom_intent_title), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.custom_intent_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = customPackage, onValueChange = { customPackage = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Custom Package") },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = customPackage, onValueChange = { customPackage = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(stringResource(R.string.custom_package)) },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(onClick = {
+                            singleAppPickerLauncher.launch(Intent(ctx, AppPickerActivity::class.java))
+                        }) {
+                            Text(stringResource(R.string.target_apps_pick))
+                        }
+                    }
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = customAction, onValueChange = { customAction = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Custom Action") },
+                        label = { Text(stringResource(R.string.custom_action)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -340,7 +381,7 @@ private fun NormalRuleEditorScreen(
                     OutlinedTextField(
                         value = customClass, onValueChange = { customClass = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Custom Class") },
+                        label = { Text(stringResource(R.string.custom_class)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -348,7 +389,7 @@ private fun NormalRuleEditorScreen(
                     OutlinedTextField(
                         value = customData, onValueChange = { customData = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Custom Data") },
+                        label = { Text(stringResource(R.string.custom_data)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -356,7 +397,7 @@ private fun NormalRuleEditorScreen(
                     OutlinedTextField(
                         value = customCategories, onValueChange = { customCategories = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Custom Categories（逗号分隔）") },
+                        label = { Text(stringResource(R.string.custom_categories)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -364,7 +405,7 @@ private fun NormalRuleEditorScreen(
                     OutlinedTextField(
                         value = customType, onValueChange = { customType = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Custom MIME Type") },
+                        label = { Text(stringResource(R.string.custom_type)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -372,7 +413,7 @@ private fun NormalRuleEditorScreen(
                     OutlinedTextField(
                         value = customFlags, onValueChange = { customFlags = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Custom Flags（数字）") },
+                        label = { Text(stringResource(R.string.custom_flags)) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -385,9 +426,9 @@ private fun NormalRuleEditorScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Extra", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        Text(stringResource(R.string.extra_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         IconButton(onClick = { extras = extras + ExtraItem("", "string") }) {
-                            Icon(Icons.Default.Add, contentDescription = "添加 Extra")
+                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.extra_add))
                         }
                     }
                     extras.forEachIndexed { idx, extra ->
@@ -400,7 +441,7 @@ private fun NormalRuleEditorScreen(
                                     extras = list
                                 },
                                 modifier = Modifier.weight(1f),
-                                label = { Text("Key") },
+                                label = { Text(stringResource(R.string.extra_key)) },
                                 singleLine = true
                             )
                             IconButton(onClick = {
@@ -408,7 +449,7 @@ private fun NormalRuleEditorScreen(
                                 list.removeAt(idx)
                                 extras = list
                             }) {
-                                Icon(Icons.Default.Delete, contentDescription = "删除")
+                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.extra_delete))
                             }
                         }
                     }

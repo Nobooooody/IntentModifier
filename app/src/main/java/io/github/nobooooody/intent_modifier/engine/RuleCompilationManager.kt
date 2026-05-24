@@ -297,7 +297,7 @@ class RuleCompilationManager(private val context: Context) {
         val importsSection = processCodeBlock(rule.imports)
         val membersSection = processCodeBlock(rule.members)
         val conditionBody = processCondition(rule.condition)
-        val actionBody = processAction(rule.action, rule.blockSubsequent)
+        val actionBody = processAction(rule.action)
 
         val baseImports = "import android.content.Context;\nimport android.content.Intent;"
         val allImports = if (importsSection.isNotEmpty()) {
@@ -436,12 +436,12 @@ class RuleCompilationManager(private val context: Context) {
         """.trimIndent()
     }
 
-    private fun processAction(action: String?, blockSubsequent: Boolean): String {
+    private fun processAction(action: String?): String {
         val code = action?.trim()
         if (code.isNullOrEmpty()) {
             return """
                 public static boolean execute(Context ctx, Intent intent, Intent result) {
-                    return $blockSubsequent;
+                    return false;
                 }
             """.trimIndent()
         }
@@ -456,7 +456,6 @@ class RuleCompilationManager(private val context: Context) {
         return """
             public static boolean execute(Context ctx, Intent intent, Intent result) {
                 $processed
-                return $blockSubsequent;
             }
         """.trimIndent()
     }

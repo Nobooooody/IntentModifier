@@ -7,7 +7,6 @@ data class JavaCodeRule(
     val enabled: Boolean = true,
     val name: String = "",
     val targetPackages: List<String> = emptyList(),
-    val blockSubsequent: Boolean = true,
     val imports: String = "",
     val members: String = "",
     val condition: String = "",

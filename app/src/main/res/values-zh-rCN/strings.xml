@@ -100,16 +100,18 @@
     <!-- Java Code Rules -->
     <string name="new_rule">新规则</string>
     <string name="edit_rule">编辑规则</string>
+    <string name="java_code_rule">Java 代码规则</string>
+    <string name="normal_rule">普通规则</string>
     <string name="rule_name">规则名称</string>
     <string name="priority">优先级</string>
     <string name="condition_code">条件代码</string>
-    <string name="condition_hint">必须返回 boolean，每条语句以分号结尾。例如：\nintent.getPackage().contains(\"com.example\");\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n注意：某些启动器可能不设置 getPackage()，可使用：\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
+    <string name="condition_hint">必须返回 boolean（true = 匹配，执行动作；false = 不匹配，跳过）。\n每条语句以分号结尾。\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n示例：\nintent.getPackage().contains(\"com.example\");\n\n注意：某些启动器可能不设置 getPackage()，可使用：\nintent.getPackage() != null ? intent.getPackage() : intent.getComponent().getPackageName()</string>
     <string name="imports_code">导入语句</string>
     <string name="imports_hint">例如：\nimport android.util.Log;\nimport java.text.SimpleDateFormat;</string>
     <string name="members_code">成员代码</string>
     <string name="members_hint">类成员变量和方法。例如：\nprivate static final String TAG = \"MyApp\";\nprivate boolean checkExtra(Intent intent) { return intent.hasExtra(\"key\"); }</string>
     <string name="action_code">动作代码</string>
-    <string name="action_hint">每条语句以分号结尾。例如：result.setPackage(\"com.custom.package\");\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n示例：Toast.makeText(ctx, \"匹配: \" + intent.getAction(), Toast.LENGTH_SHORT).show();</string>
+    <string name="action_hint">必须返回 boolean（true = 阻断后续规则，false = 继续执行）。\n每条语句以分号结尾。\n\n内置变量：ctx（Context）、intent（原始 Intent）、result（修改后 Intent）\n\n示例：\nresult.setPackage(\"com.custom.package\");\nreturn true;</string>
     <string name="test_compile">测试编译</string>
     <string name="compile_success">编译成功！</string>
     <string name="compile_failed">编译失败</string>
@@ -119,6 +121,40 @@
     <string name="compiling_all_rules">正在编译所有规则...</string>
     <string name="no_rules_to_compile">没有可编译的规则</string>
     <string name="saved_and_compiled">已保存并编译</string>
+
+    <!-- Normal rule: match conditions -->
+    <string name="match_condition_title">匹配条件</string>
+    <string name="match_condition_hint">留空表示不检查该字段</string>
+    <string name="match_package">Package</string>
+    <string name="match_action">Action</string>
+    <string name="match_class">Class</string>
+    <string name="match_data">Data</string>
+    <string name="match_categories">Categories（逗号分隔）</string>
+    <string name="match_type">MIME Type</string>
+
+    <!-- Normal rule: custom intent -->
+    <string name="custom_intent_title">自定义 Intent</string>
+    <string name="custom_intent_hint">覆盖匹配 Intent 的字段</string>
+    <string name="custom_package">Custom Package</string>
+    <string name="custom_action">Custom Action</string>
+    <string name="custom_class">Custom Class</string>
+    <string name="custom_data">Custom Data</string>
+    <string name="custom_categories">Custom Categories（逗号分隔）</string>
+    <string name="custom_type">Custom MIME Type</string>
+    <string name="custom_flags">Custom Flags（数字）</string>
+
+    <!-- Normal rule: extras -->
+    <string name="extra_title">Extra</string>
+    <string name="extra_add">添加 Extra</string>
+    <string name="extra_key">Key</string>
+    <string name="extra_delete">删除</string>
+    <string name="remove">移除</string>
+
+    <!-- Target apps (compilation scope) -->
+    <string name="target_apps_title">编译范围（目标应用）</string>
+    <string name="target_apps_hint">选择规则编译到哪些应用。留空则编译到共享 DEX（对所有应用生效）。</string>
+    <string name="target_apps_pick">选择应用</string>
+    <string name="target_apps_add">添加</string>
 
     <!-- Selection mode -->
     <string name="select_all">全选</string>
