@@ -18,21 +18,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -43,6 +41,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -61,11 +61,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.ExtraItem
@@ -316,7 +318,10 @@ fun NormalRuleForm(
                     Text(stringResource(R.string.match_condition_title), style = MaterialTheme.typography.titleMedium)
                     Text(stringResource(R.string.match_condition_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         OutlinedTextField(
                             value = matchPackage, onValueChange = { matchPackage = it },
                             modifier = Modifier.weight(1f),
@@ -325,14 +330,19 @@ fun NormalRuleForm(
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                         )
                         Spacer(Modifier.width(8.dp))
-                        OutlinedButton(onClick = {
-                            matchAppPickerLauncher.launch(Intent(ctx, AppPickerActivity::class.java))
-                        }) {
-                            Text(stringResource(R.string.target_apps_pick))
+                        Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+                            OutlinedButton(onClick = {
+                                matchAppPickerLauncher.launch(Intent(ctx, AppPickerActivity::class.java))
+                            }) {
+                                Text(stringResource(R.string.target_apps_pick))
+                            }
                         }
                     }
                     Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         OutlinedTextField(
                             value = matchClass, onValueChange = { matchClass = it },
                             modifier = Modifier.weight(1f),
@@ -341,19 +351,21 @@ fun NormalRuleForm(
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                         )
                         Spacer(Modifier.width(8.dp))
-                        OutlinedButton(onClick = {
-                            val pkg = matchPackage.trim().ifBlank { null }
-                            if (pkg != null) {
-                                pendingClassField = "match"
-                                val intent = Intent(ctx, ActivityPickerActivity::class.java).apply {
-                                    putExtra(ActivityPickerActivity.EXTRA_PACKAGE_NAME, pkg)
+                        Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+                            OutlinedButton(onClick = {
+                                val pkg = matchPackage.trim().ifBlank { null }
+                                if (pkg != null) {
+                                    pendingClassField = "match"
+                                    val intent = Intent(ctx, ActivityPickerActivity::class.java).apply {
+                                        putExtra(ActivityPickerActivity.EXTRA_PACKAGE_NAME, pkg)
+                                    }
+                                    activityPickerLauncher.launch(intent)
+                                } else {
+                                    Toast.makeText(ctx, R.string.no_package_to_browse, Toast.LENGTH_SHORT).show()
                                 }
-                                activityPickerLauncher.launch(intent)
-                            } else {
-                                Toast.makeText(ctx, R.string.no_package_to_browse, Toast.LENGTH_SHORT).show()
+                            }) {
+                                Text(stringResource(R.string.pick_activity))
                             }
-                        }) {
-                            Text(stringResource(R.string.pick_activity))
                         }
                     }
                     Spacer(Modifier.height(4.dp))
@@ -425,7 +437,10 @@ fun NormalRuleForm(
                     Text(stringResource(R.string.custom_intent_title), style = MaterialTheme.typography.titleMedium)
                     Text(stringResource(R.string.custom_intent_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         OutlinedTextField(
                             value = customPackage, onValueChange = { customPackage = it },
                             modifier = Modifier.weight(1f),
@@ -434,14 +449,19 @@ fun NormalRuleForm(
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                         )
                         Spacer(Modifier.width(8.dp))
-                        OutlinedButton(onClick = {
-                            singleAppPickerLauncher.launch(Intent(ctx, AppPickerActivity::class.java))
-                        }) {
-                            Text(stringResource(R.string.target_apps_pick))
+                        Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+                            OutlinedButton(onClick = {
+                                singleAppPickerLauncher.launch(Intent(ctx, AppPickerActivity::class.java))
+                            }) {
+                                Text(stringResource(R.string.target_apps_pick))
+                            }
                         }
                     }
                     Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         OutlinedTextField(
                             value = customClass, onValueChange = { customClass = it },
                             modifier = Modifier.weight(1f),
@@ -450,19 +470,21 @@ fun NormalRuleForm(
                             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                         )
                         Spacer(Modifier.width(8.dp))
-                        OutlinedButton(onClick = {
-                            val pkg = customPackage.trim().ifBlank { matchPackage.trim().ifBlank { null } }
-                            if (pkg != null) {
-                                pendingClassField = "custom"
-                                val intent = Intent(ctx, ActivityPickerActivity::class.java).apply {
-                                    putExtra(ActivityPickerActivity.EXTRA_PACKAGE_NAME, pkg)
+                        Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+                            OutlinedButton(onClick = {
+                                val pkg = customPackage.trim().ifBlank { matchPackage.trim().ifBlank { null } }
+                                if (pkg != null) {
+                                    pendingClassField = "custom"
+                                    val intent = Intent(ctx, ActivityPickerActivity::class.java).apply {
+                                        putExtra(ActivityPickerActivity.EXTRA_PACKAGE_NAME, pkg)
+                                    }
+                                    activityPickerLauncher.launch(intent)
+                                } else {
+                                    Toast.makeText(ctx, R.string.no_package_to_browse, Toast.LENGTH_SHORT).show()
                                 }
-                                activityPickerLauncher.launch(intent)
-                            } else {
-                                Toast.makeText(ctx, R.string.no_package_to_browse, Toast.LENGTH_SHORT).show()
+                            }) {
+                                Text(stringResource(R.string.pick_activity))
                             }
-                        }) {
-                            Text(stringResource(R.string.pick_activity))
                         }
                     }
                     Spacer(Modifier.height(4.dp))

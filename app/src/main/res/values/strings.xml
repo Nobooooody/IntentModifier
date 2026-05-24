@@ -125,12 +125,12 @@
     <string name="match_condition_title">Match Conditions</string>
     <string name="match_condition_hint">Leave empty to skip this check</string>
     <string name="match_advanced">More match options</string>
-    <string name="match_package">Package</string>
-    <string name="match_action">Action</string>
-    <string name="match_class">Class</string>
-    <string name="match_data">Data</string>
-    <string name="match_categories">Categories (comma-separated)</string>
-    <string name="match_type">MIME Type</string>
+    <string name="match_package">Match Package</string>
+    <string name="match_action">Match Action</string>
+    <string name="match_class">Match Class</string>
+    <string name="match_data">Match Data</string>
+    <string name="match_categories">Match Categories</string>
+    <string name="match_type">Match MIME Type</string>
 
     <!-- Normal rule: custom intent -->
     <string name="custom_intent_title">Custom Intent</string>
@@ -140,7 +140,7 @@
     <string name="custom_action">Custom Action</string>
     <string name="custom_class">Custom Class</string>
     <string name="custom_data">Custom Data</string>
-    <string name="custom_categories">Custom Categories (comma-separated)</string>
+    <string name="custom_categories">Custom Categories</string>
     <string name="custom_type">Custom MIME Type</string>
     <string name="custom_flags">Custom Flags (number)</string>
     <string name="replace_categories">Replace existing categories</string>

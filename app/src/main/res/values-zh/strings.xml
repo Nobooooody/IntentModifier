@@ -125,24 +125,24 @@
     <string name="match_condition_title">匹配条件</string>
     <string name="match_condition_hint">留空表示不检查该字段</string>
     <string name="match_advanced">更多匹配选项</string>
-    <string name="match_package">Package</string>
-    <string name="match_action">Action</string>
-    <string name="match_class">Class</string>
-    <string name="match_data">Data</string>
-    <string name="match_categories">Categories（逗号分隔）</string>
-    <string name="match_type">MIME Type</string>
+    <string name="match_package">匹配包名</string>
+    <string name="match_action">匹配操作</string>
+    <string name="match_class">匹配类名</string>
+    <string name="match_data">匹配数据</string>
+    <string name="match_categories">匹配分类</string>
+    <string name="match_type">匹配 MIME 类型</string>
 
     <!-- Normal rule: custom intent -->
     <string name="custom_intent_title">自定义 Intent</string>
     <string name="custom_intent_hint">覆盖匹配 Intent 的字段</string>
     <string name="custom_advanced">更多自定义选项</string>
-    <string name="custom_package">Custom Package</string>
-    <string name="custom_action">Custom Action</string>
-    <string name="custom_class">Custom Class</string>
-    <string name="custom_data">Custom Data</string>
-    <string name="custom_categories">Custom Categories（逗号分隔）</string>
-    <string name="custom_type">Custom MIME Type</string>
-    <string name="custom_flags">Custom Flags（数字）</string>
+    <string name="custom_package">自定义包名</string>
+    <string name="custom_action">自定义操作</string>
+    <string name="custom_class">自定义类名</string>
+    <string name="custom_data">自定义数据</string>
+    <string name="custom_categories">自定义分类</string>
+    <string name="custom_type">自定义 MIME 类型</string>
+    <string name="custom_flags">自定义标志（数字）</string>
     <string name="replace_categories">替换已有分类</string>
 
     <!-- Normal rule: extras -->
