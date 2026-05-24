@@ -334,6 +334,8 @@ beforeHookedMethod
 
 ### 规则编辑器（NormalRule）
 - 新建 Compose Activity，各字段对应表单
+- 匹配条件区（match*）：来源 intent 的 Action / Data / Package / Class / Categories / Type
+- 修改动作区（custom*）：目标 Action / Data / Package / Class / Flags / Categories / Type / Extras
 - Extras 支持动态增删，全部类型：String, Int, Long, Boolean, Float, Double, 对应 Array, Null
 
 ### 规则列表
