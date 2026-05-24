@@ -811,7 +811,7 @@ private fun NormalRuleEditorScreen(
                                 if (javaRules.isEmpty() && normalRules.isEmpty()) {
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(ctx, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
-                                        delay(500)
+                                        delay(1500)
                                         (ctx as? ComponentActivity)?.finish()
                                     }
                                 } else {
@@ -824,14 +824,14 @@ private fun NormalRuleEditorScreen(
                                             val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
                                             Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()
                                         }
-                                        delay(500)
+                                        delay(1500)
                                         (ctx as? ComponentActivity)?.finish()
                                     }
                                 }
                             } catch (e: Exception) {
                                 withContext(Dispatchers.Main) {
                                     Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
-                                    delay(500)
+                                    delay(1500)
                                     (ctx as? ComponentActivity)?.finish()
                                 }
                             }
