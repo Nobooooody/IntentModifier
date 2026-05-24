@@ -77,6 +77,8 @@
     <string name="field_condition">Condition</string>
     <string name="field_action">Action</string>
     <string name="field_none">(none)</string>
+    <string name="field_match_action">Match Action</string>
+    <string name="field_custom_action">Custom Action</string>
 
     <string name="import_success">Imported %1$d rules</string>
     <string name="import_failed">Import failed</string>
@@ -161,4 +163,22 @@
     <string name="deselect_all">Deselect all</string>
     <string name="selected_count">%1$d selected</string>
     <string name="export_selected_title">Export %1$d rules</string>
+
+    <!-- Conflict resolution: NormalRule fields -->
+    <string name="match_categories_short">Match Categories</string>
+    <string name="custom_categories_short">Custom Categories</string>
+    <string name="block_subsequent">Block Subsequent</string>
+    <string name="target_packages">Target Packages</string>
+    <string name="extras">Extras</string>
+
+    <!-- Activity picker -->
+    <string name="select_activity">Select Activity from %s</string>
+    <string name="loading_activities">Loading activities…</string>
+    <string name="search_activities">Search activities</string>
+    <string name="pick_activity">Pick</string>
+    <string name="no_package_to_browse">Set a package (Match or Custom) first</string>
+
+    <!-- Delete confirmation -->
+    <string name="delete_confirm_title">Delete Rule</string>
+    <string name="delete_confirm_message">Are you sure you want to delete \"%1$s\"?</string>
 </resources>

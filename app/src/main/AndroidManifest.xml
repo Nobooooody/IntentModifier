@@ -24,6 +24,11 @@
             android:theme="@style/AppTheme" />
 
         <activity
+            android:name=".ui.ActivityPickerActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+
+        <activity
             android:name=".ui.JavaCodeRuleEditorActivity"
             android:exported="false"
             android:theme="@style/AppTheme"

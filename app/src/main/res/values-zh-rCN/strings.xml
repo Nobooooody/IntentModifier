@@ -77,6 +77,8 @@
     <string name="field_condition">条件</string>
     <string name="field_action">动作</string>
     <string name="field_none">(无)</string>
+    <string name="field_match_action">匹配 Action</string>
+    <string name="field_custom_action">自定义 Action</string>
 
     <string name="import_success">已导入 %1$d 条规则</string>
     <string name="import_failed">导入失败</string>
@@ -161,4 +163,22 @@
     <string name="deselect_all">取消全选</string>
     <string name="selected_count">已选 %1$d 项</string>
     <string name="export_selected_title">导出 %1$d 条规则</string>
+
+    <!-- Conflict resolution: NormalRule fields -->
+    <string name="match_categories_short">匹配分类</string>
+    <string name="custom_categories_short">自定义分类</string>
+    <string name="block_subsequent">阻止后续</string>
+    <string name="target_packages">目标包</string>
+    <string name="extras">附加项</string>
+
+    <!-- Activity picker -->
+    <string name="select_activity">从 %s 选择 Activity</string>
+    <string name="loading_activities">正在加载 Activity…</string>
+    <string name="search_activities">搜索 Activity</string>
+    <string name="pick_activity">选择</string>
+    <string name="no_package_to_browse">请先设置 Match 或 Custom 包名</string>
+
+    <!-- Delete confirmation -->
+    <string name="delete_confirm_title">删除规则</string>
+    <string name="delete_confirm_message">确定要删除 \"%1$s\" 吗？</string>
 </resources>

@@ -22,6 +22,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -42,35 +43,58 @@ import androidx.compose.ui.unit.dp
 import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.JavaCodeRule
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
+import io.github.nobooooody.intent_modifier.data.NormalRule
 import org.json.JSONArray
+import org.json.JSONObject
 
 class ConflictResolutionActivity : ComponentActivity() {
 
     companion object {
-        const val EXTRA_CONFLICT_RULES = "conflict_rules"
-        const val EXTRA_CURRENT_RULES = "current_rules"
-        const val EXTRA_NEW_RULES = "new_rules"
+        const val EXTRA_CONFLICT_JAVA_RULES = "conflict_java_rules"
+        const val EXTRA_CONFLICT_NORMAL_RULES = "conflict_normal_rules"
+        const val EXTRA_CURRENT_JAVA_RULES = "current_java_rules"
+        const val EXTRA_CURRENT_NORMAL_RULES = "current_normal_rules"
+        const val EXTRA_NEW_JAVA_RULES = "new_java_rules"
+        const val EXTRA_NEW_NORMAL_RULES = "new_normal_rules"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val conflictRulesJson = intent.getStringExtra(EXTRA_CONFLICT_RULES) ?: return finish()
-        val currentRulesJson = intent.getStringExtra(EXTRA_CURRENT_RULES) ?: return finish()
-        val newRulesJson = intent.getStringExtra(EXTRA_NEW_RULES) ?: return finish()
+        val conflictJavaJson = intent.getStringExtra(EXTRA_CONFLICT_JAVA_RULES) ?: "[]"
+        val conflictNormalJson = intent.getStringExtra(EXTRA_CONFLICT_NORMAL_RULES) ?: "[]"
+        val currentJavaJson = intent.getStringExtra(EXTRA_CURRENT_JAVA_RULES) ?: "[]"
+        val currentNormalJson = intent.getStringExtra(EXTRA_CURRENT_NORMAL_RULES) ?: "[]"
+        val newJavaJson = intent.getStringExtra(EXTRA_NEW_JAVA_RULES) ?: "[]"
+        val newNormalJson = intent.getStringExtra(EXTRA_NEW_NORMAL_RULES) ?: "[]"
 
-        val conflictRules = parseRules(conflictRulesJson)
-        val currentRules = parseRules(currentRulesJson)
-        val newRules = parseRules(newRulesJson)
+        val conflictJavaRules = parseJavaRules(conflictJavaJson)
+        val conflictNormalRules = parseNormalRules(conflictNormalJson)
+        val currentJavaRules = parseJavaRules(currentJavaJson)
+        val currentNormalRules = parseNormalRules(currentNormalJson)
+        val newJavaRules = parseJavaRules(newJavaJson)
+        val newNormalRules = parseNormalRules(newNormalJson)
+
+        if (conflictJavaRules.isEmpty() && conflictNormalRules.isEmpty()) {
+            setResult(Activity.RESULT_CANCELED)
+            finish()
+            return
+        }
 
         setContent {
             IntentModifierTheme {
                 ConflictResolutionScreen(
-                    conflictRules = conflictRules,
-                    currentRules = currentRules,
-                    newRules = newRules,
-                    onResolved = { resolvedRules ->
-                        ModifierRepository(this@ConflictResolutionActivity).saveJavaCodeRules(resolvedRules)
+                    conflictJavaRules = conflictJavaRules,
+                    conflictNormalRules = conflictNormalRules,
+                    currentJavaRules = currentJavaRules,
+                    currentNormalRules = currentNormalRules,
+                    newJavaRules = newJavaRules,
+                    newNormalRules = newNormalRules,
+                    onResolved = { resolvedJava, resolvedNormal ->
+                        ModifierRepository(this@ConflictResolutionActivity).apply {
+                            saveJavaCodeRules(resolvedJava)
+                            saveNormalRules(resolvedNormal)
+                        }
                         setResult(Activity.RESULT_OK)
                         finish()
                     },
@@ -83,27 +107,115 @@ class ConflictResolutionActivity : ComponentActivity() {
         }
     }
 
-    private fun parseRules(json: String): List<JavaCodeRule> {
+    private fun parseJavaRules(json: String): List<JavaCodeRule> {
         val arr = JSONArray(json)
-        return (0 until arr.length()).map { i ->
+        val result = mutableListOf<JavaCodeRule>()
+        for (i in 0 until arr.length()) {
             val obj = arr.getJSONObject(i)
-            JavaCodeRule(
-                enabled = obj.optBoolean("enabled", true),
-                name = obj.optString("name", ""),
-                imports = obj.optString("imports", ""),
-                members = obj.optString("members", ""),
-                condition = obj.optString("condition", ""),
-                action = obj.optString("action", ""),
-                priority = obj.optInt("priority", 0)
-            )
+            if (obj.optString("_type", "java_code") == "java_code") {
+                result.add(JavaCodeRule(
+                    id = obj.optString("id", java.util.UUID.randomUUID().toString()),
+                    enabled = obj.optBoolean("enabled", true),
+                    name = obj.optString("name", ""),
+                    targetPackages = optStringList(obj, "targetPackages"),
+                    imports = obj.optString("imports", ""),
+                    members = obj.optString("members", ""),
+                    condition = obj.optString("condition", ""),
+                    action = obj.optString("action", ""),
+                    priority = obj.optInt("priority", 0)
+                ))
+            }
         }
+        return result
+    }
+
+    private fun parseNormalRules(json: String): List<NormalRule> {
+        val arr = JSONArray(json)
+        val result = mutableListOf<NormalRule>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.getJSONObject(i)
+            if (obj.optString("_type", "") == "normal") {
+                result.add(NormalRule(
+                    id = obj.optString("id", java.util.UUID.randomUUID().toString()),
+                    enabled = obj.optBoolean("enabled", true),
+                    name = obj.optString("name", ""),
+                    targetPackages = optStringList(obj, "targetPackages"),
+                    blockSubsequent = obj.optBoolean("blockSubsequent", true),
+                    priority = obj.optInt("priority", 0),
+                    matchAction = optNullableString(obj, "matchAction"),
+                    matchData = optNullableString(obj, "matchData"),
+                    matchPackage = optNullableString(obj, "matchPackage"),
+                    matchClass = optNullableString(obj, "matchClass"),
+                    matchCategories = optStringList(obj, "matchCategories"),
+                    matchType = optNullableString(obj, "matchType"),
+                    customAction = optNullableString(obj, "customAction"),
+                    customData = optNullableString(obj, "customData"),
+                    customPackage = optNullableString(obj, "customPackage"),
+                    customClass = optNullableString(obj, "customClass"),
+                    customFlags = if (obj.has("customFlags")) obj.getInt("customFlags") else null,
+                    customCategories = optStringList(obj, "customCategories"),
+                    customType = optNullableString(obj, "customType"),
+                    extras = parseExtras(obj.optJSONArray("extras"))
+                ))
+            }
+        }
+        return result
+    }
+
+    private fun optStringList(obj: JSONObject, key: String): List<String> {
+        val arr = obj.optJSONArray(key) ?: return emptyList()
+        return (0 until arr.length()).map { arr.optString(it, "") }.filter { it.isNotEmpty() }
+    }
+
+    private fun optNullableString(obj: JSONObject, key: String): String? {
+        val v = obj.optString(key, "")
+        return v.ifEmpty { null }
+    }
+
+    private fun parseExtras(json: JSONArray?): List<io.github.nobooooody.intent_modifier.data.ExtraItem> {
+        if (json == null) return emptyList()
+        val result = mutableListOf<io.github.nobooooody.intent_modifier.data.ExtraItem>()
+        for (i in 0 until json.length()) {
+            val extraObj = json.getJSONObject(i)
+            val valuesJson = extraObj.optJSONArray("values")
+            val values = if (valuesJson != null) {
+                (0 until valuesJson.length()).map { valuesJson.getString(it) }
+            } else {
+                listOf(extraObj.optString("value", ""))
+            }
+            result.add(io.github.nobooooody.intent_modifier.data.ExtraItem(
+                key = extraObj.getString("key"),
+                type = extraObj.getString("type"),
+                values = values
+            ))
+        }
+        return result
     }
 }
 
-private data class ConflictItem(
-    val rule: JavaCodeRule,
-    var action: ConflictAction
-)
+private sealed class ConflictItem {
+    abstract val name: String
+    abstract val ruleId: String
+    abstract val action: ConflictAction
+
+    data class JavaConflict(
+        val rule: JavaCodeRule,
+        override val action: ConflictAction = ConflictAction.NONE
+    ) : ConflictItem() {
+        override val name get() = rule.name
+        override val ruleId get() = rule.id
+        fun copy(action: ConflictAction) = JavaConflict(rule, action)
+    }
+
+    data class NormalConflict(
+        val rule: NormalRule,
+        override val action: ConflictAction = ConflictAction.NONE
+    ) : ConflictItem() {
+        override val name get() = rule.name
+        override val ruleId get() = rule.id
+        fun copy(action: ConflictAction) = NormalConflict(rule, action)
+    }
+}
 
 private enum class ConflictAction {
     NONE, REPLACE, IGNORE, RENAME_OLD, RENAME_NEW;
@@ -119,10 +231,13 @@ private enum class ConflictAction {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConflictResolutionScreen(
-    conflictRules: List<JavaCodeRule>,
-    currentRules: List<JavaCodeRule>,
-    newRules: List<JavaCodeRule>,
-    onResolved: (List<JavaCodeRule>) -> Unit,
+    conflictJavaRules: List<JavaCodeRule>,
+    conflictNormalRules: List<NormalRule>,
+    currentJavaRules: List<JavaCodeRule>,
+    currentNormalRules: List<NormalRule>,
+    newJavaRules: List<JavaCodeRule>,
+    newNormalRules: List<NormalRule>,
+    onResolved: (List<JavaCodeRule>, List<NormalRule>) -> Unit,
     onCancel: () -> Unit
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
@@ -131,7 +246,8 @@ private fun ConflictResolutionScreen(
     var applyAllAction by remember { mutableIntStateOf(0) }
 
     if (conflictItems.isEmpty()) {
-        conflictItems.addAll(conflictRules.map { ConflictItem(it, ConflictAction.NONE) })
+        conflictItems.addAll(conflictJavaRules.map { ConflictItem.JavaConflict(it) })
+        conflictItems.addAll(conflictNormalRules.map { ConflictItem.NormalConflict(it) })
     }
 
     Scaffold(
@@ -143,34 +259,42 @@ private fun ConflictResolutionScreen(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
             Text(
-                stringResource(R.string.import_conflict_message, conflictRules.size),
+                stringResource(R.string.import_conflict_message, conflictItems.size),
                 style = MaterialTheme.typography.bodyMedium
             )
             Spacer(Modifier.height(12.dp))
 
             LazyColumn(Modifier.weight(1f)) {
-                itemsIndexed(conflictItems, key = { _, item -> item.rule.name }) { index, item ->
-                    val oldRule = currentRules.find { it.name == item.rule.name }
-
+                itemsIndexed(conflictItems, key = { _, item -> item.name }) { index, item ->
                     Card(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                         Column(Modifier.padding(12.dp)) {
-                            Text(
-                                item.rule.name,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Spacer(Modifier.height(8.dp))
-
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val oldJava = currentJavaRules.find { it.id == item.ruleId }
+                                val oldNormal = currentNormalRules.find { it.id == item.ruleId }
                                 RuleContentCard(
                                     label = stringResource(R.string.conflict_existing),
-                                    rule = oldRule,
+                                    javaRule = oldJava,
+                                    normalRule = oldNormal,
                                     modifier = Modifier.weight(1f)
                                 )
-                                RuleContentCard(
-                                    label = stringResource(R.string.conflict_imported),
-                                    rule = item.rule,
-                                    modifier = Modifier.weight(1f)
-                                )
+                                when (item) {
+                                    is ConflictItem.JavaConflict -> {
+                                        RuleContentCard(
+                                            label = stringResource(R.string.conflict_imported),
+                                            javaRule = item.rule,
+                                            normalRule = null,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                    is ConflictItem.NormalConflict -> {
+                                        RuleContentCard(
+                                            label = stringResource(R.string.conflict_imported),
+                                            javaRule = null,
+                                            normalRule = item.rule,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
                             }
 
                             Spacer(Modifier.height(10.dp))
@@ -201,7 +325,10 @@ private fun ConflictResolutionScreen(
                                         DropdownMenuItem(
                                             text = { Text(label) },
                                             onClick = {
-                                                conflictItems[index] = conflictItems[index].copy(action = action)
+                                                conflictItems[index] = when (val existing = conflictItems[index]) {
+                                                    is ConflictItem.JavaConflict -> existing.copy(action = action)
+                                                    is ConflictItem.NormalConflict -> existing.copy(action = action)
+                                                }
                                                 showActionMenu = false
                                             }
                                         )
@@ -222,7 +349,10 @@ private fun ConflictResolutionScreen(
                     if (checked) {
                         val action = ConflictAction.fromIndex(applyAllAction)
                         for (i in conflictItems.indices) {
-                            conflictItems[i] = conflictItems[i].copy(action = action)
+                            conflictItems[i] = when (val existing = conflictItems[i]) {
+                                is ConflictItem.JavaConflict -> existing.copy(action = action)
+                                is ConflictItem.NormalConflict -> existing.copy(action = action)
+                            }
                         }
                     }
                 })
@@ -249,7 +379,10 @@ private fun ConflictResolutionScreen(
                                         showActions = false
                                         val action = ConflictAction.fromIndex(i)
                                         for (j in conflictItems.indices) {
-                                            conflictItems[j] = conflictItems[j].copy(action = action)
+                                            conflictItems[j] = when (val existing = conflictItems[j]) {
+                                                is ConflictItem.JavaConflict -> existing.copy(action = action)
+                                                is ConflictItem.NormalConflict -> existing.copy(action = action)
+                                            }
                                         }
                                     }
                                 )
@@ -277,46 +410,120 @@ private fun ConflictResolutionScreen(
                             return@Button
                         }
 
-                        val resolvedRules = mutableListOf<JavaCodeRule>()
-                        val workingCurrent = currentRules.toMutableList()
-                        val workingNew = newRules.toMutableList()
+                        val resolvedJava = mutableListOf<JavaCodeRule>()
+                        val resolvedNormal = mutableListOf<NormalRule>()
+                        val workingCurrentJava = currentJavaRules.toMutableList()
+                        val workingCurrentNormal = currentNormalRules.toMutableList()
+                        val workingNewJava = newJavaRules.toMutableList()
+                        val workingNewNormal = newNormalRules.toMutableList()
 
-                        for (item in conflictItems) {
+                        fun removeFromAnyJava(id: String, java: MutableList<JavaCodeRule>, normal: MutableList<NormalRule>) {
+                            java.removeAll { it.id == id }
+                            normal.removeAll { it.id == id }
+                        }
+
+                        fun findExistingJava(id: String, java: List<JavaCodeRule>, normal: List<NormalRule>): JavaCodeRule? {
+                            return java.find { it.id == id } ?: normal.find { it.id == id }?.let {
+                                JavaCodeRule(id = it.id, enabled = it.enabled, name = it.name, priority = it.priority)
+                            }
+                        }
+
+                        fun findExistingNormal(id: String, normal: List<NormalRule>, java: List<JavaCodeRule>): NormalRule? {
+                            return normal.find { it.id == id } ?: java.find { it.id == id }?.let {
+                                NormalRule(id = it.id, enabled = it.enabled, name = it.name, priority = it.priority)
+                            }
+                        }
+
+                        fun resolveJavaConflict(
+                            item: ConflictItem.JavaConflict,
+                            currentJava: MutableList<JavaCodeRule>,
+                            currentNormal: MutableList<NormalRule>,
+                            newJava: MutableList<JavaCodeRule>,
+                            resolvedJava: MutableList<JavaCodeRule>
+                        ) {
                             when (item.action) {
                                 ConflictAction.REPLACE -> {
-                                    workingCurrent.removeAll { it.name == item.rule.name }
-                                    resolvedRules.add(item.rule)
+                                    removeFromAnyJava(item.rule.id, currentJava, currentNormal)
+                                    resolvedJava.add(item.rule)
                                 }
                                 ConflictAction.IGNORE -> {}
                                 ConflictAction.RENAME_OLD -> {
-                                    val existing = workingCurrent.find { it.name == item.rule.name }
+                                    val existing = findExistingJava(item.rule.id, currentJava, currentNormal)
                                     if (existing != null) {
-                                        workingCurrent.removeAll { it.name == item.rule.name }
+                                        removeFromAnyJava(item.rule.id, currentJava, currentNormal)
                                         var newName = "${item.rule.name}_old"
                                         var counter = 1
-                                        while (workingCurrent.any { it.name == newName } || workingNew.any { it.name == newName } || resolvedRules.any { it.name == newName }) {
+                                        while (currentJava.any { it.name == newName } || newJava.any { it.name == newName } || resolvedJava.any { it.name == newName }) {
                                             newName = "${item.rule.name}_old_$counter"; counter++
                                         }
-                                        resolvedRules.add(existing.copy(name = newName))
+                                        resolvedJava.add(existing.copy(name = newName, id = java.util.UUID.randomUUID().toString()))
                                     }
-                                    resolvedRules.add(item.rule)
+                                    resolvedJava.add(item.rule)
                                 }
                                 ConflictAction.RENAME_NEW -> {
                                     var newName = "${item.rule.name}_new"
                                     var counter = 1
-                                    while (workingCurrent.any { it.name == newName } || workingNew.any { it.name == newName } || resolvedRules.any { it.name == newName }) {
+                                    while (currentJava.any { it.name == newName } || newJava.any { it.name == newName } || resolvedJava.any { it.name == newName }) {
                                         newName = "${item.rule.name}_new_$counter"; counter++
                                     }
-                                    resolvedRules.add(item.rule.copy(name = newName))
+                                    resolvedJava.add(item.rule.copy(name = newName, id = java.util.UUID.randomUUID().toString()))
                                 }
                                 else -> {}
                             }
                         }
 
-                        workingCurrent.addAll(workingNew)
-                        workingCurrent.addAll(resolvedRules)
-                        onResolved(workingCurrent)
-                        Toast.makeText(ctx, ctx.getString(R.string.import_success, newRules.size + resolvedRules.size), Toast.LENGTH_SHORT).show()
+                        fun resolveNormalConflict(
+                            item: ConflictItem.NormalConflict,
+                            currentNormal: MutableList<NormalRule>,
+                            currentJava: MutableList<JavaCodeRule>,
+                            newNormal: MutableList<NormalRule>,
+                            resolvedNormal: MutableList<NormalRule>
+                        ) {
+                            when (item.action) {
+                                ConflictAction.REPLACE -> {
+                                    removeFromAnyJava(item.rule.id, currentJava, currentNormal)
+                                    resolvedNormal.add(item.rule)
+                                }
+                                ConflictAction.IGNORE -> {}
+                                ConflictAction.RENAME_OLD -> {
+                                    val existing = findExistingNormal(item.rule.id, currentNormal, currentJava)
+                                    if (existing != null) {
+                                        removeFromAnyJava(item.rule.id, currentJava, currentNormal)
+                                        var newName = "${item.rule.name}_old"
+                                        var counter = 1
+                                        while (currentNormal.any { it.name == newName } || newNormal.any { it.name == newName } || resolvedNormal.any { it.name == newName }) {
+                                            newName = "${item.rule.name}_old_$counter"; counter++
+                                        }
+                                        resolvedNormal.add(existing.copy(name = newName, id = java.util.UUID.randomUUID().toString()))
+                                    }
+                                    resolvedNormal.add(item.rule)
+                                }
+                                ConflictAction.RENAME_NEW -> {
+                                    var newName = "${item.rule.name}_new"
+                                    var counter = 1
+                                    while (currentNormal.any { it.name == newName } || newNormal.any { it.name == newName } || resolvedNormal.any { it.name == newName }) {
+                                        newName = "${item.rule.name}_new_$counter"; counter++
+                                    }
+                                    resolvedNormal.add(item.rule.copy(name = newName, id = java.util.UUID.randomUUID().toString()))
+                                }
+                                else -> {}
+                            }
+                        }
+
+                        for (item in conflictItems) {
+                            when (item) {
+                                is ConflictItem.JavaConflict -> resolveJavaConflict(item, workingCurrentJava, workingCurrentNormal, workingNewJava, resolvedJava)
+                                is ConflictItem.NormalConflict -> resolveNormalConflict(item, workingCurrentNormal, workingCurrentJava, workingNewNormal, resolvedNormal)
+                            }
+                        }
+
+                        workingCurrentJava.addAll(workingNewJava)
+                        workingCurrentJava.addAll(resolvedJava)
+                        workingCurrentNormal.addAll(workingNewNormal)
+                        workingCurrentNormal.addAll(resolvedNormal)
+
+                        onResolved(workingCurrentJava, workingCurrentNormal)
+                        Toast.makeText(ctx, ctx.getString(R.string.import_success, newJavaRules.size + newNormalRules.size + resolvedJava.size + resolvedNormal.size), Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.weight(1f)
                 ) {
@@ -330,11 +537,7 @@ private fun ConflictResolutionScreen(
 }
 
 @Composable
-private fun RuleContentCard(label: String, rule: JavaCodeRule?, modifier: Modifier = Modifier) {
-    val labelImports = stringResource(R.string.field_imports)
-    val labelMembers = stringResource(R.string.field_members)
-    val labelCondition = stringResource(R.string.field_condition)
-    val labelAction = stringResource(R.string.field_action)
+private fun RuleContentCard(label: String, javaRule: JavaCodeRule?, normalRule: NormalRule?, modifier: Modifier = Modifier) {
     val labelNone = stringResource(R.string.field_none)
     val labelNotFound = stringResource(R.string.conflict_not_found)
 
@@ -345,13 +548,58 @@ private fun RuleContentCard(label: String, rule: JavaCodeRule?, modifier: Modifi
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
 
-            if (rule != null) {
-                FieldSection(label = labelImports, code = rule.imports, placeholder = labelNone)
-                FieldSection(label = labelMembers, code = rule.members, placeholder = labelNone)
-                FieldSection(label = labelCondition, code = rule.condition, placeholder = labelNone)
-                FieldSection(label = labelAction, code = rule.action, placeholder = labelNone)
+            if (javaRule != null) {
+                Text(
+                    javaRule.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(4.dp))
+                val labelImports = stringResource(R.string.field_imports)
+                val labelMembers = stringResource(R.string.field_members)
+                val labelCondition = stringResource(R.string.field_condition)
+                val labelAction = stringResource(R.string.field_action)
+                FieldSection(label = labelImports, code = javaRule.imports, placeholder = labelNone)
+                FieldSection(label = labelMembers, code = javaRule.members, placeholder = labelNone)
+                FieldSection(label = labelCondition, code = javaRule.condition, placeholder = labelNone)
+                FieldSection(label = labelAction, code = javaRule.action, placeholder = labelNone)
+            } else if (normalRule != null) {
+                Text(
+                    normalRule.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(2.dp))
+                FieldSection(label = stringResource(R.string.match_action), code = normalRule.matchAction ?: "", placeholder = labelNone)
+                FieldSection(label = stringResource(R.string.match_data), code = normalRule.matchData ?: "", placeholder = labelNone)
+                FieldSection(label = stringResource(R.string.match_package), code = normalRule.matchPackage ?: "", placeholder = labelNone)
+                FieldSection(label = stringResource(R.string.match_class), code = normalRule.matchClass ?: "", placeholder = labelNone)
+                if (normalRule.matchCategories.isNotEmpty()) {
+                    FieldSection(label = stringResource(R.string.match_categories_short), code = normalRule.matchCategories.joinToString(", "), placeholder = labelNone)
+                }
+                FieldSection(label = stringResource(R.string.match_type), code = normalRule.matchType ?: "", placeholder = labelNone)
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                FieldSection(label = stringResource(R.string.custom_action), code = normalRule.customAction ?: "", placeholder = labelNone)
+                FieldSection(label = stringResource(R.string.custom_data), code = normalRule.customData ?: "", placeholder = labelNone)
+                FieldSection(label = stringResource(R.string.custom_package), code = normalRule.customPackage ?: "", placeholder = labelNone)
+                FieldSection(label = stringResource(R.string.custom_class), code = normalRule.customClass ?: "", placeholder = labelNone)
+                if (normalRule.customFlags != null) {
+                    FieldSection(label = stringResource(R.string.custom_flags), code = normalRule.customFlags.toString(), placeholder = labelNone)
+                }
+                if (normalRule.customCategories.isNotEmpty()) {
+                    FieldSection(label = stringResource(R.string.custom_categories_short), code = normalRule.customCategories.joinToString(", "), placeholder = labelNone)
+                }
+                FieldSection(label = stringResource(R.string.custom_type), code = normalRule.customType ?: "", placeholder = labelNone)
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                FieldSection(label = stringResource(R.string.block_subsequent), code = if (normalRule.blockSubsequent) "true" else "false", placeholder = labelNone)
+                if (normalRule.targetPackages.isNotEmpty()) {
+                    FieldSection(label = stringResource(R.string.target_packages), code = normalRule.targetPackages.joinToString(", "), placeholder = labelNone)
+                }
+                if (normalRule.extras.isNotEmpty()) {
+                    FieldSection(label = stringResource(R.string.extras), code = normalRule.extras.joinToString("; ") { "${it.key} (${it.type})" }, placeholder = labelNone)
+                }
             } else {
                 Text(
                     labelNotFound,

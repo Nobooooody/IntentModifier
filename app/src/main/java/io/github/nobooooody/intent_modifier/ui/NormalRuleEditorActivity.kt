@@ -189,6 +189,17 @@ private fun NormalRuleEditorScreen(
         }
     }
 
+    val activityPickerLauncher = rememberLauncherForActivityResult<Intent, ActivityResult>(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result: ActivityResult ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val activity = result.data?.getStringExtra(ActivityPickerActivity.EXTRA_SELECTED_ACTIVITY)
+            if (activity != null) {
+                customClass = activity
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -378,13 +389,29 @@ private fun NormalRuleEditorScreen(
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
                     Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = customClass, onValueChange = { customClass = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.custom_class)) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = customClass, onValueChange = { customClass = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(stringResource(R.string.custom_class)) },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(onClick = {
+                            val pkg = customPackage.trim().ifBlank { matchPackage.trim().ifBlank { null } }
+                            if (pkg != null) {
+                                val intent = Intent(ctx, ActivityPickerActivity::class.java).apply {
+                                    putExtra(ActivityPickerActivity.EXTRA_PACKAGE_NAME, pkg)
+                                }
+                                activityPickerLauncher.launch(intent)
+                            } else {
+                                Toast.makeText(ctx, R.string.no_package_to_browse, Toast.LENGTH_SHORT).show()
+                            }
+                        }) {
+                            Text(stringResource(R.string.pick_activity))
+                        }
+                    }
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = customData, onValueChange = { customData = it },

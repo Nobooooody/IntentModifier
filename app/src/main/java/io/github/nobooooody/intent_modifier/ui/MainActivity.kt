@@ -77,9 +77,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.draw.alpha
 import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.HOOK_INSTRUMENTATION
 import io.github.nobooooody.intent_modifier.data.HOOK_LAUNCHER3
+import io.github.nobooooody.intent_modifier.data.ExtraItem
 import io.github.nobooooody.intent_modifier.data.JavaCodeRule
 import io.github.nobooooody.intent_modifier.data.LauncherHook
 import io.github.nobooooody.intent_modifier.data.NormalRule
@@ -179,6 +181,60 @@ private sealed interface DisplayRule {
     }
 }
 
+// ─── Import types ─────────────────────────────────────────────────────────────
+
+private sealed class ImportResult {
+    data class Success(val javaRules: List<JavaCodeRule>, val normalRules: List<NormalRule>, val count: Int) : ImportResult()
+    data class Conflict(
+        val conflictJavaRules: List<JavaCodeRule>,
+        val conflictNormalRules: List<NormalRule>,
+        val currentJavaRules: MutableList<JavaCodeRule>,
+        val currentNormalRules: MutableList<NormalRule>,
+        val newJavaRules: List<JavaCodeRule>,
+        val newNormalRules: List<NormalRule>,
+        val repo: ModifierRepository
+    ) : ImportResult()
+}
+
+private fun handleImportText(ctx: Context, jsonStr: String, repo: ModifierRepository, onResult: (ImportResult) -> Unit) {
+    try {
+        val (importedJava, importedNormal) = parseAllRulesJson(jsonStr)
+        if (importedJava.isEmpty() && importedNormal.isEmpty()) {
+            Toast.makeText(ctx, R.string.import_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val currentJavaRules = repo.getJavaCodeRules().toMutableList()
+        val currentNormalRules = repo.getNormalRules().toMutableList()
+
+        val existingJavaIds = currentJavaRules.map { it.id }.toSet()
+        val existingNormalIds = currentNormalRules.map { it.id }.toSet()
+        val allExistingIds = existingJavaIds + existingNormalIds
+
+        val newJavaRules = importedJava.filter { it.id !in allExistingIds }
+        val newNormalRules = importedNormal.filter { it.id !in allExistingIds }
+        val conflictJavaRules = importedJava.filter { it.id in allExistingIds }
+        val conflictNormalRules = importedNormal.filter { it.id in allExistingIds }
+
+        if (conflictJavaRules.isNotEmpty() || conflictNormalRules.isNotEmpty()) {
+            onResult(ImportResult.Conflict(
+                conflictJavaRules, conflictNormalRules,
+                currentJavaRules, currentNormalRules,
+                newJavaRules, newNormalRules, repo
+            ))
+        } else {
+            currentJavaRules.addAll(importedJava)
+            currentNormalRules.addAll(importedNormal)
+            repo.saveJavaCodeRules(currentJavaRules)
+            repo.saveNormalRules(currentNormalRules)
+            onResult(ImportResult.Success(currentJavaRules, currentNormalRules, importedJava.size + importedNormal.size))
+            Toast.makeText(ctx, ctx.getString(R.string.import_success, importedJava.size + importedNormal.size), Toast.LENGTH_SHORT).show()
+        }
+    } catch (e: Exception) {
+        Toast.makeText(ctx, R.string.import_failed, Toast.LENGTH_SHORT).show()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun RulesScreen() {
@@ -188,9 +244,16 @@ private fun RulesScreen() {
     var normalRules by remember { mutableStateOf(repo.getNormalRules()) }
     var isSelectionMode by remember { mutableStateOf(false) }
     var showAddMenu by remember { mutableStateOf(false) }
-    val selectedItems = remember { mutableStateListOf<Int>() }
+    val selectedDisplayIndices = remember { mutableStateListOf<Int>() }
     var showMenu by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var pendingDeleteRule by remember { mutableStateOf<DisplayRule?>(null) }
+
+    val displayRules = remember(rules, normalRules) {
+        val javaItems = rules.mapIndexed { i, r -> DisplayRule.Java(i, r) }
+        val normalItems = normalRules.mapIndexed { i, r -> DisplayRule.Normal(i, r) }
+        (javaItems + normalItems).sortedByDescending { it.priority }
+    }
 
     val scope = rememberCoroutineScope()
     val activity = ctx as? ComponentActivity
@@ -198,7 +261,7 @@ private fun RulesScreen() {
     fun refresh() {
         rules = repo.getJavaCodeRules()
         normalRules = repo.getNormalRules()
-        selectedItems.clear()
+        selectedDisplayIndices.clear()
         isSelectionMode = false
     }
 
@@ -230,9 +293,10 @@ private fun RulesScreen() {
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         uri?.let {
-            val selected = selectedItems.sorted().map { rules[it] }
-            exportRules(ctx, rules, if (selectedItems.isNotEmpty()) selected else null, it)
-            selectedItems.clear(); isSelectionMode = false
+            val selected = if (selectedDisplayIndices.isNotEmpty())
+                selectedDisplayIndices.sorted().map { displayRules[it] } else null
+            exportRules(ctx, rules, normalRules, selected, it)
+            selectedDisplayIndices.clear(); isSelectionMode = false
         }
     }
 
@@ -245,15 +309,19 @@ private fun RulesScreen() {
                 handleImportText(ctx, text, repo) { result ->
                     when (result) {
                         is ImportResult.Success -> {
-                            rules = result.rules
-                            selectedItems.clear()
+                            rules = result.javaRules
+                            normalRules = result.normalRules
+                            selectedDisplayIndices.clear()
                             isSelectionMode = false
                         }
                         is ImportResult.Conflict -> {
                             val intent = Intent(ctx, ConflictResolutionActivity::class.java).apply {
-                                putExtra(ConflictResolutionActivity.EXTRA_CONFLICT_RULES, rulesToJson(result.conflictRules))
-                                putExtra(ConflictResolutionActivity.EXTRA_CURRENT_RULES, rulesToJson(result.currentRules))
-                                putExtra(ConflictResolutionActivity.EXTRA_NEW_RULES, rulesToJson(result.newRules))
+                                putExtra(ConflictResolutionActivity.EXTRA_CONFLICT_JAVA_RULES, exportAllRulesJson(result.conflictJavaRules, emptyList()))
+                                putExtra(ConflictResolutionActivity.EXTRA_CONFLICT_NORMAL_RULES, exportAllRulesJson(emptyList(), result.conflictNormalRules))
+                                putExtra(ConflictResolutionActivity.EXTRA_CURRENT_JAVA_RULES, exportAllRulesJson(result.currentJavaRules, emptyList()))
+                                putExtra(ConflictResolutionActivity.EXTRA_CURRENT_NORMAL_RULES, exportAllRulesJson(emptyList(), result.currentNormalRules))
+                                putExtra(ConflictResolutionActivity.EXTRA_NEW_JAVA_RULES, exportAllRulesJson(result.newJavaRules, emptyList()))
+                                putExtra(ConflictResolutionActivity.EXTRA_NEW_NORMAL_RULES, exportAllRulesJson(emptyList(), result.newNormalRules))
                             }
                             conflictLauncher.launch(intent)
                         }
@@ -265,37 +333,38 @@ private fun RulesScreen() {
         }
     }
 
-    fun toggleSelection(index: Int) {
-        if (index in selectedItems) selectedItems.remove(index) else selectedItems.add(index)
-        if (selectedItems.isEmpty()) isSelectionMode = false
+    fun toggleSelection(displayIndex: Int) {
+        if (displayIndex in selectedDisplayIndices) selectedDisplayIndices.remove(displayIndex)
+        else selectedDisplayIndices.add(displayIndex)
+        if (selectedDisplayIndices.isEmpty()) isSelectionMode = false
     }
 
     Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             if (isSelectionMode) {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.selected_count, selectedItems.size)) },
+                    title = { Text(stringResource(R.string.selected_count, selectedDisplayIndices.size)) },
                     navigationIcon = {
-                        IconButton(onClick = { isSelectionMode = false; selectedItems.clear() }) {
+                        IconButton(onClick = { isSelectionMode = false; selectedDisplayIndices.clear() }) {
                             Icon(Icons.Default.Close, contentDescription = null)
                         }
                     },
                     actions = {
                         TextButton(onClick = {
-                            if (selectedItems.size == rules.size) {
-                                selectedItems.clear()
+                            if (selectedDisplayIndices.size == displayRules.size) {
+                                selectedDisplayIndices.clear()
                             } else {
-                                selectedItems.clear()
-                                selectedItems.addAll(rules.indices)
+                                selectedDisplayIndices.clear()
+                                selectedDisplayIndices.addAll(displayRules.indices)
                             }
                         }) {
                             Text(
-                                if (selectedItems.size == rules.size) stringResource(R.string.deselect_all)
+                                if (selectedDisplayIndices.size == displayRules.size) stringResource(R.string.deselect_all)
                                 else stringResource(R.string.select_all)
                             )
                         }
                         IconButton(onClick = {
-                            if (selectedItems.isNotEmpty()) showExportDialog = true
+                            if (selectedDisplayIndices.isNotEmpty()) showExportDialog = true
                         }) {
                             Icon(Icons.Default.Share, contentDescription = stringResource(R.string.export))
                         }
@@ -317,7 +386,7 @@ private fun RulesScreen() {
                                 text = { Text(stringResource(R.string.export_to_clipboard)) },
                                 onClick = {
                                     showMenu = false
-                                    copyToClipboard(ctx, repo.getJavaCodeRulesJson())
+                                    copyToClipboard(ctx, exportAllRulesJson(rules, normalRules))
                                 }
                             )
                             DropdownMenuItem(
@@ -334,14 +403,18 @@ private fun RulesScreen() {
                                             handleImportText(ctx, clip.getItemAt(0).text.toString(), repo) { result ->
                                                 when (result) {
                                                     is ImportResult.Success -> {
-                                                        rules = result.rules
+                                                        rules = result.javaRules
+                                                        normalRules = result.normalRules
                                                         Toast.makeText(ctx, ctx.getString(R.string.import_success, result.count), Toast.LENGTH_SHORT).show()
                                                     }
                                                     is ImportResult.Conflict -> {
                                                         val intent = Intent(ctx, ConflictResolutionActivity::class.java).apply {
-                                                            putExtra(ConflictResolutionActivity.EXTRA_CONFLICT_RULES, rulesToJson(result.conflictRules))
-                                                            putExtra(ConflictResolutionActivity.EXTRA_CURRENT_RULES, rulesToJson(result.currentRules))
-                                                            putExtra(ConflictResolutionActivity.EXTRA_NEW_RULES, rulesToJson(result.newRules))
+                                                            putExtra(ConflictResolutionActivity.EXTRA_CONFLICT_JAVA_RULES, exportAllRulesJson(result.conflictJavaRules, emptyList()))
+                                                            putExtra(ConflictResolutionActivity.EXTRA_CONFLICT_NORMAL_RULES, exportAllRulesJson(emptyList(), result.conflictNormalRules))
+                                                            putExtra(ConflictResolutionActivity.EXTRA_CURRENT_JAVA_RULES, exportAllRulesJson(result.currentJavaRules, emptyList()))
+                                                            putExtra(ConflictResolutionActivity.EXTRA_CURRENT_NORMAL_RULES, exportAllRulesJson(emptyList(), result.currentNormalRules))
+                                                            putExtra(ConflictResolutionActivity.EXTRA_NEW_JAVA_RULES, exportAllRulesJson(result.newJavaRules, emptyList()))
+                                                            putExtra(ConflictResolutionActivity.EXTRA_NEW_NORMAL_RULES, exportAllRulesJson(emptyList(), result.newNormalRules))
                                                         }
                                                         conflictLauncher.launch(intent)
                                                     }
@@ -380,7 +453,7 @@ private fun RulesScreen() {
             }
         }
     ) { padding ->
-        if (rules.isEmpty() && normalRules.isEmpty()) {
+        if (displayRules.isEmpty()) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -393,32 +466,29 @@ private fun RulesScreen() {
                 Text(stringResource(R.string.tap_to_add), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
             }
         } else {
-            val displayRules = remember(rules, normalRules) {
-                val javaItems = rules.mapIndexed { i, r -> DisplayRule.Java(i, r) }
-                val normalItems = normalRules.mapIndexed { i, r -> DisplayRule.Normal(i, r) }
-                (javaItems + normalItems).sortedByDescending { it.priority }
-            }
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
                 itemsIndexed(displayRules, key = { _, dr ->
                     when (dr) {
-                        is DisplayRule.Java -> "java_${dr.rule.name}"
+                        is DisplayRule.Java -> "java_${dr.rule.id}"
                         is DisplayRule.Normal -> "normal_${dr.rule.id}"
                     }
-                }) { _, dr ->
-                    when (dr) {
+                }) { displayIndex, dr ->
+                    val isSelected = displayIndex in selectedDisplayIndices
+                    val itemAlpha = if (isSelectionMode && !isSelected) 0.4f else 1f
+                    when (val displayItem = dr) {
                         is DisplayRule.Java -> {
-                            val index = dr.index
-                            val rule = dr.rule
-                            val isSelected = index in selectedItems
+                            val javaRule = displayItem.rule
                             Card(
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .alpha(itemAlpha)
                                     .combinedClickable(
-                                        onClick = { if (isSelectionMode) toggleSelection(index) },
+                                        onClick = { if (isSelectionMode) toggleSelection(displayIndex) },
                                         onLongClick = {
                                             if (!isSelectionMode) {
                                                 isSelectionMode = true
-                                                selectedItems.add(index)
+                                                selectedDisplayIndices.add(displayIndex)
                                             }
                                         }
                                     )
@@ -426,17 +496,17 @@ private fun RulesScreen() {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         if (isSelectionMode) {
-                                            Checkbox(checked = isSelected, onCheckedChange = { toggleSelection(index) })
+                                            Checkbox(checked = isSelected, onCheckedChange = { toggleSelection(displayIndex) })
                                             Spacer(Modifier.width(8.dp))
                                         }
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(rule.name, style = MaterialTheme.typography.titleMedium)
+                                            Text(javaRule.name, style = MaterialTheme.typography.titleMedium)
                                             Text(stringResource(R.string.java_code_rule), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                                         }
                                         if (!isSelectionMode) {
-                                            Switch(checked = rule.enabled, onCheckedChange = { enabled ->
+                                            Switch(checked = javaRule.enabled, onCheckedChange = { enabled ->
                                                 val updated = rules.toMutableList()
-                                                updated[index] = updated[index].copy(enabled = enabled)
+                                                updated[displayItem.index] = updated[displayItem.index].copy(enabled = enabled)
                                                 repo.saveJavaCodeRules(updated)
                                                 rules = updated
                                                 scope.launch { recompileAll(ctx, repo) }
@@ -444,17 +514,17 @@ private fun RulesScreen() {
                                         }
                                     }
                                     Text(
-                                        "${stringResource(R.string.priority)}: ${rule.priority}",
+                                        "${stringResource(R.string.priority)}: ${javaRule.priority}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        if (rule.condition.isNotEmpty()) rule.condition else stringResource(R.string.condition_empty),
+                                        if (javaRule.condition.isNotEmpty()) javaRule.condition else stringResource(R.string.condition_empty),
                                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                                         maxLines = 2, overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        rule.action,
+                                        javaRule.action,
                                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                                         maxLines = 2, overflow = TextOverflow.Ellipsis,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -464,7 +534,7 @@ private fun RulesScreen() {
                                         Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                                             TextButton(onClick = {
                                                 val intent = Intent(ctx, JavaCodeRuleEditorActivity::class.java)
-                                                intent.putExtra(JavaCodeRuleEditorActivity.EXTRA_RULE_INDEX, index)
+                                                intent.putExtra(JavaCodeRuleEditorActivity.EXTRA_RULE_INDEX, displayItem.index)
                                                 editorLauncher.launch(intent)
                                             }) {
                                                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
@@ -472,11 +542,7 @@ private fun RulesScreen() {
                                             }
                                             Spacer(Modifier.width(8.dp))
                                             TextButton(onClick = {
-                                                val updated = rules.toMutableList()
-                                                updated.removeAt(index)
-                                                repo.saveJavaCodeRules(updated)
-                                                rules = updated
-                                                scope.launch { recompileAll(ctx, repo) }
+                                                pendingDeleteRule = displayItem
                                             }) {
                                                 Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
                                                 Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
@@ -487,22 +553,36 @@ private fun RulesScreen() {
                             }
                         }
                         is DisplayRule.Normal -> {
-                            val index = dr.index
-                            val rule = dr.rule
+                            val normalRule = displayItem.rule
                             Card(
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .alpha(itemAlpha)
+                                    .combinedClickable(
+                                        onClick = { if (isSelectionMode) toggleSelection(displayIndex) },
+                                        onLongClick = {
+                                            if (!isSelectionMode) {
+                                                isSelectionMode = true
+                                                selectedDisplayIndices.add(displayIndex)
+                                            }
+                                        }
+                                    )
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (isSelectionMode) {
+                                            Checkbox(checked = isSelected, onCheckedChange = { toggleSelection(displayIndex) })
+                                            Spacer(Modifier.width(8.dp))
+                                        }
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(rule.name, style = MaterialTheme.typography.titleMedium)
+                                            Text(normalRule.name, style = MaterialTheme.typography.titleMedium)
                                             Text(stringResource(R.string.normal_rule), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                                         }
                                         if (!isSelectionMode) {
-                                            Switch(checked = rule.enabled, onCheckedChange = { enabled ->
+                                            Switch(checked = normalRule.enabled, onCheckedChange = { enabled ->
                                                 val updated = normalRules.toMutableList()
-                                                updated[index] = updated[index].copy(enabled = enabled)
+                                                updated[displayItem.index] = updated[displayItem.index].copy(enabled = enabled)
                                                 repo.saveNormalRules(updated)
                                                 normalRules = updated
                                                 scope.launch { recompileAll(ctx, repo) }
@@ -510,7 +590,7 @@ private fun RulesScreen() {
                                         }
                                     }
                                     Text(
-                                        "${stringResource(R.string.priority)}: ${rule.priority}",
+                                        "${stringResource(R.string.priority)}: ${normalRule.priority}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -519,7 +599,7 @@ private fun RulesScreen() {
                                         Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                                             TextButton(onClick = {
                                                 val intent = Intent(ctx, NormalRuleEditorActivity::class.java)
-                                                intent.putExtra(NormalRuleEditorActivity.EXTRA_RULE_INDEX, index)
+                                                intent.putExtra(NormalRuleEditorActivity.EXTRA_RULE_INDEX, displayItem.index)
                                                 normalRuleEditorLauncher.launch(intent)
                                             }) {
                                                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
@@ -527,11 +607,7 @@ private fun RulesScreen() {
                                             }
                                             Spacer(Modifier.width(8.dp))
                                             TextButton(onClick = {
-                                                val updated = normalRules.toMutableList()
-                                                updated.removeAt(index)
-                                                repo.saveNormalRules(updated)
-                                                normalRules = updated
-                                                scope.launch { recompileAll(ctx, repo) }
+                                                pendingDeleteRule = displayItem
                                             }) {
                                                 Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.padding(end = 4.dp))
                                                 Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
@@ -547,12 +623,54 @@ private fun RulesScreen() {
         }
     }
 
+    // Delete confirmation dialog
+    pendingDeleteRule?.let { dr ->
+        val ruleName = when (dr) {
+            is DisplayRule.Java -> dr.rule.name
+            is DisplayRule.Normal -> dr.rule.name
+        }
+        AlertDialog(
+            onDismissRequest = { pendingDeleteRule = null },
+            title = { Text(stringResource(R.string.delete_confirm_title)) },
+            text = { Text(stringResource(R.string.delete_confirm_message, ruleName)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    when (dr) {
+                        is DisplayRule.Java -> {
+                            val updated = rules.toMutableList()
+                            updated.removeAt(dr.index)
+                            repo.saveJavaCodeRules(updated)
+                            rules = updated
+                        }
+                        is DisplayRule.Normal -> {
+                            val updated = normalRules.toMutableList()
+                            updated.removeAt(dr.index)
+                            repo.saveNormalRules(updated)
+                            normalRules = updated
+                        }
+                    }
+                    pendingDeleteRule = null
+                    scope.launch { recompileAll(ctx, repo) }
+                }) {
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteRule = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
     // Export dialog
-    if (showExportDialog && selectedItems.isNotEmpty()) {
-        val selected = selectedItems.sorted().map { rules[it] }
+    if (showExportDialog && selectedDisplayIndices.isNotEmpty()) {
+        val selectedDisplayItems = selectedDisplayIndices.sorted().map { displayRules[it] }
+        val selectedJava = selectedDisplayItems.filterIsInstance<DisplayRule.Java>().map { it.rule }
+        val selectedNormal = selectedDisplayItems.filterIsInstance<DisplayRule.Normal>().map { it.rule }
         AlertDialog(
             onDismissRequest = { showExportDialog = false },
-            title = { Text(stringResource(R.string.export_selected_title, selected.size)) },
+            title = { Text(stringResource(R.string.export_selected_title, selectedDisplayItems.size)) },
             text = {
                 Column {
                     TextButton(onClick = {
@@ -563,8 +681,8 @@ private fun RulesScreen() {
                     }
                     TextButton(onClick = {
                         showExportDialog = false
-                        copyToClipboard(ctx, rulesToJson(selected))
-                        selectedItems.clear()
+                        copyToClipboard(ctx, exportAllRulesJson(selectedJava, selectedNormal))
+                        selectedDisplayIndices.clear()
                         isSelectionMode = false
                     }, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.export_to_clipboard))
@@ -575,63 +693,143 @@ private fun RulesScreen() {
             dismissButton = { TextButton(onClick = { showExportDialog = false }) { Text(stringResource(R.string.cancel)) } }
         )
     }
-
 }
 
-// ─── Import types ─────────────────────────────────────────────────────────────
+// ─── Unified export / import ──────────────────────────────────────────────────
 
-private sealed class ImportResult {
-    data class Success(val rules: List<JavaCodeRule>, val count: Int) : ImportResult()
-    data class Conflict(
-        val conflictRules: List<JavaCodeRule>,
-        val currentRules: MutableList<JavaCodeRule>,
-        val newRules: List<JavaCodeRule>,
-        val repo: ModifierRepository
-    ) : ImportResult()
-}
-
-private fun handleImportText(ctx: Context, jsonStr: String, repo: ModifierRepository, onResult: (ImportResult) -> Unit) {
-    try {
-        val imported = mutableListOf<JavaCodeRule>()
-        val arr = JSONArray(jsonStr)
-        for (i in 0 until arr.length()) {
-            val obj = arr.getJSONObject(i)
-            val name = obj.optString("name", "").trim()
-            if (name.isNotEmpty()) {
-                imported.add(JavaCodeRule(
-                    enabled = obj.optBoolean("enabled", true),
-                    name = name,
-                    imports = obj.optString("imports", ""),
-                    members = obj.optString("members", ""),
-                    condition = obj.optString("condition", ""),
-                    action = obj.optString("action", ""),
-                    priority = obj.optInt("priority", 0)
-                ))
-            }
-        }
-        if (imported.isEmpty()) {
-            Toast.makeText(ctx, R.string.import_failed, Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val currentRules = repo.getJavaCodeRules().toMutableList()
-        val existingNames = currentRules.map { it.name }.toSet()
-        val newRules = imported.filter { it.name !in existingNames }
-        val conflictRules = imported.filter { it.name in existingNames }
-
-        if (conflictRules.isNotEmpty()) {
-            onResult(ImportResult.Conflict(conflictRules, currentRules, newRules, repo))
-        } else {
-            currentRules.addAll(imported)
-            repo.saveJavaCodeRules(currentRules)
-            onResult(ImportResult.Success(currentRules, imported.size))
-            Toast.makeText(ctx, ctx.getString(R.string.import_success, imported.size), Toast.LENGTH_SHORT).show()
-        }
-    } catch (e: Exception) {
-        Toast.makeText(ctx, R.string.import_failed, Toast.LENGTH_SHORT).show()
+private fun exportAllRulesJson(javaRules: List<JavaCodeRule>, normalRules: List<NormalRule>): String {
+    val arr = JSONArray()
+    for (rule in javaRules) {
+        val obj = JSONObject()
+        obj.put("_type", "java_code")
+        obj.put("id", rule.id)
+        obj.put("enabled", rule.enabled)
+        obj.put("name", rule.name)
+        obj.put("targetPackages", JSONArray(rule.targetPackages))
+        obj.put("imports", rule.imports)
+        obj.put("members", rule.members)
+        obj.put("condition", rule.condition)
+        obj.put("action", rule.action)
+        obj.put("priority", rule.priority)
+        arr.put(obj)
     }
+    for (rule in normalRules) {
+        val obj = JSONObject()
+        obj.put("_type", "normal")
+        obj.put("id", rule.id)
+        obj.put("enabled", rule.enabled)
+        obj.put("name", rule.name)
+        obj.put("targetPackages", JSONArray(rule.targetPackages))
+        obj.put("blockSubsequent", rule.blockSubsequent)
+        obj.put("priority", rule.priority)
+        obj.putOpt("matchAction", rule.matchAction)
+        obj.putOpt("matchData", rule.matchData)
+        obj.putOpt("matchPackage", rule.matchPackage)
+        obj.putOpt("matchClass", rule.matchClass)
+        if (rule.matchCategories.isNotEmpty()) obj.put("matchCategories", JSONArray(rule.matchCategories))
+        obj.putOpt("matchType", rule.matchType)
+        obj.putOpt("customAction", rule.customAction)
+        obj.putOpt("customData", rule.customData)
+        obj.putOpt("customPackage", rule.customPackage)
+        obj.putOpt("customClass", rule.customClass)
+        if (rule.customFlags != null) obj.put("customFlags", rule.customFlags)
+        if (rule.customCategories.isNotEmpty()) obj.put("customCategories", JSONArray(rule.customCategories))
+        obj.putOpt("customType", rule.customType)
+        if (rule.extras.isNotEmpty()) {
+            obj.put("extras", JSONArray().apply {
+                rule.extras.forEach { extra ->
+                    put(JSONObject().apply {
+                        put("key", extra.key)
+                        put("type", extra.type)
+                        if (extra.values.size == 1) put("value", extra.values[0])
+                        else if (extra.values.isNotEmpty()) put("values", JSONArray(extra.values))
+                    })
+                }
+            })
+        }
+        arr.put(obj)
+    }
+    return arr.toString()
 }
 
+private fun parseAllRulesJson(jsonStr: String): Pair<List<JavaCodeRule>, List<NormalRule>> {
+    val javaRules = mutableListOf<JavaCodeRule>()
+    val normalRules = mutableListOf<NormalRule>()
+    val arr = JSONArray(jsonStr)
+    for (i in 0 until arr.length()) {
+        val obj = arr.getJSONObject(i)
+        val type = obj.optString("_type", "java_code")
+        val name = obj.optString("name", "").trim()
+        if (name.isEmpty()) continue
+        if (type == "normal") {
+            normalRules.add(NormalRule(
+                id = obj.optString("id", java.util.UUID.randomUUID().toString()),
+                enabled = obj.optBoolean("enabled", true),
+                name = name,
+                targetPackages = optStringListStatic(obj, "targetPackages"),
+                blockSubsequent = obj.optBoolean("blockSubsequent", true),
+                priority = obj.optInt("priority", 0),
+                matchAction = optNullableStringStatic(obj, "matchAction"),
+                matchData = optNullableStringStatic(obj, "matchData"),
+                matchPackage = optNullableStringStatic(obj, "matchPackage"),
+                matchClass = optNullableStringStatic(obj, "matchClass"),
+                matchCategories = optStringListStatic(obj, "matchCategories"),
+                matchType = optNullableStringStatic(obj, "matchType"),
+                customAction = optNullableStringStatic(obj, "customAction"),
+                customData = optNullableStringStatic(obj, "customData"),
+                customPackage = optNullableStringStatic(obj, "customPackage"),
+                customClass = optNullableStringStatic(obj, "customClass"),
+                customFlags = if (obj.has("customFlags")) obj.getInt("customFlags") else null,
+                customCategories = optStringListStatic(obj, "customCategories"),
+                customType = optNullableStringStatic(obj, "customType"),
+                extras = parseExtrasStatic(obj.optJSONArray("extras"))
+            ))
+        } else {
+            javaRules.add(JavaCodeRule(
+                id = obj.optString("id", java.util.UUID.randomUUID().toString()),
+                enabled = obj.optBoolean("enabled", true),
+                name = name,
+                targetPackages = optStringListStatic(obj, "targetPackages"),
+                imports = obj.optString("imports", ""),
+                members = obj.optString("members", ""),
+                condition = obj.optString("condition", ""),
+                action = obj.optString("action", ""),
+                priority = obj.optInt("priority", 0)
+            ))
+        }
+    }
+    return Pair(javaRules, normalRules)
+}
+
+private fun optStringListStatic(obj: JSONObject, key: String): List<String> {
+    val arr = obj.optJSONArray(key) ?: return emptyList()
+    return (0 until arr.length()).map { arr.optString(it, "") }.filter { it.isNotEmpty() }
+}
+
+private fun optNullableStringStatic(obj: JSONObject, key: String): String? {
+    val v = obj.optString(key, "")
+    return v.ifEmpty { null }
+}
+
+private fun parseExtrasStatic(json: JSONArray?): List<ExtraItem> {
+    if (json == null) return emptyList()
+    val result = mutableListOf<ExtraItem>()
+    for (i in 0 until json.length()) {
+        val extraObj = json.getJSONObject(i)
+        val valuesJson = extraObj.optJSONArray("values")
+        val values = if (valuesJson != null) {
+            (0 until valuesJson.length()).map { valuesJson.getString(it) }
+        } else {
+            listOf(extraObj.optString("value", ""))
+        }
+        result.add(ExtraItem(
+            key = extraObj.getString("key"),
+            type = extraObj.getString("type"),
+            values = values
+        ))
+    }
+    return result
+}
 
 // ─── Launchers Screen ─────────────────────────────────────────────────────────
 
@@ -877,35 +1075,34 @@ private suspend fun recompileAll(ctx: Context, repo: ModifierRepository) {
 
 // ─── Export helpers ───────────────────────────────────────────────────────────
 
-private fun rulesToJson(rules: List<JavaCodeRule>): String {
-    val arr = JSONArray()
-    for (rule in rules) {
-        val obj = JSONObject()
-        obj.put("enabled", rule.enabled)
-        obj.put("name", rule.name)
-        obj.put("imports", rule.imports)
-        obj.put("members", rule.members)
-        obj.put("condition", rule.condition)
-        obj.put("action", rule.action)
-        obj.put("priority", rule.priority)
-        arr.put(obj)
-    }
-    return arr.toString()
-}
-
 private fun copyToClipboard(ctx: Context, json: String) {
     val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     clipboard.setPrimaryClip(ClipData.newPlainText("IntentModifierRules", json))
     Toast.makeText(ctx, R.string.exported_to_clipboard, Toast.LENGTH_SHORT).show()
 }
 
-private fun exportRules(ctx: Context, rules: List<JavaCodeRule>, selected: List<JavaCodeRule>?, uri: Uri) {
+private fun exportRules(
+    ctx: Context,
+    javaRules: List<JavaCodeRule>,
+    normalRules: List<NormalRule>,
+    selected: List<DisplayRule>?,
+    uri: Uri
+) {
     try {
-        val toExport = selected ?: rules
-        val json = rulesToJson(toExport)
+        val (expJava, expNormal) = if (selected != null) {
+            val sj = selected.filterIsInstance<DisplayRule.Java>().map { it.rule }
+            val sn = selected.filterIsInstance<DisplayRule.Normal>().map { it.rule }
+            Pair(sj, sn)
+        } else {
+            Pair(javaRules, normalRules)
+        }
+        val json = exportAllRulesJson(expJava, expNormal)
         ctx.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
         Toast.makeText(ctx, R.string.export_success, Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         Toast.makeText(ctx, R.string.export_failed, Toast.LENGTH_SHORT).show()
     }
 }
+
+// Legacy single-type export (for backward compat)
+private fun rulesToJson(rules: List<JavaCodeRule>): String = exportAllRulesJson(rules, emptyList())
