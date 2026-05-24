@@ -33,8 +33,20 @@ data class NormalRule(
     val id: String = UUID.randomUUID().toString(),
     val enabled: Boolean = true,
     val name: String = "",
-    val targetPackages: List<String> = emptyList(),
+    val targetPackages: List<String> = emptyList(),  // 空 = 全局（分发范围）
     val priority: Int = 0,
+
+    // === 匹配条件（AND 精确匹配，空 = 跳过）===
+    // 用于 evaluate()：判断被拦截的 intent 是否符合条件
+    val matchAction: String? = null,
+    val matchData: String? = null,
+    val matchPackage: String? = null,
+    val matchClass: String? = null,
+    val matchCategories: List<String> = emptyList(),
+    val matchType: String? = null,
+
+    // === 修改动作（空 = 不改）===
+    // 用于 execute()：设置修改后的 intent 的目标值
     val customAction: String? = null,
     val customData: String? = null,
     val customPackage: String? = null,
@@ -157,40 +169,53 @@ import android.net.Uri;
 import android.os.Bundle;
 
 public class Rule_{UUID8} {
-    // 编译时根据 NormalRule 字段生成的常量
-    private static final String TARGET_ACTION = "{customAction}";
-    private static final String TARGET_DATA = "{customData}";
-    private static final String TARGET_PKG = "{customPackage}";
-    private static final String TARGET_CLASS = "{customClass}";
-    private static final int TARGET_FLAGS = {customFlags};
-    private static final String TARGET_TYPE = "{customType}";
-    // targetCategories, extras 同理...
+    // 匹配条件常量（来自 match* 字段）
+    private static final String MATCH_PKG = "{matchPackage}";
+    private static final String MATCH_ACTION = "{matchAction}";
+    private static final String MATCH_DATA = "{matchData}";
+    private static final String MATCH_CLASS = "{matchClass}";
+    private static final String MATCH_TYPE = "{matchType}";
+    // matchCategories 同理...
+
+    // 修改动作常量（来自 custom* 字段）
+    private static final String CUSTOM_ACTION = "{customAction}";
+    private static final String CUSTOM_DATA = "{customData}";
+    private static final String CUSTOM_PKG = "{customPackage}";
+    private static final String CUSTOM_CLASS = "{customClass}";
+    private static final int CUSTOM_FLAGS = {customFlags};
+    private static final String CUSTOM_TYPE = "{customType}";
+    // customCategories, extras 同理...
 
     public static boolean evaluate(Context ctx, Intent intent, Intent result) {
-        // 根据填写的字段自动生成 AND 精确匹配条件
-        // 字段为空则跳过该条件
+        // 用 MATCH_* 字段判断 intent 是否匹配（AND 精确匹配，空 = 跳过）
         if (intent.getComponent() == null) return false;
-        String targetPkg = intent.getComponent().getPackageName();
-        if (targetPkg == null) return false;
+        String pkg = intent.getComponent().getPackageName();
+        if (pkg == null) return false;
 
         boolean matches = true;
-        if (!TARGET_PKG.isEmpty())
-            matches = matches && targetPkg.equals(TARGET_PKG);
-        if (!TARGET_ACTION.isEmpty())
-            matches = matches && TARGET_ACTION.equals(intent.getAction());
-        if (!TARGET_CLASS.isEmpty())
-            matches = matches && TARGET_CLASS.equals(intent.getComponent().getClassName());
-        // ... 其他字段同理
+        if (!MATCH_PKG.isEmpty())
+            matches = matches && pkg.equals(MATCH_PKG);
+        if (!MATCH_ACTION.isEmpty())
+            matches = matches && MATCH_ACTION.equals(intent.getAction());
+        if (!MATCH_CLASS.isEmpty())
+            matches = matches && MATCH_CLASS.equals(intent.getComponent().getClassName());
+        if (!MATCH_DATA.isEmpty() && intent.getData() != null)
+            matches = matches && MATCH_DATA.equals(intent.getData().toString());
+        if (!MATCH_TYPE.isEmpty())
+            matches = matches && MATCH_TYPE.equals(intent.getType());
+        // matchCategories 同理...
         return matches;
     }
 
     public static void execute(Context ctx, Intent intent, Intent result) {
-        if (!TARGET_ACTION.isEmpty()) result.setAction(TARGET_ACTION);
-        if (!TARGET_DATA.isEmpty()) result.setData(Uri.parse(TARGET_DATA));
-        if (!TARGET_PKG.isEmpty() && !TARGET_CLASS.isEmpty())
-            result.setClassName(TARGET_PKG, TARGET_CLASS);
-        if (TARGET_FLAGS != 0) result.addFlags(TARGET_FLAGS);
-        // ... categories, type, extras
+        // 用 CUSTOM_* 字段修改 result（空 = 不改）
+        if (!CUSTOM_ACTION.isEmpty()) result.setAction(CUSTOM_ACTION);
+        if (!CUSTOM_DATA.isEmpty()) result.setData(Uri.parse(CUSTOM_DATA));
+        if (!CUSTOM_PKG.isEmpty() && !CUSTOM_CLASS.isEmpty())
+            result.setClassName(CUSTOM_PKG, CUSTOM_CLASS);
+        if (CUSTOM_FLAGS != 0) result.addFlags(CUSTOM_FLAGS);
+        if (!CUSTOM_TYPE.isEmpty()) result.setType(CUSTOM_TYPE);
+        // customCategories, extras 同理...
     }
 }
 ```
