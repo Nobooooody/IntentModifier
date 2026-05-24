@@ -121,8 +121,6 @@ class NormalRuleEditorActivity : ComponentActivity() {
                             currentRules.add(rule)
                         }
                         repo.saveNormalRules(currentRules)
-                        setResult(Activity.RESULT_OK)
-                        finish()
                     }
                 )
             }
@@ -812,7 +810,7 @@ private fun NormalRuleEditorScreen(
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(ctx, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
                                         delay(1500)
-                                        (ctx as? ComponentActivity)?.finish()
+                                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
                                     }
                                 } else {
                                     val manager = RuleCompilationManager(ctx)
@@ -825,14 +823,14 @@ private fun NormalRuleEditorScreen(
                                             Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()
                                         }
                                         delay(1500)
-                                        (ctx as? ComponentActivity)?.finish()
+                                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
                                     }
                                 }
                             } catch (e: Exception) {
                                 withContext(Dispatchers.Main) {
                                     Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
                                     delay(1500)
-                                    (ctx as? ComponentActivity)?.finish()
+                                    (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
                                 }
                             }
                         }
