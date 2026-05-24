@@ -24,9 +24,6 @@
     <string name="rule_name_hint">例如：重定向百度</string>
     <string name="priority_hint">数值越大优先级越高</string>
 
-    <!-- Validation errors -->
-    <string name="error_key_required">键不能为空</string>
-
     <!-- App picker -->
     <string name="select_app">选择应用</string>
     <string name="search_apps">搜索应用</string>
@@ -146,10 +143,26 @@
     <string name="custom_flags">Custom Flags（数字）</string>
 
     <!-- Normal rule: extras -->
-    <string name="extra_title">Extra</string>
-    <string name="extra_add">添加 Extra</string>
+    <string name="extra_title">附加</string>
+    <string name="extra_add">添加附加</string>
     <string name="extra_key">Key</string>
+    <string name="extra_value">值</string>
     <string name="extra_delete">删除</string>
+    <string name="type_string">字符串</string>
+    <string name="type_integer">整数</string>
+    <string name="type_long">长整数</string>
+    <string name="type_decimal">小数</string>
+    <string name="type_boolean">布尔值</string>
+    <string name="type_uri">URI</string>
+    <string name="type_component">ComponentName</string>
+    <string name="type_null">空</string>
+
+    <!-- Validation errors -->
+    <string name="error_key_required">键不能为空</string>
+    <string name="error_invalid_integer">无效的整数</string>
+    <string name="error_invalid_long">无效的长整数</string>
+    <string name="error_invalid_number">无效的数字</string>
+    <string name="error_invalid_uri">无效的 URI</string>
     <string name="remove">移除</string>
 
     <!-- Target apps (compilation scope) -->

@@ -13,10 +13,13 @@ import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,7 +28,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -136,14 +141,14 @@ private fun NormalRuleEditorScreen(
     var matchAction by remember { mutableStateOf(editingRule?.matchAction ?: "") }
     var matchClass by remember { mutableStateOf(editingRule?.matchClass ?: "") }
     var matchData by remember { mutableStateOf(editingRule?.matchData ?: "") }
-    var matchCategories by remember { mutableStateOf(editingRule?.matchCategories?.joinToString(", ") ?: "") }
+    var matchCategories by remember { mutableStateOf(editingRule?.matchCategories?.filter { it.isNotBlank() } ?: emptyList()) }
     var matchType by remember { mutableStateOf(editingRule?.matchType ?: "") }
 
     var customPackage by remember { mutableStateOf(editingRule?.customPackage ?: "") }
     var customAction by remember { mutableStateOf(editingRule?.customAction ?: "") }
     var customClass by remember { mutableStateOf(editingRule?.customClass ?: "") }
     var customData by remember { mutableStateOf(editingRule?.customData ?: "") }
-    var customCategories by remember { mutableStateOf(editingRule?.customCategories?.joinToString(", ") ?: "") }
+    var customCategories by remember { mutableStateOf(editingRule?.customCategories?.filter { it.isNotBlank() } ?: emptyList()) }
     var customType by remember { mutableStateOf(editingRule?.customType ?: "") }
     var customFlags by remember { mutableStateOf(editingRule?.customFlags?.toString() ?: "") }
 
@@ -339,12 +344,10 @@ private fun NormalRuleEditorScreen(
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
                     Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = matchCategories, onValueChange = { matchCategories = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.match_categories)) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    CategoryListEditor(
+                        items = matchCategories,
+                        onItemsChange = { matchCategories = it },
+                        label = stringResource(R.string.match_categories)
                     )
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
@@ -421,12 +424,10 @@ private fun NormalRuleEditorScreen(
                         textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
                     Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = customCategories, onValueChange = { customCategories = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.custom_categories)) },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    CategoryListEditor(
+                        items = customCategories,
+                        onItemsChange = { customCategories = it },
+                        label = stringResource(R.string.custom_categories)
                     )
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
@@ -460,23 +461,112 @@ private fun NormalRuleEditorScreen(
                     }
                     extras.forEachIndexed { idx, extra ->
                         Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = extra.key, onValueChange = { newKey ->
-                                    val list = extras.toMutableList()
-                                    list[idx] = extra.copy(key = newKey)
-                                    extras = list
-                                },
-                                modifier = Modifier.weight(1f),
-                                label = { Text(stringResource(R.string.extra_key)) },
-                                singleLine = true
-                            )
-                            IconButton(onClick = {
-                                val list = extras.toMutableList()
-                                list.removeAt(idx)
-                                extras = list
-                            }) {
-                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.extra_delete))
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedTextField(
+                                        value = extra.key,
+                                        onValueChange = { newKey ->
+                                            val list = extras.toMutableList()
+                                            list[idx] = extra.copy(key = newKey)
+                                            extras = list
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        label = { Text(stringResource(R.string.extra_key)) },
+                                        singleLine = true
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Box {
+                                        val internalTypes = listOf("string", "integer", "long", "decimal", "boolean", "uri", "component", "null")
+                                        val typeLabels = mapOf(
+                                            "string" to stringResource(R.string.type_string),
+                                            "integer" to stringResource(R.string.type_integer),
+                                            "long" to stringResource(R.string.type_long),
+                                            "decimal" to stringResource(R.string.type_decimal),
+                                            "boolean" to stringResource(R.string.type_boolean),
+                                            "uri" to stringResource(R.string.type_uri),
+                                            "component" to stringResource(R.string.type_component),
+                                            "null" to stringResource(R.string.type_null)
+                                        )
+                                        var expandedType by remember { mutableStateOf(false) }
+                                        OutlinedButton(onClick = { expandedType = true }) {
+                                            Text(typeLabels[extra.type] ?: extra.type, maxLines = 1)
+                                        }
+                                        DropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
+                                            internalTypes.forEach { t ->
+                                                DropdownMenuItem(
+                                                    text = { Text(typeLabels[t] ?: t) },
+                                                    onClick = {
+                                                        val list = extras.toMutableList()
+                                                        val defaultVal = when (t) {
+                                                            "boolean" -> "true"
+                                                            "null" -> ""
+                                                            else -> ""
+                                                        }
+                                                        list[idx] = extra.copy(type = t, values = listOf(defaultVal))
+                                                        extras = list
+                                                        expandedType = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(Modifier.width(4.dp))
+                                    IconButton(onClick = {
+                                        val list = extras.toMutableList()
+                                        list.removeAt(idx)
+                                        extras = list
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.extra_delete))
+                                    }
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                when (extra.type) {
+                                    "boolean" -> {
+                                        val boolValue = extra.values.firstOrNull()?.toBooleanStrictOrNull() ?: true
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                stringResource(R.string.type_boolean),
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Switch(
+                                                checked = boolValue,
+                                                onCheckedChange = { checked ->
+                                                    val list = extras.toMutableList()
+                                                    list[idx] = extra.copy(values = listOf(checked.toString()))
+                                                    extras = list
+                                                }
+                                            )
+                                        }
+                                    }
+                                    "null" -> {
+                                        Text(
+                                            stringResource(R.string.type_null),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    else -> {
+                                        OutlinedTextField(
+                                            value = extra.values.firstOrNull() ?: "",
+                                            onValueChange = { newValue ->
+                                                val list = extras.toMutableList()
+                                                list[idx] = extra.copy(values = listOf(newValue))
+                                                extras = list
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            label = { Text(stringResource(R.string.extra_value)) },
+                                            singleLine = true,
+                                            keyboardOptions = KeyboardOptions(
+                                                keyboardType = when (extra.type) {
+                                                    "integer", "long" -> KeyboardType.Number
+                                                    "decimal" -> KeyboardType.Decimal
+                                                    else -> KeyboardType.Text
+                                                }
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -500,13 +590,13 @@ private fun NormalRuleEditorScreen(
                                     matchAction = matchAction.trim().ifBlank { null },
                                     matchClass = matchClass.trim().ifBlank { null },
                                     matchData = matchData.trim().ifBlank { null },
-                                    matchCategories = matchCategories.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                                    matchCategories = matchCategories,
                                     matchType = matchType.trim().ifBlank { null },
                                     customPackage = customPackage.trim().ifBlank { null },
                                     customAction = customAction.trim().ifBlank { null },
                                     customClass = customClass.trim().ifBlank { null },
                                     customData = customData.trim().ifBlank { null },
-                                    customCategories = customCategories.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                                    customCategories = customCategories,
                                     customType = customType.trim().ifBlank { null },
                                     customFlags = customFlags.trim().toIntOrNull(),
                                     extras = extras
@@ -545,6 +635,37 @@ private fun NormalRuleEditorScreen(
                             Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
                             return@Button
                         }
+                        var hasError = false
+                        for (extra in extras) {
+                            if (extra.key.isBlank()) {
+                                Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
+                                hasError = true; break
+                            }
+                            val valStr = extra.values.firstOrNull() ?: ""
+                            when (extra.type) {
+                                "integer" -> if (valStr.isNotBlank() && valStr.toIntOrNull() == null) {
+                                    Toast.makeText(ctx, R.string.error_invalid_integer, Toast.LENGTH_SHORT).show()
+                                    hasError = true; break
+                                }
+                                "long" -> if (valStr.isNotBlank() && valStr.toLongOrNull() == null) {
+                                    Toast.makeText(ctx, R.string.error_invalid_long, Toast.LENGTH_SHORT).show()
+                                    hasError = true; break
+                                }
+                                "decimal" -> if (valStr.isNotBlank() && valStr.toDoubleOrNull() == null) {
+                                    Toast.makeText(ctx, R.string.error_invalid_number, Toast.LENGTH_SHORT).show()
+                                    hasError = true; break
+                                }
+                                "uri" -> if (valStr.isNotBlank()) {
+                                    try {
+                                        android.net.Uri.parse(valStr)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(ctx, R.string.error_invalid_uri, Toast.LENGTH_SHORT).show()
+                                        hasError = true; break
+                                    }
+                                }
+                            }
+                        }
+                        if (hasError) { isSaving = false; return@Button }
                         isSaving = true
                         val rule = NormalRule(
                             id = editingRule?.id ?: java.util.UUID.randomUUID().toString(),
@@ -557,13 +678,13 @@ private fun NormalRuleEditorScreen(
                             matchAction = matchAction.trim().ifBlank { null },
                             matchClass = matchClass.trim().ifBlank { null },
                             matchData = matchData.trim().ifBlank { null },
-                            matchCategories = matchCategories.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                            matchCategories = matchCategories,
                             matchType = matchType.trim().ifBlank { null },
                             customPackage = customPackage.trim().ifBlank { null },
                             customAction = customAction.trim().ifBlank { null },
                             customClass = customClass.trim().ifBlank { null },
                             customData = customData.trim().ifBlank { null },
-                            customCategories = customCategories.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                            customCategories = customCategories,
                             customType = customType.trim().ifBlank { null },
                             customFlags = customFlags.trim().toIntOrNull(),
                             extras = extras
@@ -614,6 +735,46 @@ private fun NormalRuleEditorScreen(
             compileResult?.let { (msg, color) ->
                 Spacer(Modifier.height(16.dp))
                 Text(msg, color = color, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryListEditor(
+    items: List<String>,
+    onItemsChange: (List<String>) -> Unit,
+    label: String
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                IconButton(onClick = { onItemsChange(items + "") }) {
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.extra_add))
+                }
+            }
+            items.forEachIndexed { idx, item ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = item,
+                        onValueChange = { newVal ->
+                            val list = items.toMutableList()
+                            list[idx] = newVal
+                            onItemsChange(list)
+                        },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                    )
+                    IconButton(onClick = {
+                        val list = items.toMutableList()
+                        list.removeAt(idx)
+                        onItemsChange(list)
+                    }) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.extra_delete))
+                    }
+                }
             }
         }
     }

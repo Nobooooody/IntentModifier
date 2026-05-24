@@ -24,9 +24,6 @@
     <string name="rule_name_hint">e.g., Redirect Baidu</string>
     <string name="priority_hint">Higher value = higher priority</string>
 
-    <!-- Validation errors -->
-    <string name="error_key_required">Key required</string>
-
     <!-- App picker -->
     <string name="select_app">Select App</string>
     <string name="search_apps">Search apps</string>
@@ -149,7 +146,23 @@
     <string name="extra_title">Extra</string>
     <string name="extra_add">Add Extra</string>
     <string name="extra_key">Key</string>
+    <string name="extra_value">Value</string>
     <string name="extra_delete">Delete</string>
+    <string name="type_string">String</string>
+    <string name="type_integer">Integer</string>
+    <string name="type_long">Long</string>
+    <string name="type_decimal">Decimal Number</string>
+    <string name="type_boolean">Boolean</string>
+    <string name="type_uri">URI</string>
+    <string name="type_component">ComponentName</string>
+    <string name="type_null">Null</string>
+
+    <!-- Validation errors -->
+    <string name="error_key_required">Key is required</string>
+    <string name="error_invalid_integer">Invalid integer</string>
+    <string name="error_invalid_long">Invalid long</string>
+    <string name="error_invalid_number">Invalid number</string>
+    <string name="error_invalid_uri">Invalid URI</string>
     <string name="remove">Remove</string>
 
     <!-- Target apps (compilation scope) -->

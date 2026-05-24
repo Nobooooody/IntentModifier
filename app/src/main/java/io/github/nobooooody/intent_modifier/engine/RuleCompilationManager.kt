@@ -325,13 +325,68 @@ class RuleCompilationManager(private val context: Context) {
     private fun buildNormalTemplate(ruleName: String, rule: NormalRule): String {
         val esc: (String?) -> String = { it?.replace("\"", "\\\"") ?: "" }
 
+        val matchCategoriesArray = rule.matchCategories?.filter { it.isNotBlank() }?.joinToString(", ") { "\"${esc(it)}\"" }
+            ?.let { "{ $it }" } ?: "{}"
+
+        val customCategoriesArray = rule.customCategories?.filter { it.isNotBlank() }?.joinToString(", ") { "\"${esc(it)}\"" }
+            ?.let { "{ $it }" } ?: "{}"
+
+        val extrasCode = rule.extras?.filter { it.key.isNotBlank() }?.joinToString("\n                ") { extra ->
+            val key = esc(extra.key)
+            val value = extra.values.firstOrNull() ?: ""
+            when (extra.type) {
+                "null" -> "result.removeExtra(\"$key\");"
+                "boolean" -> "result.putExtra(\"$key\", ${value.toBooleanStrictOrNull() ?: true});"
+                "integer" -> {
+                    if (value.isBlank()) "// skip empty integer extra \"$key\""
+                    else {
+                        val intVal = value.toIntOrNull()
+                        if (intVal != null) "result.putExtra(\"$key\", $intVal);"
+                        else "// skip invalid integer extra \"$key\""
+                    }
+                }
+                "long" -> {
+                    if (value.isBlank()) "// skip empty long extra \"$key\""
+                    else {
+                        val longVal = value.toLongOrNull()
+                        if (longVal != null) "result.putExtra(\"$key\", ${longVal}L);"
+                        else "// skip invalid long extra \"$key\""
+                    }
+                }
+                "decimal" -> {
+                    if (value.isBlank()) "// skip empty decimal extra \"$key\""
+                    else {
+                        val doubleVal = value.toDoubleOrNull()
+                        if (doubleVal != null) "result.putExtra(\"$key\", $doubleVal);"
+                        else "// skip invalid decimal extra \"$key\""
+                    }
+                }
+                "uri" -> {
+                    if (value.isBlank()) "// skip empty uri extra \"$key\""
+                    else "result.putExtra(\"$key\", Uri.parse(\"${esc(value)}\"));"
+                }
+                "component" -> {
+                    if (value.isBlank()) "// skip empty component extra \"$key\""
+                    else {
+                        val comp = try { android.content.ComponentName.unflattenFromString(value) } catch (e: Exception) { null }
+                        if (comp != null) {
+                            "result.putExtra(\"$key\", ComponentName.unflattenFromString(\"${esc(value)}\"));"
+                        } else {
+                            "// invalid component extra \"$key\": \"${esc(value)}\""
+                        }
+                    }
+                }
+                else -> "result.putExtra(\"$key\", \"${esc(value)}\");"
+            }
+        }?.let { "\n$it" } ?: ""
+
         return """
             package engine;
 
+            import android.content.ComponentName;
             import android.content.Context;
             import android.content.Intent;
             import android.net.Uri;
-            import android.os.Bundle;
 
             public class $ruleName {
 
@@ -340,6 +395,7 @@ class RuleCompilationManager(private val context: Context) {
                 private static final String MATCH_DATA = "${esc(rule.matchData)}";
                 private static final String MATCH_CLASS = "${esc(rule.matchClass)}";
                 private static final String MATCH_TYPE = "${esc(rule.matchType)}";
+                private static final String[] MATCH_CATEGORIES = $matchCategoriesArray;
 
                 private static final String CUSTOM_ACTION = "${esc(rule.customAction)}";
                 private static final String CUSTOM_DATA = "${esc(rule.customData)}";
@@ -347,6 +403,7 @@ class RuleCompilationManager(private val context: Context) {
                 private static final String CUSTOM_CLASS = "${esc(rule.customClass)}";
                 private static final int CUSTOM_FLAGS = ${rule.customFlags ?: 0};
                 private static final String CUSTOM_TYPE = "${esc(rule.customType)}";
+                private static final String[] CUSTOM_CATEGORIES = $customCategoriesArray;
                 private static final boolean BLOCK_SUBSEQUENT = ${rule.blockSubsequent};
 
                 public static boolean evaluate(Context ctx, Intent intent, Intent result) {
@@ -365,6 +422,13 @@ class RuleCompilationManager(private val context: Context) {
                         matches = matches && MATCH_DATA.equals(intent.getData().toString());
                     if (!MATCH_TYPE.isEmpty())
                         matches = matches && MATCH_TYPE.equals(intent.getType());
+                    if (MATCH_CATEGORIES.length > 0) {
+                        boolean catMatch = false;
+                        for (String cat : MATCH_CATEGORIES) {
+                            if (intent.hasCategory(cat)) { catMatch = true; break; }
+                        }
+                        matches = matches && catMatch;
+                    }
                     return matches;
                 }
 
@@ -375,6 +439,18 @@ class RuleCompilationManager(private val context: Context) {
                         result.setClassName(CUSTOM_PKG, CUSTOM_CLASS);
                     if (CUSTOM_FLAGS != 0) result.addFlags(CUSTOM_FLAGS);
                     if (!CUSTOM_TYPE.isEmpty()) result.setType(CUSTOM_TYPE);
+                    {
+                        java.util.Set<String> existingCats = result.getCategories();
+                        if (existingCats != null) {
+                            for (String cat : new java.util.HashSet<>(existingCats)) {
+                                result.removeCategory(cat);
+                            }
+                        }
+                        for (String cat : CUSTOM_CATEGORIES) {
+                            result.addCategory(cat);
+                        }
+                    }
+                    // extras$extrasCode
                     return BLOCK_SUBSEQUENT;
                 }
             }
