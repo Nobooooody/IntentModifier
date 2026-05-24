@@ -453,8 +453,7 @@ class RuleCompilationManager(private val context: Context) {
                         result.addCategory(cat);
                     }
                     if (REPLACE_EXTRAS) {
-                        android.os.Bundle b = result.getExtras();
-                        if (b != null) b.clear();
+                        result.replaceExtras(new android.os.Bundle());
                     }
                     // extras$extrasCode
                     return BLOCK_SUBSEQUENT;
