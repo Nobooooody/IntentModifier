@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -369,17 +370,18 @@ private fun NormalRuleEditorScreen(
                         shape = MaterialTheme.shapes.small
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 stringResource(R.string.match_advanced),
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 modifier = Modifier.weight(1f)
                             )
                             Icon(
                                 if (showMatchAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = null
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp)
                             )
                         }
                     }
@@ -476,17 +478,18 @@ private fun NormalRuleEditorScreen(
                         shape = MaterialTheme.shapes.small
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 stringResource(R.string.custom_advanced),
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 modifier = Modifier.weight(1f)
                             )
                             Icon(
                                 if (showCustomAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = null
+                                contentDescription = null,
+                                modifier = Modifier.size(28.dp)
                             )
                         }
                     }
