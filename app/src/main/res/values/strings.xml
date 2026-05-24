@@ -141,6 +141,7 @@
     <string name="custom_categories">Custom Categories (comma-separated)</string>
     <string name="custom_type">Custom MIME Type</string>
     <string name="custom_flags">Custom Flags (number)</string>
+    <string name="replace_categories">Replace existing categories</string>
 
     <!-- Normal rule: extras -->
     <string name="extra_title">Extra</string>

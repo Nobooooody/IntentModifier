@@ -154,6 +154,7 @@ class ConflictResolutionActivity : ComponentActivity() {
                     customClass = optNullableString(obj, "customClass"),
                     customFlags = if (obj.has("customFlags")) obj.getInt("customFlags") else null,
                     customCategories = optStringList(obj, "customCategories"),
+                    replaceCategories = obj.optBoolean("replaceCategories", false),
                     customType = optNullableString(obj, "customType"),
                     extras = parseExtras(obj.optJSONArray("extras"))
                 ))

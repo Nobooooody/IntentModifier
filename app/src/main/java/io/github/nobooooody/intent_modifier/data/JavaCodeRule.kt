@@ -45,6 +45,7 @@ data class NormalRule(
     val customClass: String? = null,
     val customFlags: Int? = null,
     val customCategories: List<String> = emptyList(),
+    val replaceCategories: Boolean = false,
     val customType: String? = null,
     val extras: List<ExtraItem> = emptyList()
 )

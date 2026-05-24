@@ -404,6 +404,7 @@ class RuleCompilationManager(private val context: Context) {
                 private static final int CUSTOM_FLAGS = ${rule.customFlags ?: 0};
                 private static final String CUSTOM_TYPE = "${esc(rule.customType)}";
                 private static final String[] CUSTOM_CATEGORIES = $customCategoriesArray;
+                private static final boolean REPLACE_CATEGORIES = ${rule.replaceCategories};
                 private static final boolean BLOCK_SUBSEQUENT = ${rule.blockSubsequent};
 
                 public static boolean evaluate(Context ctx, Intent intent, Intent result) {
@@ -439,16 +440,16 @@ class RuleCompilationManager(private val context: Context) {
                         result.setClassName(CUSTOM_PKG, CUSTOM_CLASS);
                     if (CUSTOM_FLAGS != 0) result.addFlags(CUSTOM_FLAGS);
                     if (!CUSTOM_TYPE.isEmpty()) result.setType(CUSTOM_TYPE);
-                    {
+                    if (REPLACE_CATEGORIES) {
                         java.util.Set<String> existingCats = result.getCategories();
                         if (existingCats != null) {
                             for (String cat : new java.util.HashSet<>(existingCats)) {
                                 result.removeCategory(cat);
                             }
                         }
-                        for (String cat : CUSTOM_CATEGORIES) {
-                            result.addCategory(cat);
-                        }
+                    }
+                    for (String cat : CUSTOM_CATEGORIES) {
+                        result.addCategory(cat);
                     }
                     // extras$extrasCode
                     return BLOCK_SUBSEQUENT;

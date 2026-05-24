@@ -141,6 +141,7 @@
     <string name="custom_categories">Custom Categories（逗号分隔）</string>
     <string name="custom_type">Custom MIME Type</string>
     <string name="custom_flags">Custom Flags（数字）</string>
+    <string name="replace_categories">替换已有分类</string>
 
     <!-- Normal rule: extras -->
     <string name="extra_title">附加</string>

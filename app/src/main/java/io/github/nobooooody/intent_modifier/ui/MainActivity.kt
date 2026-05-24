@@ -734,6 +734,7 @@ private fun exportAllRulesJson(javaRules: List<JavaCodeRule>, normalRules: List<
         obj.putOpt("customClass", rule.customClass)
         if (rule.customFlags != null) obj.put("customFlags", rule.customFlags)
         if (rule.customCategories.isNotEmpty()) obj.put("customCategories", JSONArray(rule.customCategories))
+        if (rule.replaceCategories) obj.put("replaceCategories", true)
         obj.putOpt("customType", rule.customType)
         if (rule.extras.isNotEmpty()) {
             obj.put("extras", JSONArray().apply {

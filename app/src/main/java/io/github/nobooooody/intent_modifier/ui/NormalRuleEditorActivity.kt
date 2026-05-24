@@ -149,6 +149,7 @@ private fun NormalRuleEditorScreen(
     var customClass by remember { mutableStateOf(editingRule?.customClass ?: "") }
     var customData by remember { mutableStateOf(editingRule?.customData ?: "") }
     var customCategories by remember { mutableStateOf(editingRule?.customCategories?.filter { it.isNotBlank() } ?: emptyList()) }
+    var replaceCategories by remember { mutableStateOf(editingRule?.replaceCategories ?: false) }
     var customType by remember { mutableStateOf(editingRule?.customType ?: "") }
     var customFlags by remember { mutableStateOf(editingRule?.customFlags?.toString() ?: "") }
 
@@ -429,6 +430,17 @@ private fun NormalRuleEditorScreen(
                         onItemsChange = { customCategories = it },
                         label = stringResource(R.string.custom_categories)
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(stringResource(R.string.replace_categories))
+                        Switch(
+                            checked = replaceCategories,
+                            onCheckedChange = { replaceCategories = it }
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = customType, onValueChange = { customType = it },
@@ -597,6 +609,7 @@ private fun NormalRuleEditorScreen(
                                     customClass = customClass.trim().ifBlank { null },
                                     customData = customData.trim().ifBlank { null },
                                     customCategories = customCategories,
+                                    replaceCategories = replaceCategories,
                                     customType = customType.trim().ifBlank { null },
                                     customFlags = customFlags.trim().toIntOrNull(),
                                     extras = extras
@@ -685,6 +698,7 @@ private fun NormalRuleEditorScreen(
                             customClass = customClass.trim().ifBlank { null },
                             customData = customData.trim().ifBlank { null },
                             customCategories = customCategories,
+                            replaceCategories = replaceCategories,
                             customType = customType.trim().ifBlank { null },
                             customFlags = customFlags.trim().toIntOrNull(),
                             extras = extras
