@@ -453,6 +453,7 @@ fun NormalRuleForm(
                         OutlinedButton(onClick = {
                             val pkg = customPackage.trim().ifBlank { matchPackage.trim().ifBlank { null } }
                             if (pkg != null) {
+                                pendingClassField = "custom"
                                 val intent = Intent(ctx, ActivityPickerActivity::class.java).apply {
                                     putExtra(ActivityPickerActivity.EXTRA_PACKAGE_NAME, pkg)
                                 }
