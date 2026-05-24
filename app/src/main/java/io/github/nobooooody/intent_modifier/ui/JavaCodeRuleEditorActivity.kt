@@ -61,6 +61,7 @@ import io.github.nobooooody.intent_modifier.data.JavaCodeRule
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.engine.RuleCompilationManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -108,8 +109,6 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
                             currentRules.add(rule)
                         }
                         repo.saveJavaCodeRules(currentRules)
-                        setResult(Activity.RESULT_OK)
-                        finish()
                     }
                 )
             }
@@ -382,25 +381,28 @@ private fun RuleEditorScreen(
                                 if (javaRules.isEmpty() && normalRules.isEmpty()) {
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(ctx, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
-                                        (ctx as? ComponentActivity)?.finish()
+                                        delay(1500)
+                                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
                                     }
                                 } else {
                                     val manager = RuleCompilationManager(ctx)
                                     val result = withContext(Dispatchers.IO) { manager.compileAllRules(javaRules, normalRules) }
                                     withContext(Dispatchers.Main) {
                                         if (result.success) {
-                                            Toast.makeText(ctx, R.string.saved_and_compiled, Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
                                         } else {
                                             val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
                                             Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()
                                         }
-                                        (ctx as? ComponentActivity)?.finish()
+                                        delay(1500)
+                                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
                                     }
                                 }
                             } catch (e: Exception) {
                                 withContext(Dispatchers.Main) {
                                     Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
-                                    (ctx as? ComponentActivity)?.finish()
+                                    delay(1500)
+                                    (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
                                 }
                             }
                         }
