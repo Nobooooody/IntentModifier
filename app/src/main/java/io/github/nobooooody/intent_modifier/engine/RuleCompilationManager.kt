@@ -405,6 +405,7 @@ class RuleCompilationManager(private val context: Context) {
                 private static final String CUSTOM_TYPE = "${esc(rule.customType)}";
                 private static final String[] CUSTOM_CATEGORIES = $customCategoriesArray;
                 private static final boolean REPLACE_CATEGORIES = ${rule.replaceCategories};
+                private static final boolean REPLACE_EXTRAS = ${rule.replaceExtras};
                 private static final boolean BLOCK_SUBSEQUENT = ${rule.blockSubsequent};
 
                 public static boolean evaluate(Context ctx, Intent intent, Intent result) {
@@ -450,6 +451,10 @@ class RuleCompilationManager(private val context: Context) {
                     }
                     for (String cat : CUSTOM_CATEGORIES) {
                         result.addCategory(cat);
+                    }
+                    if (REPLACE_EXTRAS) {
+                        android.os.Bundle b = result.getExtras();
+                        if (b != null) b.clear();
                     }
                     // extras$extrasCode
                     return BLOCK_SUBSEQUENT;

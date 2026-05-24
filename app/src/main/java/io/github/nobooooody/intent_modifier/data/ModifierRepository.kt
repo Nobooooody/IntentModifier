@@ -155,6 +155,7 @@ class ModifierRepository(private val context: Context) {
                     customFlags = if (obj.has("customFlags")) obj.getInt("customFlags") else null,
                     customCategories = optStringList(obj, "customCategories"),
                     replaceCategories = obj.optBoolean("replaceCategories", false),
+                    replaceExtras = obj.optBoolean("replaceExtras", false),
                     customType = optNullableString(obj, "customType"),
                     extras = parseExtras(obj.optJSONArray("extras"))
                 ))
@@ -188,6 +189,7 @@ class ModifierRepository(private val context: Context) {
                 rule.customFlags?.let { put("customFlags", it) }
                 if (rule.customCategories.isNotEmpty()) put("customCategories", JSONArray(rule.customCategories))
                 if (rule.replaceCategories) put("replaceCategories", true)
+                if (rule.replaceExtras) put("replaceExtras", true)
                 rule.customType?.let { put("customType", it) }
                 if (rule.extras.isNotEmpty()) {
                     put("extras", JSONArray().apply {

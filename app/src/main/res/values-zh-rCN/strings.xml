@@ -151,6 +151,7 @@
     <string name="extra_key">Key</string>
     <string name="extra_value">值</string>
     <string name="extra_delete">删除</string>
+    <string name="replace_extras">替换已有附加项</string>
     <string name="type_string">字符串</string>
     <string name="type_integer">整数</string>
     <string name="type_long">长整数</string>

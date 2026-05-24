@@ -151,6 +151,7 @@
     <string name="extra_key">Key</string>
     <string name="extra_value">Value</string>
     <string name="extra_delete">Delete</string>
+    <string name="replace_extras">Replace existing extras</string>
     <string name="type_string">String</string>
     <string name="type_integer">Integer</string>
     <string name="type_long">Long</string>
