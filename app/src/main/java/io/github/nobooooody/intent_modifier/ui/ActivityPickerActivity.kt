@@ -160,8 +160,7 @@ private fun ActivityPickerScreen(
                                 Text(
                                     activity.className,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
