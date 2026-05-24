@@ -291,15 +291,17 @@ loadRulesIfNeeded(lpparam, ctx):
 ```kotlin
 fun applyRules(intent: Intent): Intent {
     val rules = compiledRules ?: return intent
-    val result = Intent(intent)
+    val resultIntent = Intent(intent)
+    var executed = false
     for (rule in rules.list) {
-        val matched = rule.evaluateMethod.invoke(null, ctx, intent, result) as? Boolean ?: false
+        val matched = rule.evaluateMethod.invoke(null, ctx, intent, resultIntent) as? Boolean ?: false
         if (matched) {
-            val shouldBlock = rule.executeMethod.invoke(null, ctx, intent, result) as? Boolean ?: true
+            val shouldBlock = rule.executeMethod.invoke(null, ctx, intent, resultIntent) as? Boolean ?: true
+            executed = true
             if (shouldBlock) break
         }
     }
-    return result
+    return if (executed) resultIntent else intent
 }
 ```
 
