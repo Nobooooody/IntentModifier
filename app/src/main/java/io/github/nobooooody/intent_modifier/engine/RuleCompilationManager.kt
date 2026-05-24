@@ -331,7 +331,7 @@ class RuleCompilationManager(private val context: Context) {
         val customCategoriesArray = rule.customCategories?.filter { it.isNotBlank() }?.joinToString(", ") { "\"${esc(it)}\"" }
             ?.let { "{ $it }" } ?: "{}"
 
-        val extrasCode = rule.extras?.filter { it.key.isNotBlank() }?.joinToString("\n                ") { extra ->
+        val extrasCode = rule.extras?.filter { it.key.isNotBlank() }?.joinToString("\n                    ") { extra ->
             val key = esc(extra.key)
             val value = extra.values.firstOrNull() ?: ""
             when (extra.type) {
@@ -378,7 +378,7 @@ class RuleCompilationManager(private val context: Context) {
                 }
                 else -> "result.putExtra(\"$key\", \"${esc(value)}\");"
             }
-        }?.let { "\n$it" } ?: ""
+        } ?: ""
 
         return """
             package engine;
@@ -455,7 +455,7 @@ class RuleCompilationManager(private val context: Context) {
                     if (REPLACE_EXTRAS) {
                         result.replaceExtras(new android.os.Bundle());
                     }
-                    // extras$extrasCode
+                    $extrasCode
                     return BLOCK_SUBSEQUENT;
                 }
             }
