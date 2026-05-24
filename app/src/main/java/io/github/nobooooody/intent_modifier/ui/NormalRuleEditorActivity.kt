@@ -49,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -362,19 +363,25 @@ private fun NormalRuleEditorScreen(
 
                     var showMatchAdvanced by remember { mutableStateOf(false) }
                     Spacer(Modifier.height(4.dp))
-                    Row(
+                    Surface(
                         modifier = Modifier.fillMaxWidth().clickable { showMatchAdvanced = !showMatchAdvanced },
-                        verticalAlignment = Alignment.CenterVertically
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.small
                     ) {
-                        Text(
-                            stringResource(R.string.match_advanced),
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            if (showMatchAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                stringResource(R.string.match_advanced),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                if (showMatchAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = null
+                            )
+                        }
                     }
                     AnimatedVisibility(visible = showMatchAdvanced) {
                         Column {
@@ -463,19 +470,25 @@ private fun NormalRuleEditorScreen(
 
                     var showCustomAdvanced by remember { mutableStateOf(false) }
                     Spacer(Modifier.height(4.dp))
-                    Row(
+                    Surface(
                         modifier = Modifier.fillMaxWidth().clickable { showCustomAdvanced = !showCustomAdvanced },
-                        verticalAlignment = Alignment.CenterVertically
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = MaterialTheme.shapes.small
                     ) {
-                        Text(
-                            stringResource(R.string.custom_advanced),
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            if (showCustomAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                stringResource(R.string.custom_advanced),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                if (showCustomAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = null
+                            )
+                        }
                     }
                     AnimatedVisibility(visible = showCustomAdvanced) {
                         Column {
