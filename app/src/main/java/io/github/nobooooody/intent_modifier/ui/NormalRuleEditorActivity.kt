@@ -246,7 +246,7 @@ private fun NormalRuleEditorScreen(
             }
 
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("阻断后续规则", modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.block_subsequent), modifier = Modifier.weight(1f))
                 Switch(checked = blockSubsequent, onCheckedChange = { blockSubsequent = it })
             }
 
@@ -814,7 +814,7 @@ private fun NormalRuleEditorScreen(
                                     val result = withContext(Dispatchers.IO) { manager.compileAllRules(javaRules, normalRules) }
                                     withContext(Dispatchers.Main) {
                                         if (result.success) {
-                                            Toast.makeText(ctx, R.string.saved_and_compiled, Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
                                         } else {
                                             val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
                                             Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()

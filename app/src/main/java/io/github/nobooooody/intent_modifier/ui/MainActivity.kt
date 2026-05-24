@@ -16,6 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1048,7 +1049,10 @@ private fun LanguageDialog(currentLang: String, onDismiss: () -> Unit, onSelect:
         text = {
             Column {
                 options.forEachIndexed { index, label ->
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { selected = index }
+                    ) {
                         RadioButton(selected = selected == index, onClick = { selected = index })
                         Text(label, modifier = Modifier.padding(start = 8.dp))
                     }
