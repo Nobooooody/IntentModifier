@@ -2,13 +2,9 @@ package io.github.nobooooody.intent_modifier
 
 import android.app.Activity
 import android.app.AndroidAppHelper
-import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
-import android.database.Cursor
 import android.net.Uri
-import io.github.nobooooody.intent_modifier.ui.provider.RuleProvider
-import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Base64
@@ -19,12 +15,14 @@ import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.XSharedPreferences
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import io.github.nobooooody.intent_modifier.ui.provider.RuleProvider
 import org.json.JSONObject
 import java.io.File
+import java.lang.reflect.Method
 
 class XposedInit : IXposedHookLoadPackage {
 
-    var currentContext: Context? =  null
+    var currentContext: Context? = null
     private var lastVersion: Long = 0
     private var compiledRules: CompiledRules? = null
 
@@ -32,9 +30,6 @@ class XposedInit : IXposedHookLoadPackage {
         private const val TAG = "IntentModifier"
         private const val PREFS_NAME = "intent_modifier_config"
         private const val KEY_COMPILED_VERSION = "compiled_version"
-        private const val KEY_COMPILED_DEX = "compiled_dex"
-        private const val KEY_RULES_HASH = "rules_hash"
-        private const val KEY_RULE_COUNT = "rule_count"
 
         private val MODULE_PACKAGE = "io.github.nobooooody.intent_modifier"
     }
@@ -78,95 +73,156 @@ class XposedInit : IXposedHookLoadPackage {
         val launcherHooks = LauncherHooksLoader.getHooks()
         val hookType = launcherHooks[currentPkg]?.hookType ?: HOOK_INSTRUMENTATION
 
-
         when (hookType) {
-            HOOK_LAUNCHER3 -> {
-                hookLauncher3(lpparam)
-            }
-            HOOK_INSTRUMENTATION -> {
-                hookInstrumentation(lpparam)
-            }
-            else -> {
-                hookCustomClass(lpparam, hookType)
-            }
+            HOOK_LAUNCHER3 -> hookLauncher3(lpparam)
+            HOOK_INSTRUMENTATION -> hookInstrumentation(lpparam)
+            else -> hookCustomClass(lpparam, hookType)
         }
     }
+
+    // ─── 规则加载 ───────────────────────────────────────────────────────────────
 
     private fun loadRulesIfNeeded(lpparam: XC_LoadPackage.LoadPackageParam, ctx: Context?) {
         try {
             val targetPkg = lpparam.packageName
             val targetDataDir = "/data/data/$targetPkg"
 
-            val remoteVersion = tryGetRemoteVersion(lpparam, ctx)
+            val remoteVersion = tryGetRemoteVersion(lpparam)
 
-            val localDexFile = File("$targetDataDir/cache/intent_modifier_rules/rules.dex")
             val localMetaFile = File("$targetDataDir/cache/intent_modifier_rules/meta.json")
-
             var localVersion = 0L
-            var localHash = ""
-            var localRuleCount = 0
-
-            if (localDexFile.exists() && localMetaFile.exists()) {
+            if (localMetaFile.exists()) {
                 try {
-                    val metaJson = JSONObject(localMetaFile.readText())
-                    localVersion = metaJson.optLong("version", 0)
-                    localHash = metaJson.optString("hash", "")
-                    localRuleCount = metaJson.optInt("count", 0)
+                    localVersion = JSONObject(localMetaFile.readText()).optLong("version", 0)
                 } catch (e: Exception) {
                     log("Failed to read local meta: ${e.message}")
                 }
             }
 
             if (remoteVersion == null || remoteVersion == 0L) {
-                if (localDexFile.exists() && localRuleCount > 0) {
-                    log("No remote rules found, loading from local cache version=$localVersion")
-                    tryLoadLocalDex(lpparam, localDexFile, localRuleCount)
-                } else {
-                    log("No remote rules found (XSharedPreferences and ContentProvider both failed), and no local cache")
-                }
+                tryLoadLocalCached(lpparam, targetPkg)
                 return
             }
 
-            if (remoteVersion == localVersion && localDexFile.exists() && localRuleCount > 0) {
-                log("Local rules version=$localVersion is up to date")
-                tryLoadLocalDex(lpparam, localDexFile, localRuleCount)
-                return
+            if (remoteVersion == localVersion) {
+                if (tryLoadLocalCached(lpparam, targetPkg)) {
+                    log("Local rules version=$localVersion up to date")
+                    return
+                }
             }
 
             log("Need to update rules: remote=$remoteVersion, local=$localVersion")
-            val remoteDex = tryGetRemoteDex(ctx)
-            if (remoteDex.isNullOrEmpty()) {
-                if (localDexFile.exists() && localRuleCount > 0) {
-                    log("No remote dex available, falling back to local")
-                    tryLoadLocalDex(lpparam, localDexFile, localRuleCount)
-                }
+
+            // 下载 shared DEX
+            val sharedDexBase64 = tryGetRemoteDex(ctx)
+            if (sharedDexBase64.isNullOrEmpty()) {
+                tryLoadLocalCached(lpparam, targetPkg)
                 return
             }
 
-            val dexBytes = Base64.decode(remoteDex, Base64.NO_WRAP)
-            val remoteHash = tryGetRemoteHash(ctx) ?: ""
-            val remoteRuleCount = tryGetRemoteRuleCount(ctx)
+            // 尝试下载 app-specific DEX
+            val appDexBase64 = tryGetRemoteAppDex(ctx, targetPkg)
 
+            // 写入缓存
             val rulesDir = File("$targetDataDir/cache/intent_modifier_rules")
             rulesDir.deleteRecursively()
             rulesDir.mkdirs()
 
-            localDexFile.writeBytes(dexBytes)
-            localDexFile.setReadOnly()
+            val sharedDexFile = File(rulesDir, "rules_shared.dex")
+            sharedDexFile.writeBytes(Base64.decode(sharedDexBase64, Base64.NO_WRAP))
+            sharedDexFile.setReadOnly()
+
+            if (appDexBase64 != null) {
+                val appDexFile = File(rulesDir, "rules_app.dex")
+                appDexFile.writeBytes(Base64.decode(appDexBase64, Base64.NO_WRAP))
+                appDexFile.setReadOnly()
+            }
+
             localMetaFile.writeText(JSONObject().apply {
                 put("version", remoteVersion)
-                put("hash", remoteHash)
-                put("count", remoteRuleCount)
             }.toString())
 
-            tryLoadLocalDex(lpparam, localDexFile, remoteRuleCount)
+            loadDexAndBuildRules(lpparam, targetPkg, remoteVersion)
 
         } catch (e: Exception) {
             log("Failed to load rules: ${e.message}")
         }
     }
 
-    private fun tryGetRemoteVersion(lpparam: XC_LoadPackage.LoadPackageParam, ctx: Context?): Long? {
+    private fun tryLoadLocalCached(lpparam: XC_LoadPackage.LoadPackageParam, targetPkg: String): Boolean {
+        val rulesDir = File("/data/data/$targetPkg/cache/intent_modifier_rules")
+        val sharedDex = File(rulesDir, "rules_shared.dex")
+        val metaFile = File(rulesDir, "meta.json")
+        if (!sharedDex.exists() || !metaFile.exists()) return false
+
+        val version = try { JSONObject(metaFile.readText()).optLong("version", 0) } catch (e: Exception) { 0L }
+        loadDexAndBuildRules(lpparam, targetPkg, version)
+        return true
+    }
+
+    private fun loadDexAndBuildRules(lpparam: XC_LoadPackage.LoadPackageParam, targetPkg: String, version: Long) {
+        try {
+            if (compiledRules != null && lastVersion == version && lastVersion > 0) return
+
+            val rulesDir = "/data/data/$targetPkg/cache/intent_modifier_rules"
+            val dexPaths = mutableListOf("$rulesDir/rules_shared.dex")
+            val appDex = File("$rulesDir/rules_app.dex")
+            if (appDex.exists()) dexPaths.add(appDex.absolutePath)
+
+            val optimizedDir = File("$rulesDir/optimized").also { it.mkdirs() }
+            val path = dexPaths.joinToString(":")
+            val parentLoader = lpparam.classLoader
+            val dexClassLoader = dalvik.system.DexClassLoader(path, optimizedDir.absolutePath, null, parentLoader)
+
+            // 加载 shared RuleRegistry
+            val registryClasses = mutableListOf<Pair<String, String>>()
+            loadRegistry(dexClassLoader, "engine.RuleRegistry_shared")?.let { registryClasses.addAll(it) }
+
+            // 如果有 app DEX，加载 app RuleRegistry
+            if (appDex.exists()) {
+                val sanitizedPkg = targetPkg.replace('.', '_')
+                loadRegistry(dexClassLoader, "engine.RuleRegistry_app_$sanitizedPkg")?.let { registryClasses.addAll(it) }
+            }
+
+            // 按 priority 降序排列
+            registryClasses.sortByDescending { it.second.toIntOrNull() ?: 0 }
+
+            // 加载每条规则的方法
+            val rules = mutableListOf<LoadedRule>()
+            for ((className, _) in registryClasses) {
+                try {
+                    val ruleClass = dexClassLoader.loadClass(className)
+                    val evaluateMethod = ruleClass.getMethod("evaluate", Context::class.java, Intent::class.java, Intent::class.java)
+                    val executeMethod = ruleClass.getMethod("execute", Context::class.java, Intent::class.java, Intent::class.java)
+                    rules.add(LoadedRule(evaluateMethod, executeMethod))
+                    log("Loaded $className")
+                } catch (e: Exception) {
+                    log("Failed to load $className: ${e.message}")
+                }
+            }
+
+            compiledRules = if (rules.isNotEmpty()) CompiledRules(rules) else null
+            lastVersion = version
+            log("Successfully loaded ${rules.size} rules from ${dexPaths.size} DEX file(s)")
+        } catch (e: Exception) {
+            log("Failed to load DEX: ${e.message}")
+        }
+    }
+
+    private fun loadRegistry(classLoader: ClassLoader, registryName: String): List<Pair<String, String>>? {
+        return try {
+            val registryClass = classLoader.loadClass(registryName)
+            val raw = registryClass.getMethod("getRules").invoke(null) as Array<Array<Any>>
+            raw.map { Pair(it[0] as String, (it[1] as Int).toString()) }
+        } catch (e: Exception) {
+            log("Registry $registryName not found: ${e.message}")
+            null
+        }
+    }
+
+    // ─── 远端读取 ───────────────────────────────────────────────────────────────
+
+    private fun tryGetRemoteVersion(lpparam: XC_LoadPackage.LoadPackageParam): Long? {
         try {
             val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
             xprefs.makeWorldReadable()
@@ -176,11 +232,12 @@ class XposedInit : IXposedHookLoadPackage {
                 return version
             }
         } catch (e: Exception) {
-            log("XSharedPreferences failed: ${e.message}")
+            log("XSharedPreferences version failed: ${e.message}")
         }
 
         try {
-            val cursor = ctx?.contentResolver?.query(RuleProvider.URI_VERSION, null, null, null, null)
+            val ctx = currentContext ?: return null
+            val cursor = ctx.contentResolver.query(RuleProvider.URI_VERSION, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val version = it.getLong(0)
@@ -201,22 +258,19 @@ class XposedInit : IXposedHookLoadPackage {
         try {
             val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
             xprefs.makeWorldReadable()
-            val dex = xprefs.getString(KEY_COMPILED_DEX, null)
-            if (!dex.isNullOrEmpty()) {
-                return dex
-            }
+            val dex = xprefs.getString("shared_dex", null)
+            if (!dex.isNullOrEmpty()) return dex
         } catch (e: Exception) {
-            log("XSharedPreferences dex read failed: ${e.message}")
+            log("XSharedPreferences shared_dex failed: ${e.message}")
         }
 
         try {
-            val cursor = ctx?.contentResolver?.query(RuleProvider.URI_DEX, null, null, null, null)
+            if (ctx == null) return null
+            val cursor = ctx.contentResolver.query(RuleProvider.URI_DEX, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val dex = it.getString(0)
-                    if (!dex.isNullOrEmpty()) {
-                        return dex
-                    }
+                    if (!dex.isNullOrEmpty()) return dex
                 }
             }
         } catch (e: Exception) {
@@ -226,124 +280,58 @@ class XposedInit : IXposedHookLoadPackage {
         return null
     }
 
-    private fun tryGetRemoteHash(ctx: Context?): String? {
+    private fun tryGetRemoteAppDex(ctx: Context?, targetPkg: String): String? {
         try {
+            val sanitized = targetPkg.replace('.', '_')
             val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
             xprefs.makeWorldReadable()
-            val hash = xprefs.getString(KEY_RULES_HASH, null)
-            if (hash != null) {
-                log("Got hash=${hash.take(16)}... via XSharedPreferences")
-                return hash
-            }
+            val dex = xprefs.getString("app_dex_$sanitized", null)
+            if (!dex.isNullOrEmpty()) return dex
         } catch (e: Exception) {
-            log("XSharedPreferences hash failed: ${e.message}")
+            log("XSharedPreferences app_dex failed: ${e.message}")
         }
 
         try {
-            ctx?.contentResolver?.query(RuleProvider.URI_HASH, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val hash = cursor.getString(0)
-                    if (!hash.isNullOrEmpty()) {
-                        log("Got hash=${hash.take(16)}... via ContentProvider")
-                        return hash
-                    }
+            if (ctx == null) return null
+            val uri = Uri.withAppendedPath(RuleProvider.URI_DEX, targetPkg)
+            val cursor = ctx.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val dex = it.getString(0)
+                    if (!dex.isNullOrEmpty()) return dex
                 }
             }
         } catch (e: Exception) {
-            log("ContentProvider hash failed: ${e.message}")
+            log("ContentProvider app_dex failed: ${e.message}")
         }
 
         return null
     }
 
-    private fun tryGetRemoteRuleCount(ctx: Context?): Int {
-        try {
-            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
-            xprefs.makeWorldReadable()
-            val count = xprefs.getInt(KEY_RULE_COUNT, 0)
-            if (count > 0) {
-                log("Got rule count=$count via XSharedPreferences")
-                return count
-            }
-        } catch (e: Exception) {
-            log("XSharedPreferences rule count failed: ${e.message}")
-        }
-
-        try {
-            ctx?.contentResolver?.query(RuleProvider.URI_COUNT, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val count = cursor.getInt(0)
-                    log("Got rule count=$count via ContentProvider")
-                    return count
-                }
-            }
-        } catch (e: Exception) {
-            log("ContentProvider rule count failed: ${e.message}")
-        }
-
-        return 0
-    }
-
-    private fun tryLoadLocalDex(lpparam: XC_LoadPackage.LoadPackageParam, dexFile: File, ruleCount: Int) {
-        try {
-            if (compiledRules != null && lastVersion > 0) {
-                return
-            }
-
-            val targetPkg = lpparam.packageName
-            val targetDataDir = "/data/data/$targetPkg"
-            val optimizedDir = File("$targetDataDir/code_cache/optimized")
-            optimizedDir.mkdirs()
-
-            val dexClassLoader = dalvik.system.DexClassLoader(
-                dexFile.absolutePath,
-                optimizedDir.absolutePath,
-                dexFile.parentFile?.absolutePath,
-                lpparam.classLoader
-            )
-
-            val rules = mutableListOf<LoadedRule>()
-            for (i in 0 until ruleCount) {
-                try {
-                    val ruleClass = dexClassLoader.loadClass("engine.Rule_$i")
-                    val evaluateMethod = ruleClass.getMethod("evaluate", Context::class.java, Intent::class.java, Intent::class.java)
-                    val executeMethod = ruleClass.getMethod("execute", Context::class.java, Intent::class.java, Intent::class.java)
-                    rules.add(LoadedRule(evaluateMethod, executeMethod))
-                    log("Loaded Rule_$i")
-                } catch (e: Exception) {
-                    log("Failed to load Rule_$i: ${e.message}")
-                }
-            }
-
-            compiledRules = if (rules.isNotEmpty()) CompiledRules(rules) else null
-            log("Successfully loaded ${rules.size} rules from local DEX")
-        } catch (e: Exception) {
-            log("Failed to load local DEX: ${e.message}")
-        }
-    }
+    // ─── 规则执行 ───────────────────────────────────────────────────────────────
 
     private fun applyRules(intent: Intent): Intent {
         val rules = compiledRules
-        if (rules == null || rules.list.isEmpty()) {
-            return intent
-        }
+        if (rules == null || rules.list.isEmpty()) return intent
 
         val resultIntent = Intent(intent)
-        var matched = false
+        var executed = false
         for (rule in rules.list) {
             try {
-                val evalResult = rule.evaluateMethod.invoke(null, currentContext, intent, resultIntent) as? Boolean ?: false
-                if (evalResult) {
-                    rule.executeMethod.invoke(null, currentContext, intent, resultIntent)
-                    matched = true
-                    break
+                val matched = rule.evaluateMethod.invoke(null, currentContext, intent, resultIntent) as? Boolean ?: false
+                if (matched) {
+                    val shouldBlock = rule.executeMethod.invoke(null, currentContext, intent, resultIntent) as? Boolean ?: true
+                    executed = true
+                    if (shouldBlock) break
                 }
             } catch (e: Exception) {
                 log("Rule evaluation failed: ${e.message}")
             }
         }
-        return if (matched) resultIntent else intent
+        return if (executed) resultIntent else intent
     }
+
+    // ─── Hook 方法 ──────────────────────────────────────────────────────────────
 
     private fun hookInstrumentation(lpparam: XC_LoadPackage.LoadPackageParam) {
         XposedHelpers.findAndHookMethod(
@@ -352,9 +340,9 @@ class XposedInit : IXposedHookLoadPackage {
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     if (currentContext == null) {
-                        currentContext = AndroidAppHelper.currentApplication().getApplicationContext()
+                        currentContext = AndroidAppHelper.currentApplication()?.applicationContext
                     }
-                    loadRulesIfNeeded(lpparam,currentContext)
+                    loadRulesIfNeeded(lpparam, currentContext)
                     val intent = param.args[4] as? Intent ?: return
 
                     logIntent("$TAG: Original", intent)
@@ -376,9 +364,9 @@ class XposedInit : IXposedHookLoadPackage {
                     XposedBridge.hookMethod(method, object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
                             if (currentContext == null) {
-                                currentContext = AndroidAppHelper.currentApplication().getApplicationContext()
+                                currentContext = AndroidAppHelper.currentApplication()?.applicationContext
                             }
-                            loadRulesIfNeeded(lpparam,currentContext)
+                            loadRulesIfNeeded(lpparam, currentContext)
                             val intent = param.args[1] as? Intent ?: return
 
                             logIntent("$TAG L3: Original", intent)
@@ -401,7 +389,6 @@ class XposedInit : IXposedHookLoadPackage {
         try {
             val cls = Class.forName(hookClassName, false, lpparam.classLoader)
             val methods = cls.declaredMethods
-
             var hooked = false
             for (method in methods) {
                 if (method.name.contains("startActivity") && method.parameterTypes.any { it == Intent::class.java }) {
@@ -409,11 +396,10 @@ class XposedInit : IXposedHookLoadPackage {
                     XposedBridge.hookMethod(method, object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
                             if (currentContext == null) {
-                                currentContext = AndroidAppHelper.currentApplication().getApplicationContext()
+                                currentContext = AndroidAppHelper.currentApplication()?.applicationContext
                             }
-                            loadRulesIfNeeded(lpparam,currentContext)
+                            loadRulesIfNeeded(lpparam, currentContext)
                             val intent = param.args[intentIndex] as? Intent ?: return
-
                             logIntent("$TAG Custom: Original", intent)
                             val modifiedIntent = applyRules(intent)
                             if (modifiedIntent !== intent) {
@@ -426,16 +412,15 @@ class XposedInit : IXposedHookLoadPackage {
                     hooked = true
                 }
             }
-
             if (!hooked) {
                 for (method in methods) {
                     if (method.name.contains("startActivity")) {
                         XposedBridge.hookMethod(method, object : XC_MethodHook() {
                             override fun beforeHookedMethod(param: MethodHookParam) {
                                 if (currentContext == null) {
-                                    currentContext = AndroidAppHelper.currentApplication().getApplicationContext()
+                                    currentContext = AndroidAppHelper.currentApplication()?.applicationContext
                                 }
-                                loadRulesIfNeeded(lpparam,currentContext)
+                                loadRulesIfNeeded(lpparam, currentContext)
                                 for (i in param.args.indices) {
                                     if (param.args[i] is Intent) {
                                         val intent = param.args[i] as Intent
