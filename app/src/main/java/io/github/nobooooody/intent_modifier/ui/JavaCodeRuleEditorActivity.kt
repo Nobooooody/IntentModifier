@@ -236,7 +236,7 @@ fun JavaCodeRuleForm(
 
     fun doTestCompile() {
         if (condition.isBlank() && action.isBlank()) {
-            errorDialogMessage = ctx.getString(R.string.compile_failed)
+            errorDialogMessage = ctx.getString(R.string.condition_or_action_required)
             return
         }
         isCompiling = true

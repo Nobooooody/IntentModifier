@@ -201,4 +201,5 @@
     <string name="batch_delete_confirm_title">Delete Rules</string>
     <string name="batch_delete_confirm_message">Are you sure you want to delete %1$d rules?</string>
     <string name="close">Close</string>
+    <string name="condition_or_action_required">Please fill in condition or action</string>
 </resources>
