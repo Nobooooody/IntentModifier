@@ -431,11 +431,13 @@ fun NormalRuleForm(
 
             // 优先级
             OutlinedTextField(
-                value = priority, onValueChange = { priority = it },
+                value = priority,
+                onValueChange = { if (it.all { c -> c.isDigit() || c == '-' }) priority = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.priority)) },
                 placeholder = { Text(stringResource(R.string.priority_hint)) },
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
 
             Spacer(Modifier.height(16.dp))

@@ -62,6 +62,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.JavaCodeRule
@@ -310,11 +312,13 @@ fun JavaCodeRuleForm(
 
             // 优先级
             OutlinedTextField(
-                value = priority, onValueChange = { priority = it },
+                value = priority,
+                onValueChange = { if (it.all { c -> c.isDigit() || c == '-' }) priority = it },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.priority)) },
                 placeholder = { Text(stringResource(R.string.priority_hint)) },
-                singleLine = true
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
 
             Spacer(Modifier.height(16.dp))
