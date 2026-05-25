@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +52,7 @@ class TabbedRuleEditorActivity : ComponentActivity() {
             @OptIn(ExperimentalMaterial3Api::class)
             IntentModifierTheme {
                 var tabIndex by remember { mutableIntStateOf(0) }
+                var saveTrigger by remember { mutableIntStateOf(0) }
                 Scaffold(
                     topBar = {
                         TopAppBar(
@@ -58,6 +60,11 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                             navigationIcon = {
                                 IconButton(onClick = { finish() }) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                }
+                            },
+                            actions = {
+                                IconButton(onClick = { saveTrigger++ }) {
+                                    Icon(Icons.Default.Check, contentDescription = null)
                                 }
                             }
                         )
@@ -84,7 +91,8 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                                         val currentRules = repo.getNormalRules().toMutableList()
                                         currentRules.add(rule)
                                         repo.saveNormalRules(currentRules)
-                                    }
+                                    },
+                                    saveTrigger = saveTrigger
                                 )
                             }
                             1 -> key("java_rule_form") {
@@ -94,7 +102,8 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                                         val currentRules = repo.getJavaCodeRules().toMutableList()
                                         currentRules.add(rule)
                                         repo.saveJavaCodeRules(currentRules)
-                                    }
+                                    },
+                                    saveTrigger = saveTrigger
                                 )
                             }
                         }

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
+import java.util.UUID
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -54,7 +56,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,6 +116,7 @@ class NormalRuleEditorActivity : ComponentActivity() {
         setContent {
             @OptIn(ExperimentalMaterial3Api::class)
             IntentModifierTheme {
+                var saveTrigger by remember { mutableIntStateOf(0) }
                 Scaffold(
                     topBar = {
                         TopAppBar(
@@ -119,6 +124,11 @@ class NormalRuleEditorActivity : ComponentActivity() {
                             navigationIcon = {
                                 IconButton(onClick = { finish() }) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                }
+                            },
+                            actions = {
+                                IconButton(onClick = { saveTrigger++ }) {
+                                    Icon(Icons.Default.Check, contentDescription = null)
                                 }
                             }
                         )
@@ -136,7 +146,8 @@ class NormalRuleEditorActivity : ComponentActivity() {
                             }
                             repo.saveNormalRules(currentRules)
                         },
-                        modifier = Modifier.padding(padding)
+                        modifier = Modifier.padding(padding),
+                        saveTrigger = saveTrigger
                     )
                 }
             }
@@ -149,7 +160,8 @@ class NormalRuleEditorActivity : ComponentActivity() {
 fun NormalRuleForm(
     editingRule: NormalRule?,
     onSave: (NormalRule) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    saveTrigger: Int = 0
 ) {
     val ctx = LocalContext.current
     var name by remember { mutableStateOf(editingRule?.name ?: "") }
@@ -181,6 +193,109 @@ fun NormalRuleForm(
     var isCompiling by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    fun doSave() {
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) {
+            Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
+            return
+        }
+        var hasError = false
+        for (extra in extras) {
+            if (extra.key.isBlank()) {
+                Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
+                hasError = true; break
+            }
+            val valStr = extra.values.firstOrNull() ?: ""
+            when (extra.type) {
+                "integer" -> if (valStr.isNotBlank() && valStr.toIntOrNull() == null) {
+                    Toast.makeText(ctx, R.string.error_invalid_integer, Toast.LENGTH_SHORT).show()
+                    hasError = true; break
+                }
+                "long" -> if (valStr.isNotBlank() && valStr.toLongOrNull() == null) {
+                    Toast.makeText(ctx, R.string.error_invalid_long, Toast.LENGTH_SHORT).show()
+                    hasError = true; break
+                }
+                "decimal" -> if (valStr.isNotBlank() && valStr.toDoubleOrNull() == null) {
+                    Toast.makeText(ctx, R.string.error_invalid_number, Toast.LENGTH_SHORT).show()
+                    hasError = true; break
+                }
+            }
+            if (hasError) break
+        }
+        if (hasError) return
+        val targetList = targetPackages.toList()
+        val validExtras = extras.filter { it.key.isNotBlank() }
+        val priorityVal = priority.trim().toIntOrNull() ?: 0
+        val trimmedCustomType = customType.trim()
+        val customFlagsVal = customFlags.trim().toIntOrNull() ?: 0
+        val rule = NormalRule(
+            id = editingRule?.id ?: UUID.randomUUID().toString(),
+            name = trimmedName,
+            enabled = enabled,
+            targetPackages = targetList,
+            blockSubsequent = blockSubsequent,
+            priority = priorityVal,
+            matchPackage = matchPackage.trim().ifEmpty { null },
+            matchAction = matchAction.trim().ifEmpty { null },
+            matchData = matchData.trim().ifEmpty { null },
+            matchClass = matchClass.trim().ifEmpty { null },
+            matchCategories = matchCategories.filter { it.isNotBlank() },
+            matchType = matchType.trim().ifEmpty { null },
+            customPackage = customPackage.trim().ifEmpty { null },
+            customAction = customAction.trim().ifEmpty { null },
+            customData = customData.trim().ifEmpty { null },
+            customClass = customClass.trim().ifEmpty { null },
+            customCategories = customCategories.filter { it.isNotBlank() },
+            customFlags = customFlagsVal,
+            customType = trimmedCustomType.ifEmpty { null },
+            extras = validExtras,
+            replaceCategories = replaceCategories,
+            replaceExtras = replaceExtras
+        )
+        onSave(rule)
+        isSaving = true
+        compileResult = null
+        scope.launch {
+            try {
+                val repo = ModifierRepository(ctx)
+                val javaRules = repo.getJavaCodeRules()
+                    .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
+                    .sortedByDescending { it.priority }
+                val normalRules = repo.getNormalRules().filter { it.enabled }
+                if (javaRules.isEmpty() && normalRules.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(ctx, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
+                        delay(1500)
+                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
+                    }
+                } else {
+                    val manager = RuleCompilationManager(ctx)
+                    val result = withContext(Dispatchers.IO) { manager.compileAllRules(javaRules, normalRules) }
+                    withContext(Dispatchers.Main) {
+                        if (result.success) {
+                            Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${ctx.getString(R.string.compile_success)}", Toast.LENGTH_LONG).show()
+                        } else {
+                            val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
+                            Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()
+                        }
+                        delay(1500)
+                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
+                    delay(1500)
+                    (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(saveTrigger) {
+        if (saveTrigger > 0) doSave()
+    }
 
     val packageManager = ctx.packageManager
 
@@ -768,107 +883,7 @@ fun NormalRuleForm(
                 Spacer(Modifier.padding(horizontal = 8.dp))
 
                 Button(
-                    onClick = {
-                        val trimmedName = name.trim()
-                        if (trimmedName.isBlank()) {
-                            Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-                        var hasError = false
-                        for (extra in extras) {
-                            if (extra.key.isBlank()) {
-                                Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
-                                hasError = true; break
-                            }
-                            val valStr = extra.values.firstOrNull() ?: ""
-                            when (extra.type) {
-                                "integer" -> if (valStr.isNotBlank() && valStr.toIntOrNull() == null) {
-                                    Toast.makeText(ctx, R.string.error_invalid_integer, Toast.LENGTH_SHORT).show()
-                                    hasError = true; break
-                                }
-                                "long" -> if (valStr.isNotBlank() && valStr.toLongOrNull() == null) {
-                                    Toast.makeText(ctx, R.string.error_invalid_long, Toast.LENGTH_SHORT).show()
-                                    hasError = true; break
-                                }
-                                "decimal" -> if (valStr.isNotBlank() && valStr.toDoubleOrNull() == null) {
-                                    Toast.makeText(ctx, R.string.error_invalid_number, Toast.LENGTH_SHORT).show()
-                                    hasError = true; break
-                                }
-                                "uri" -> if (valStr.isNotBlank()) {
-                                    try {
-                                        android.net.Uri.parse(valStr)
-                                    } catch (e: Exception) {
-                                        Toast.makeText(ctx, R.string.error_invalid_uri, Toast.LENGTH_SHORT).show()
-                                        hasError = true; break
-                                    }
-                                }
-                            }
-                        }
-                        if (hasError) { isSaving = false; return@Button }
-                        isSaving = true
-                        val rule = NormalRule(
-                            id = editingRule?.id ?: java.util.UUID.randomUUID().toString(),
-                            enabled = enabled,
-                            name = trimmedName,
-                            targetPackages = targetPackages,
-                            blockSubsequent = blockSubsequent,
-                            priority = priority.toIntOrNull() ?: 0,
-                            matchPackage = matchPackage.trim().ifBlank { null },
-                            matchAction = matchAction.trim().ifBlank { null },
-                            matchClass = matchClass.trim().ifBlank { null },
-                            matchData = matchData.trim().ifBlank { null },
-                            matchCategories = matchCategories,
-                            matchType = matchType.trim().ifBlank { null },
-                            customPackage = customPackage.trim().ifBlank { null },
-                            customAction = customAction.trim().ifBlank { null },
-                            customClass = customClass.trim().ifBlank { null },
-                            customData = customData.trim().ifBlank { null },
-                            customCategories = customCategories,
-                            replaceCategories = replaceCategories,
-                            replaceExtras = replaceExtras,
-                            customType = customType.trim().ifBlank { null },
-                            customFlags = customFlags.trim().toIntOrNull(),
-                            extras = extras
-                        )
-                        onSave(rule)
-
-                        Toast.makeText(ctx, R.string.compiling_all_rules, Toast.LENGTH_SHORT).show()
-                        scope.launch {
-                            try {
-                                val repo = ModifierRepository(ctx)
-                                val javaRules = repo.getJavaCodeRules()
-                                    .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
-                                    .sortedByDescending { it.priority }
-                                val normalRules = repo.getNormalRules().filter { it.enabled }
-                                if (javaRules.isEmpty() && normalRules.isEmpty()) {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(ctx, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
-                                        delay(1500)
-                                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
-                                    }
-                                } else {
-                                    val manager = RuleCompilationManager(ctx)
-                                    val result = withContext(Dispatchers.IO) { manager.compileAllRules(javaRules, normalRules) }
-                                    withContext(Dispatchers.Main) {
-                                        if (result.success) {
-                                            Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
-                                            Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()
-                                        }
-                                        delay(1500)
-                                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
-                                    delay(1500)
-                                    (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
-                                }
-                            }
-                        }
-                    },
+                    onClick = { doSave() },
                     modifier = Modifier.weight(1f),
                     enabled = !isCompiling && !isSaving
                 ) {

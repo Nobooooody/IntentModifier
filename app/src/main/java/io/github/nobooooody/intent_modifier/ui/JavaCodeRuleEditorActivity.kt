@@ -29,7 +29,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -100,6 +103,7 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
         setContent {
             @OptIn(ExperimentalMaterial3Api::class)
             IntentModifierTheme {
+                var saveTrigger by remember { mutableIntStateOf(0) }
                 Scaffold(
                     topBar = {
                         TopAppBar(
@@ -107,6 +111,11 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
                             navigationIcon = {
                                 IconButton(onClick = { finish() }) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                }
+                            },
+                            actions = {
+                                IconButton(onClick = { saveTrigger++ }) {
+                                    Icon(Icons.Default.Check, contentDescription = null)
                                 }
                             }
                         )
@@ -124,7 +133,8 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
                             }
                             repo.saveJavaCodeRules(currentRules)
                         },
-                        modifier = Modifier.padding(padding)
+                        modifier = Modifier.padding(padding),
+                        saveTrigger = saveTrigger
                     )
                 }
             }
@@ -137,7 +147,8 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
 fun JavaCodeRuleForm(
     editingRule: JavaCodeRule?,
     onSave: (JavaCodeRule) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    saveTrigger: Int = 0
 ) {
     val ctx = LocalContext.current
     var name by remember { mutableStateOf(editingRule?.name ?: "") }
@@ -152,6 +163,67 @@ fun JavaCodeRuleForm(
     var isCompiling by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    fun doSave() {
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) {
+            Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
+            return
+        }
+        isSaving = true
+        val rule = JavaCodeRule(
+            enabled = enabled,
+            name = trimmedName,
+            targetPackages = targetPackages,
+            imports = imports.trim(),
+            members = members.trim(),
+            condition = condition.trim(),
+            action = action.trim(),
+            priority = priority.toIntOrNull() ?: 0
+        )
+        onSave(rule)
+
+        Toast.makeText(ctx, R.string.compiling_all_rules, Toast.LENGTH_SHORT).show()
+        scope.launch {
+            try {
+                val repo = ModifierRepository(ctx)
+                val javaRules = repo.getJavaCodeRules()
+                    .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
+                    .sortedByDescending { it.priority }
+                val normalRules = repo.getNormalRules().filter { it.enabled }
+                if (javaRules.isEmpty() && normalRules.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(ctx, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
+                        delay(1500)
+                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
+                    }
+                } else {
+                    val manager = RuleCompilationManager(ctx)
+                    val result = withContext(Dispatchers.IO) { manager.compileAllRules(javaRules, normalRules) }
+                    withContext(Dispatchers.Main) {
+                        if (result.success) {
+                            Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
+                        } else {
+                            val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
+                            Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()
+                        }
+                        delay(1500)
+                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
+                    delay(1500)
+                    (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(saveTrigger) {
+        if (saveTrigger > 0) doSave()
+    }
 
     val appPickerLauncher = rememberLauncherForActivityResult<Intent, ActivityResult>(
         ActivityResultContracts.StartActivityForResult()
@@ -364,62 +436,7 @@ fun JavaCodeRuleForm(
                 Spacer(Modifier.padding(horizontal = 8.dp))
 
                 Button(
-                    onClick = {
-                        val trimmedName = name.trim()
-                        if (trimmedName.isBlank()) {
-                            Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-                        isSaving = true
-                        val rule = JavaCodeRule(
-                            enabled = enabled,
-                            name = trimmedName,
-                            targetPackages = targetPackages,
-                            imports = imports.trim(),
-                            members = members.trim(),
-                            condition = condition.trim(),
-                            action = action.trim(),
-                            priority = priority.toIntOrNull() ?: 0
-                        )
-                        onSave(rule)
-
-                        Toast.makeText(ctx, R.string.compiling_all_rules, Toast.LENGTH_SHORT).show()
-                        scope.launch {
-                            try {
-                                val repo = ModifierRepository(ctx)
-                                val javaRules = repo.getJavaCodeRules()
-                                    .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
-                                    .sortedByDescending { it.priority }
-                                val normalRules = repo.getNormalRules().filter { it.enabled }
-                                if (javaRules.isEmpty() && normalRules.isEmpty()) {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(ctx, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
-                                        delay(1500)
-                                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
-                                    }
-                                } else {
-                                    val manager = RuleCompilationManager(ctx)
-                                    val result = withContext(Dispatchers.IO) { manager.compileAllRules(javaRules, normalRules) }
-                                    withContext(Dispatchers.Main) {
-                                        if (result.success) {
-                                            Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
-                                            Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()
-                                        }
-                                        delay(1500)
-                                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
-                                    delay(1500)
-                                    (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
-                                }
-                            }
-                        }
-                    },
+                    onClick = { doSave() },
                     modifier = Modifier.weight(1f),
                     enabled = !isCompiling && !isSaving
                 ) {
