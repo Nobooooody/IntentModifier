@@ -58,6 +58,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -416,79 +417,10 @@ fun NormalRuleForm(
 
             Spacer(Modifier.height(16.dp))
 
-            // 启用 + 阻断
+            // 启用
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.enabled), modifier = Modifier.weight(1f))
                 Switch(checked = enabled, onCheckedChange = { enabled = it })
-            }
-
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.block_subsequent), modifier = Modifier.weight(1f))
-                Switch(checked = blockSubsequent, onCheckedChange = { blockSubsequent = it })
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // 优先级
-            OutlinedTextField(
-                value = priority,
-                onValueChange = { if (it.all { c -> c.isDigit() || c == '-' }) priority = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.priority)) },
-                placeholder = { Text(stringResource(R.string.priority_hint)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            // Target apps (compilation scope)
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.target_apps_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        OutlinedButton(onClick = {
-                            val intent = Intent(ctx, AppPickerActivity::class.java).apply {
-                                putExtra(AppPickerActivity.EXTRA_MULTI_SELECT, true)
-                            }
-                            appPickerLauncher.launch(intent)
-                        }) {
-                            Text(if (targetPackages.isEmpty()) stringResource(R.string.target_apps_pick) else stringResource(R.string.target_apps_add))
-                        }
-                    }
-                    Text(stringResource(R.string.target_apps_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (targetPackages.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            targetPackages.forEach { pkg ->
-                                val label = try {
-                                    packageManager.getApplicationInfo(pkg, 0).loadLabel(packageManager).toString()
-                                } catch (e: Exception) { pkg }
-                                Surface(
-                                    shape = MaterialTheme.shapes.small,
-                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                    tonalElevation = 0.dp
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
-                                    ) {
-                                        Text("$label ($pkg)", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                                        Spacer(Modifier.width(4.dp))
-                                        Icon(
-                                            Icons.Default.Close, contentDescription = stringResource(R.string.remove),
-                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                            modifier = Modifier.clickable { targetPackages = targetPackages - pkg }.padding(4.dp).size(18.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -743,6 +675,137 @@ fun NormalRuleForm(
                                 minLines = 1,
                                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                             )
+                            Spacer(Modifier.height(8.dp))
+                            HorizontalDivider()
+                            Spacer(Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(R.string.extra_title), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                                IconButton(onClick = { extras = extras + ExtraItem("", "string") }) {
+                                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.extra_add))
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(stringResource(R.string.replace_extras))
+                                Switch(
+                                    checked = replaceExtras,
+                                    onCheckedChange = { replaceExtras = it }
+                                )
+                            }
+                            extras.forEachIndexed { idx, extra ->
+                                Spacer(Modifier.height(8.dp))
+                                Card(modifier = Modifier.fillMaxWidth()) {
+                                    Column(Modifier.padding(8.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            OutlinedTextField(
+                                                value = extra.key,
+                                                onValueChange = { newKey ->
+                                                    val list = extras.toMutableList()
+                                                    list[idx] = extra.copy(key = newKey)
+                                                    extras = list
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                                label = { Text(stringResource(R.string.extra_key)) },
+                                                singleLine = true
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Box {
+                                                val internalTypes = listOf("string", "integer", "long", "decimal", "boolean", "uri", "component", "null")
+                                                val typeLabels = mapOf(
+                                                    "string" to stringResource(R.string.type_string),
+                                                    "integer" to stringResource(R.string.type_integer),
+                                                    "long" to stringResource(R.string.type_long),
+                                                    "decimal" to stringResource(R.string.type_decimal),
+                                                    "boolean" to stringResource(R.string.type_boolean),
+                                                    "uri" to stringResource(R.string.type_uri),
+                                                    "component" to stringResource(R.string.type_component),
+                                                    "null" to stringResource(R.string.type_null)
+                                                )
+                                                var expandedType by remember { mutableStateOf(false) }
+                                                OutlinedButton(onClick = { expandedType = true }) {
+                                                    Text(typeLabels[extra.type] ?: extra.type, maxLines = 1)
+                                                }
+                                                DropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
+                                                    internalTypes.forEach { t ->
+                                                        DropdownMenuItem(
+                                                            text = { Text(typeLabels[t] ?: t) },
+                                                            onClick = {
+                                                                val list = extras.toMutableList()
+                                                                val defaultVal = when (t) {
+                                                                    "boolean" -> "true"
+                                                                    "null" -> ""
+                                                                    else -> ""
+                                                                }
+                                                                list[idx] = extra.copy(type = t, values = listOf(defaultVal))
+                                                                extras = list
+                                                                expandedType = false
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Spacer(Modifier.width(4.dp))
+                                            IconButton(onClick = {
+                                                val list = extras.toMutableList()
+                                                list.removeAt(idx)
+                                                extras = list
+                                            }) {
+                                                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.extra_delete))
+                                            }
+                                        }
+                                        Spacer(Modifier.height(4.dp))
+                                        when (extra.type) {
+                                            "boolean" -> {
+                                                val boolValue = extra.values.firstOrNull()?.toBooleanStrictOrNull() ?: true
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        stringResource(R.string.type_boolean),
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    Switch(
+                                                        checked = boolValue,
+                                                        onCheckedChange = { checked ->
+                                                            val list = extras.toMutableList()
+                                                            list[idx] = extra.copy(values = listOf(checked.toString()))
+                                                            extras = list
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                            "null" -> {
+                                                Text(
+                                                    stringResource(R.string.type_null),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            else -> {
+                                                OutlinedTextField(
+                                                    value = extra.values.firstOrNull() ?: "",
+                                                    onValueChange = { newValue ->
+                                                        val list = extras.toMutableList()
+                                                        list[idx] = extra.copy(values = listOf(newValue))
+                                                        extras = list
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    label = { Text(stringResource(R.string.extra_value)) },
+                                                    minLines = 1,
+                                                    keyboardOptions = KeyboardOptions(
+                                                        keyboardType = when (extra.type) {
+                                                            "integer", "long" -> KeyboardType.Number
+                                                            "decimal" -> KeyboardType.Decimal
+                                                            else -> KeyboardType.Text
+                                                        }
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -750,131 +813,67 @@ fun NormalRuleForm(
 
             Spacer(Modifier.height(16.dp))
 
-            // Extras
+            // 优先级
+            OutlinedTextField(
+                value = priority,
+                onValueChange = { if (it.all { c -> c.isDigit() || c == '-' }) priority = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.priority)) },
+                placeholder = { Text(stringResource(R.string.priority_hint)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // 阻止后续规则
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.block_subsequent), modifier = Modifier.weight(1f))
+                Switch(checked = blockSubsequent, onCheckedChange = { blockSubsequent = it })
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Target apps (compilation scope)
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.extra_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { extras = extras + ExtraItem("", "string") }) {
-                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.extra_add))
+                        Text(stringResource(R.string.target_apps_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                        OutlinedButton(onClick = {
+                            val intent = Intent(ctx, AppPickerActivity::class.java).apply {
+                                putExtra(AppPickerActivity.EXTRA_MULTI_SELECT, true)
+                            }
+                            appPickerLauncher.launch(intent)
+                        }) {
+                            Text(if (targetPackages.isEmpty()) stringResource(R.string.target_apps_pick) else stringResource(R.string.target_apps_add))
                         }
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(stringResource(R.string.replace_extras))
-                        Switch(
-                            checked = replaceExtras,
-                            onCheckedChange = { replaceExtras = it }
-                        )
-                    }
-                    extras.forEachIndexed { idx, extra ->
+                    Text(stringResource(R.string.target_apps_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (targetPackages.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(8.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    OutlinedTextField(
-                                        value = extra.key,
-                                        onValueChange = { newKey ->
-                                            val list = extras.toMutableList()
-                                            list[idx] = extra.copy(key = newKey)
-                                            extras = list
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        label = { Text(stringResource(R.string.extra_key)) },
-                                        singleLine = true
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Box {
-                                        val internalTypes = listOf("string", "integer", "long", "decimal", "boolean", "uri", "component", "null")
-                                        val typeLabels = mapOf(
-                                            "string" to stringResource(R.string.type_string),
-                                            "integer" to stringResource(R.string.type_integer),
-                                            "long" to stringResource(R.string.type_long),
-                                            "decimal" to stringResource(R.string.type_decimal),
-                                            "boolean" to stringResource(R.string.type_boolean),
-                                            "uri" to stringResource(R.string.type_uri),
-                                            "component" to stringResource(R.string.type_component),
-                                            "null" to stringResource(R.string.type_null)
-                                        )
-                                        var expandedType by remember { mutableStateOf(false) }
-                                        OutlinedButton(onClick = { expandedType = true }) {
-                                            Text(typeLabels[extra.type] ?: extra.type, maxLines = 1)
-                                        }
-                                        DropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
-                                            internalTypes.forEach { t ->
-                                                DropdownMenuItem(
-                                                    text = { Text(typeLabels[t] ?: t) },
-                                                    onClick = {
-                                                        val list = extras.toMutableList()
-                                                        val defaultVal = when (t) {
-                                                            "boolean" -> "true"
-                                                            "null" -> ""
-                                                            else -> ""
-                                                        }
-                                                        list[idx] = extra.copy(type = t, values = listOf(defaultVal))
-                                                        extras = list
-                                                        expandedType = false
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                    Spacer(Modifier.width(4.dp))
-                                    IconButton(onClick = {
-                                        val list = extras.toMutableList()
-                                        list.removeAt(idx)
-                                        extras = list
-                                    }) {
-                                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.extra_delete))
-                                    }
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                when (extra.type) {
-                                    "boolean" -> {
-                                        val boolValue = extra.values.firstOrNull()?.toBooleanStrictOrNull() ?: true
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                stringResource(R.string.type_boolean),
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                            Switch(
-                                                checked = boolValue,
-                                                onCheckedChange = { checked ->
-                                                    val list = extras.toMutableList()
-                                                    list[idx] = extra.copy(values = listOf(checked.toString()))
-                                                    extras = list
-                                                }
-                                            )
-                                        }
-                                    }
-                                    "null" -> {
-                                        Text(
-                                            stringResource(R.string.type_null),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    else -> {
-                                        OutlinedTextField(
-                                            value = extra.values.firstOrNull() ?: "",
-                                            onValueChange = { newValue ->
-                                                val list = extras.toMutableList()
-                                                list[idx] = extra.copy(values = listOf(newValue))
-                                                extras = list
-                                            },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            label = { Text(stringResource(R.string.extra_value)) },
-                                            minLines = 1,
-                                            keyboardOptions = KeyboardOptions(
-                                                keyboardType = when (extra.type) {
-                                                    "integer", "long" -> KeyboardType.Number
-                                                    "decimal" -> KeyboardType.Decimal
-                                                    else -> KeyboardType.Text
-                                                }
-                                            )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            targetPackages.forEach { pkg ->
+                                val label = try {
+                                    packageManager.getApplicationInfo(pkg, 0).loadLabel(packageManager).toString()
+                                } catch (e: Exception) { pkg }
+                                Surface(
+                                    shape = MaterialTheme.shapes.small,
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    tonalElevation = 0.dp
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
+                                    ) {
+                                        Text("$label ($pkg)", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                        Spacer(Modifier.width(4.dp))
+                                        Icon(
+                                            Icons.Default.Close, contentDescription = stringResource(R.string.remove),
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            modifier = Modifier.clickable { targetPackages = targetPackages - pkg }.padding(4.dp).size(18.dp)
                                         )
                                     }
                                 }
