@@ -79,12 +79,12 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                         TabRow(selectedTabIndex = tabIndex) {
                             Tab(
                                 selected = tabIndex == 0,
-                                onClick = { tabIndex = 0 },
+                                onClick = { tabIndex = 0; testCompileTrigger = 0; saveTrigger = 0 },
                                 text = { Text(stringResource(R.string.normal_rule)) }
                             )
                             Tab(
                                 selected = tabIndex == 1,
-                                onClick = { tabIndex = 1 },
+                                onClick = { tabIndex = 1; testCompileTrigger = 0; saveTrigger = 0 },
                                 text = { Text(stringResource(R.string.java_code_rule)) }
                             )
                         }
