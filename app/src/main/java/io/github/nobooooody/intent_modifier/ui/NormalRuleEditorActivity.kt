@@ -273,7 +273,7 @@ fun NormalRuleForm(
                 val normalRules = repo.getNormalRules().filter { it.enabled }
                 if (javaRules.isEmpty() && normalRules.isEmpty()) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(ctx, R.string.no_rules_to_compile, Toast.LENGTH_SHORT).show()
+                        errorDialogMessage = ctx.getString(R.string.no_rules_to_compile)
                         delay(1500)
                         (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
                     }

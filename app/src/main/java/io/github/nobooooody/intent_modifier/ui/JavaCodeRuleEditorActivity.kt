@@ -236,7 +236,7 @@ fun JavaCodeRuleForm(
 
     fun doTestCompile() {
         if (condition.isBlank() && action.isBlank()) {
-            Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
+            errorDialogMessage = ctx.getString(R.string.compile_failed)
             return
         }
         isCompiling = true
