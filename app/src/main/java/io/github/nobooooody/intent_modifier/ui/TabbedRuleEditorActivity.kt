@@ -21,6 +21,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -76,22 +77,26 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                             )
                         }
                         when (tabIndex) {
-                            0 -> NormalRuleForm(
-                                editingRule = null,
-                                onSave = { rule ->
-                                    val currentRules = repo.getNormalRules().toMutableList()
-                                    currentRules.add(rule)
-                                    repo.saveNormalRules(currentRules)
-                                }
-                            )
-                            1 -> JavaCodeRuleForm(
-                                editingRule = null,
-                                onSave = { rule ->
-                                    val currentRules = repo.getJavaCodeRules().toMutableList()
-                                    currentRules.add(rule)
-                                    repo.saveJavaCodeRules(currentRules)
-                                }
-                            )
+                            0 -> key("normal_rule_form") {
+                                NormalRuleForm(
+                                    editingRule = null,
+                                    onSave = { rule ->
+                                        val currentRules = repo.getNormalRules().toMutableList()
+                                        currentRules.add(rule)
+                                        repo.saveNormalRules(currentRules)
+                                    }
+                                )
+                            }
+                            1 -> key("java_rule_form") {
+                                JavaCodeRuleForm(
+                                    editingRule = null,
+                                    onSave = { rule ->
+                                        val currentRules = repo.getJavaCodeRules().toMutableList()
+                                        currentRules.add(rule)
+                                        repo.saveJavaCodeRules(currentRules)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
