@@ -39,7 +39,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -128,7 +128,7 @@ class NormalRuleEditorActivity : ComponentActivity() {
                             },
                             actions = {
                                 IconButton(onClick = { saveTrigger++ }) {
-                                    Icon(Icons.Default.Check, contentDescription = null)
+                                    Icon(Icons.Default.Save, contentDescription = null)
                                 }
                             }
                         )
