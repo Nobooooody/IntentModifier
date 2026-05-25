@@ -17,19 +17,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -223,16 +224,24 @@ fun JavaCodeRuleForm(
                                 val label = try {
                                     packageManager.getApplicationInfo(pkg, 0).loadLabel(packageManager).toString()
                                 } catch (e: Exception) { pkg }
-                                AssistChip(
-                                    onClick = {},
-                                    label = { Text("$label ($pkg)", maxLines = 1, style = MaterialTheme.typography.bodySmall) },
-                                    trailingIcon = {
+                                Surface(
+                                    shape = MaterialTheme.shapes.small,
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    tonalElevation = 0.dp
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
+                                    ) {
+                                        Text("$label ($pkg)", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                        Spacer(Modifier.width(4.dp))
                                         Icon(
                                             Icons.Default.Close, contentDescription = stringResource(R.string.remove),
-                                            modifier = Modifier.clickable { targetPackages = targetPackages - pkg }.padding(4.dp)
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            modifier = Modifier.clickable { targetPackages = targetPackages - pkg }.padding(4.dp).size(18.dp)
                                         )
                                     }
-                                )
+                                }
                             }
                         }
                     }

@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -294,16 +293,24 @@ fun NormalRuleForm(
                                 val label = try {
                                     packageManager.getApplicationInfo(pkg, 0).loadLabel(packageManager).toString()
                                 } catch (e: Exception) { pkg }
-                                AssistChip(
-                                    onClick = {},
-                                    label = { Text("$label ($pkg)", maxLines = 1, style = MaterialTheme.typography.bodySmall) },
-                                    trailingIcon = {
+                                Surface(
+                                    shape = MaterialTheme.shapes.small,
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    tonalElevation = 0.dp
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)
+                                    ) {
+                                        Text("$label ($pkg)", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                        Spacer(Modifier.width(4.dp))
                                         Icon(
                                             Icons.Default.Close, contentDescription = stringResource(R.string.remove),
-                                            modifier = Modifier.clickable { targetPackages = targetPackages - pkg }.padding(4.dp)
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            modifier = Modifier.clickable { targetPackages = targetPackages - pkg }.padding(4.dp).size(18.dp)
                                         )
                                     }
-                                )
+                                }
                             }
                         }
                     }
