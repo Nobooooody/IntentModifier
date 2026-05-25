@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -53,6 +54,7 @@ class TabbedRuleEditorActivity : ComponentActivity() {
             IntentModifierTheme {
                 var tabIndex by remember { mutableIntStateOf(0) }
                 var saveTrigger by remember { mutableIntStateOf(0) }
+                var testCompileTrigger by remember { mutableIntStateOf(0) }
                 Scaffold(
                     topBar = {
                         TopAppBar(
@@ -63,6 +65,9 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                                 }
                             },
                             actions = {
+                                IconButton(onClick = { testCompileTrigger++ }) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                                }
                                 IconButton(onClick = { saveTrigger++ }) {
                                     Icon(Icons.Default.Save, contentDescription = null)
                                 }
@@ -92,7 +97,8 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                                         currentRules.add(rule)
                                         repo.saveNormalRules(currentRules)
                                     },
-                                    saveTrigger = saveTrigger
+                                    saveTrigger = saveTrigger,
+                                    testCompileTrigger = testCompileTrigger
                                 )
                             }
                             1 -> key("java_rule_form") {
@@ -103,7 +109,8 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                                         currentRules.add(rule)
                                         repo.saveJavaCodeRules(currentRules)
                                     },
-                                    saveTrigger = saveTrigger
+                                    saveTrigger = saveTrigger,
+                                    testCompileTrigger = testCompileTrigger
                                 )
                             }
                         }

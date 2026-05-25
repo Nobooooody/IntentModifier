@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,7 +40,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -117,6 +120,7 @@ class NormalRuleEditorActivity : ComponentActivity() {
             @OptIn(ExperimentalMaterial3Api::class)
             IntentModifierTheme {
                 var saveTrigger by remember { mutableIntStateOf(0) }
+                var testCompileTrigger by remember { mutableIntStateOf(0) }
                 Scaffold(
                     topBar = {
                         TopAppBar(
@@ -127,6 +131,9 @@ class NormalRuleEditorActivity : ComponentActivity() {
                                 }
                             },
                             actions = {
+                                IconButton(onClick = { testCompileTrigger++ }) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                                }
                                 IconButton(onClick = { saveTrigger++ }) {
                                     Icon(Icons.Default.Save, contentDescription = null)
                                 }
@@ -147,7 +154,8 @@ class NormalRuleEditorActivity : ComponentActivity() {
                             repo.saveNormalRules(currentRules)
                         },
                         modifier = Modifier.padding(padding),
-                        saveTrigger = saveTrigger
+                        saveTrigger = saveTrigger,
+                        testCompileTrigger = testCompileTrigger
                     )
                 }
             }
@@ -161,7 +169,8 @@ fun NormalRuleForm(
     editingRule: NormalRule?,
     onSave: (NormalRule) -> Unit,
     modifier: Modifier = Modifier,
-    saveTrigger: Int = 0
+    saveTrigger: Int = 0,
+    testCompileTrigger: Int = 0
 ) {
     val ctx = LocalContext.current
     var name by remember { mutableStateOf(editingRule?.name ?: "") }
@@ -189,7 +198,7 @@ fun NormalRuleForm(
 
     var extras by remember { mutableStateOf(editingRule?.extras ?: emptyList()) }
 
-    var compileResult by remember { mutableStateOf<Pair<String, Color>?>(null) }
+    var errorDialogMessage by remember { mutableStateOf<String?>(null) }
     var isCompiling by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -255,7 +264,6 @@ fun NormalRuleForm(
         )
         onSave(rule)
         isSaving = true
-        compileResult = null
         scope.launch {
             try {
                 val repo = ModifierRepository(ctx)
@@ -295,6 +303,55 @@ fun NormalRuleForm(
 
     LaunchedEffect(saveTrigger) {
         if (saveTrigger > 0) doSave()
+    }
+
+    fun doTestCompile() {
+        isCompiling = true
+        scope.launch {
+            try {
+                val manager = RuleCompilationManager(ctx)
+                val testRule = NormalRule(
+                    enabled = true, name = "Test",
+                    matchPackage = matchPackage.trim().ifBlank { null },
+                    matchAction = matchAction.trim().ifBlank { null },
+                    matchClass = matchClass.trim().ifBlank { null },
+                    matchData = matchData.trim().ifBlank { null },
+                    matchCategories = matchCategories,
+                    matchType = matchType.trim().ifBlank { null },
+                    customPackage = customPackage.trim().ifBlank { null },
+                    customAction = customAction.trim().ifBlank { null },
+                    customClass = customClass.trim().ifBlank { null },
+                    customData = customData.trim().ifBlank { null },
+                    customCategories = customCategories,
+                    replaceCategories = replaceCategories,
+                    replaceExtras = replaceExtras,
+                    customType = customType.trim().ifBlank { null },
+                    customFlags = customFlags.trim().toIntOrNull(),
+                    extras = extras
+                )
+                val result = withContext(Dispatchers.IO) { manager.compileAllRules(emptyList(), listOf(testRule)) }
+                withContext(Dispatchers.Main) {
+                    if (result.success) {
+                        Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
+                    } else {
+                        val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
+                        val displayMsg = if (result.errorRuleName != null) "${result.errorRuleName}:\n$msg" else msg
+                        Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
+                        errorDialogMessage = displayMsg
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
+                    errorDialogMessage = "${ctx.getString(R.string.compile_failed)}: ${e.message}"
+                }
+            }
+            isCompiling = false
+        }
+    }
+
+    LaunchedEffect(testCompileTrigger) {
+        if (testCompileTrigger > 0) doTestCompile()
     }
 
     val packageManager = ctx.packageManager
@@ -830,50 +887,7 @@ fun NormalRuleForm(
             // Buttons
             Row(modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
-                    onClick = {
-                        isCompiling = true
-                        compileResult = Pair(ctx.getString(R.string.compiling), Color(0xFFFF9800))
-                        scope.launch {
-                            try {
-                                val manager = RuleCompilationManager(ctx)
-                                val testRule = NormalRule(
-                                    enabled = true, name = "Test",
-                                    matchPackage = matchPackage.trim().ifBlank { null },
-                                    matchAction = matchAction.trim().ifBlank { null },
-                                    matchClass = matchClass.trim().ifBlank { null },
-                                    matchData = matchData.trim().ifBlank { null },
-                                    matchCategories = matchCategories,
-                                    matchType = matchType.trim().ifBlank { null },
-                                    customPackage = customPackage.trim().ifBlank { null },
-                                    customAction = customAction.trim().ifBlank { null },
-                                    customClass = customClass.trim().ifBlank { null },
-                                    customData = customData.trim().ifBlank { null },
-                                    customCategories = customCategories,
-                                    replaceCategories = replaceCategories,
-                                    replaceExtras = replaceExtras,
-                                    customType = customType.trim().ifBlank { null },
-                                    customFlags = customFlags.trim().toIntOrNull(),
-                                    extras = extras
-                                )
-                                val result = withContext(Dispatchers.IO) { manager.compileAllRules(emptyList(), listOf(testRule)) }
-                                compileResult = if (result.success) {
-                                    Pair(ctx.getString(R.string.compile_success), Color(0xFF4CAF50))
-                                } else {
-                                    val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
-                                    Pair(if (result.errorRuleName != null) "${result.errorRuleName}:\n$msg" else msg, Color(0xFFF44336))
-                                }
-                                if (result.success) {
-                                    Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                compileResult = Pair("${ctx.getString(R.string.compile_failed)}: ${e.message}", Color(0xFFF44336))
-                                Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
-                            }
-                            isCompiling = false
-                        }
-                    },
+                    onClick = { doTestCompile() },
                     modifier = Modifier.weight(1f),
                     enabled = !isCompiling && !isSaving
                 ) {
@@ -890,11 +904,10 @@ fun NormalRuleForm(
                     Text(stringResource(R.string.save))
                 }
             }
+        }
 
-            compileResult?.let { (msg, color) ->
-                Spacer(Modifier.height(16.dp))
-                Text(msg, color = color, style = MaterialTheme.typography.bodyMedium)
-            }
+        errorDialogMessage?.let { msg ->
+            ErrorDialog(message = msg, onDismiss = { errorDialogMessage = null })
         }
     }
 
@@ -936,4 +949,29 @@ private fun CategoryListEditor(
             }
         }
     }
+}
+
+@Composable
+private fun ErrorDialog(
+    message: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.compile_failed)) },
+        text = {
+            SelectionContainer {
+                Text(
+                    text = message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }
