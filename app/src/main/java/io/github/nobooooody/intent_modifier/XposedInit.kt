@@ -100,6 +100,7 @@ class XposedInit : IXposedHookLoadPackage {
             }
 
             if (remoteVersion == null || remoteVersion == 0L) {
+                log("No remote version available, trying local cached DEX")
                 tryLoadLocalCached(lpparam, targetPkg)
                 return
             }
@@ -116,6 +117,7 @@ class XposedInit : IXposedHookLoadPackage {
             // 下载 shared DEX
             val sharedDexBase64 = tryGetRemoteDex(ctx)
             if (sharedDexBase64.isNullOrEmpty()) {
+                log("No remote DEX available, falling back to local cached DEX")
                 tryLoadLocalCached(lpparam, targetPkg)
                 return
             }
@@ -237,6 +239,7 @@ class XposedInit : IXposedHookLoadPackage {
 
         try {
             val ctx = currentContext ?: return null
+            log("Falling back to ContentProvider for version")
             val cursor = ctx.contentResolver.query(RuleProvider.URI_VERSION, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
@@ -266,6 +269,7 @@ class XposedInit : IXposedHookLoadPackage {
 
         try {
             if (ctx == null) return null
+            log("Falling back to ContentProvider for shared DEX")
             val cursor = ctx.contentResolver.query(RuleProvider.URI_DEX, null, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
@@ -293,6 +297,7 @@ class XposedInit : IXposedHookLoadPackage {
 
         try {
             if (ctx == null) return null
+            log("Falling back to ContentProvider for app DEX ($targetPkg)")
             val uri = Uri.withAppendedPath(RuleProvider.URI_DEX, targetPkg)
             val cursor = ctx.contentResolver.query(uri, null, null, null, null)
             cursor?.use {
