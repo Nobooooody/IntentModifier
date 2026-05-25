@@ -233,6 +233,7 @@ class XposedInit : IXposedHookLoadPackage {
                 log("Got remote version=$version via XSharedPreferences")
                 return version
             }
+            log("XSharedPreferences version is 0")
         } catch (e: Exception) {
             log("XSharedPreferences version failed: ${e.message}")
         }
@@ -263,6 +264,7 @@ class XposedInit : IXposedHookLoadPackage {
             xprefs.makeWorldReadable()
             val dex = xprefs.getString("shared_dex", null)
             if (!dex.isNullOrEmpty()) return dex
+            log("XSharedPreferences shared_dex is empty")
         } catch (e: Exception) {
             log("XSharedPreferences shared_dex failed: ${e.message}")
         }
@@ -291,6 +293,7 @@ class XposedInit : IXposedHookLoadPackage {
             xprefs.makeWorldReadable()
             val dex = xprefs.getString("app_dex_$sanitized", null)
             if (!dex.isNullOrEmpty()) return dex
+            log("XSharedPreferences app_dex_$sanitized is empty")
         } catch (e: Exception) {
             log("XSharedPreferences app_dex failed: ${e.message}")
         }
