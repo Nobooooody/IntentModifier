@@ -134,7 +134,7 @@
 
     <!-- Normal rule: custom intent -->
     <string name="custom_intent_title">自定义 Intent</string>
-    <string name="custom_intent_hint">覆盖匹配 Intent 的字段</string>
+    <string name="custom_intent_hint">覆盖匹配 Intent 的字段，留空则保持原值</string>
     <string name="custom_advanced">更多自定义选项</string>
     <string name="custom_package">自定义包名</string>
     <string name="custom_action">自定义操作</string>

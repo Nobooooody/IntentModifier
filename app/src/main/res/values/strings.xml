@@ -134,7 +134,7 @@
 
     <!-- Normal rule: custom intent -->
     <string name="custom_intent_title">Custom Intent</string>
-    <string name="custom_intent_hint">Override matched Intent fields</string>
+    <string name="custom_intent_hint">Override matched Intent fields, leave blank to keep original values</string>
     <string name="custom_advanced">More custom options</string>
     <string name="custom_package">Custom Package</string>
     <string name="custom_action">Custom Action</string>

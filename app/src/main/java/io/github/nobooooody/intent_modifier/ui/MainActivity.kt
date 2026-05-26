@@ -1120,8 +1120,6 @@ private suspend fun recompileAll(ctx: Context, repo: ModifierRepository) {
         .sortedByDescending { it.priority }
     val normalRules = repo.getNormalRules().filter { it.enabled }
 
-    if (javaRules.isEmpty() && normalRules.isEmpty()) return
-
     withContext(Dispatchers.IO) {
         RuleCompilationManager(ctx).compileAllRules(javaRules, normalRules)
     }

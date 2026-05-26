@@ -481,14 +481,6 @@ fun NormalRuleForm(
                             }
                         }
                     }
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = matchData, onValueChange = { matchData = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.match_data)) },
-                        minLines = 1,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
 
                     var showMatchAdvanced by remember { mutableStateOf(false) }
                     Spacer(Modifier.height(4.dp))
@@ -517,18 +509,32 @@ fun NormalRuleForm(
                         Column {
                             Spacer(Modifier.height(4.dp))
                             OutlinedTextField(
+                                value = matchData, onValueChange = { matchData = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.match_data)) },
+                                minLines = 1,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider()
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedTextField(
                                 value = matchAction, onValueChange = { matchAction = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text(stringResource(R.string.match_action)) },
                                 minLines = 1,
                                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                             )
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider()
                             Spacer(Modifier.height(4.dp))
                             CategoryListEditor(
                                 items = matchCategories,
                                 onItemsChange = { matchCategories = it },
                                 label = stringResource(R.string.match_categories)
                             )
+                            Spacer(Modifier.height(4.dp))
+                            HorizontalDivider()
                             Spacer(Modifier.height(4.dp))
                             OutlinedTextField(
                                 value = matchType, onValueChange = { matchType = it },
@@ -600,14 +606,6 @@ fun NormalRuleForm(
                             }
                         }
                     }
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = customData, onValueChange = { customData = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.custom_data)) },
-                        minLines = 1,
-                        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
-                    )
 
                     var showCustomAdvanced by remember { mutableStateOf(false) }
                     Spacer(Modifier.height(4.dp))
@@ -636,29 +634,35 @@ fun NormalRuleForm(
                         Column {
                             Spacer(Modifier.height(4.dp))
                             OutlinedTextField(
+                                value = customData, onValueChange = { customData = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(stringResource(R.string.custom_data)) },
+                                minLines = 1,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider()
+                            Spacer(Modifier.height(4.dp))
+                            OutlinedTextField(
                                 value = customAction, onValueChange = { customAction = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text(stringResource(R.string.custom_action)) },
                                 minLines = 1,
                                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                             )
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider()
                             Spacer(Modifier.height(4.dp))
                             CategoryListEditor(
                                 items = customCategories,
                                 onItemsChange = { customCategories = it },
-                                label = stringResource(R.string.custom_categories)
+                                label = stringResource(R.string.custom_categories),
+                                replaceSwitchLabel = stringResource(R.string.replace_categories),
+                                replaceSwitchChecked = replaceCategories,
+                                onReplaceSwitchChange = { replaceCategories = it }
                             )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(stringResource(R.string.replace_categories))
-                                Switch(
-                                    checked = replaceCategories,
-                                    onCheckedChange = { replaceCategories = it }
-                                )
-                            }
+                            Spacer(Modifier.height(4.dp))
+                            HorizontalDivider()
                             Spacer(Modifier.height(4.dp))
                             OutlinedTextField(
                                 value = customType, onValueChange = { customType = it },
@@ -667,6 +671,8 @@ fun NormalRuleForm(
                                 minLines = 1,
                                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                             )
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider()
                             Spacer(Modifier.height(4.dp))
                             OutlinedTextField(
                                 value = customFlags, onValueChange = { customFlags = it },
@@ -696,7 +702,7 @@ fun NormalRuleForm(
                                 )
                             }
                             extras.forEachIndexed { idx, extra ->
-                                Spacer(Modifier.height(8.dp))
+                                if (idx > 0) Spacer(Modifier.height(8.dp))
                                 Card(modifier = Modifier.fillMaxWidth()) {
                                     Column(Modifier.padding(8.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -916,7 +922,10 @@ fun NormalRuleForm(
 private fun CategoryListEditor(
     items: List<String>,
     onItemsChange: (List<String>) -> Unit,
-    label: String
+    label: String,
+    replaceSwitchLabel: String? = null,
+    replaceSwitchChecked: Boolean = false,
+    onReplaceSwitchChange: ((Boolean) -> Unit)? = null
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(8.dp)) {
@@ -946,6 +955,19 @@ private fun CategoryListEditor(
                     }) {
                         Icon(Icons.Default.Close, contentDescription = stringResource(R.string.extra_delete))
                     }
+                }
+            }
+            if (replaceSwitchLabel != null && onReplaceSwitchChange != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(replaceSwitchLabel)
+                    Switch(
+                        checked = replaceSwitchChecked,
+                        onCheckedChange = onReplaceSwitchChange
+                    )
                 }
             }
         }

@@ -119,35 +119,31 @@ class RuleCompilationManager(private val context: Context) {
                 ruleEntries.add(RuleEntry(rule.id, ruleName, classFile, rule.targetPackages, rule.priority))
             }
 
-            if (ruleEntries.isEmpty()) {
-                log("No enabled rules to compile")
-                return CompilationResult(false, "No enabled rules to compile")
-            }
-
-            // 按 targetPackages 分组
-            val sharedEntries = ruleEntries.filter { it.targetPackages.isEmpty() }
             val appGroups = mutableMapOf<String, MutableList<RuleEntry>>()
-            for (entry in ruleEntries) {
-                for (pkg in entry.targetPackages) {
-                    val sanitized = repo.sanitizePackageName(pkg)
-                    appGroups.getOrPut(sanitized) { mutableListOf() }.add(entry)
+            val sharedEntries: List<RuleEntry>
+            if (ruleEntries.isEmpty()) {
+                log("No enabled rules to compile, generating empty DEX")
+                sharedEntries = emptyList()
+            } else {
+                sharedEntries = ruleEntries.filter { it.targetPackages.isEmpty() }
+                for (entry in ruleEntries) {
+                    for (pkg in entry.targetPackages) {
+                        val sanitized = repo.sanitizePackageName(pkg)
+                        appGroups.getOrPut(sanitized) { mutableListOf() }.add(entry)
+                    }
                 }
             }
 
             val version = System.currentTimeMillis()
             onProgress?.invoke("Converting to DEX...")
 
-            // 编译 shared DEX
-            val sharedDex = if (sharedEntries.isNotEmpty()) {
-                buildGroupDex(sharedEntries, classOutputDir, cacheDir, "shared")?.let { dexFile ->
-                    repo.saveSharedDex(Base64.encodeToString(dexFile.readBytes(), Base64.NO_WRAP))
-                    true
-                } ?: run {
-                    log("Failed to create shared DEX")
-                    return CompilationResult(false, "Failed to create shared DEX")
-                }
-            } else {
-                false
+            // 编译 shared DEX（可能为空）
+            val sharedDex = buildGroupDex(sharedEntries, classOutputDir, cacheDir, "shared")?.let { dexFile ->
+                repo.saveSharedDex(Base64.encodeToString(dexFile.readBytes(), Base64.NO_WRAP))
+                true
+            } ?: run {
+                log("Failed to create shared DEX")
+                return CompilationResult(false, "Failed to create shared DEX")
             }
 
             // 编译 per-app DEX
@@ -162,10 +158,17 @@ class RuleCompilationManager(private val context: Context) {
                 }
             }
 
+            // 清理过期 per-app DEX
+            val stalePackages = repo.getAllAppDexPackages() - appGroups.keys
+            for (stalePkg in stalePackages) {
+                log("Removing stale app DEX for $stalePkg")
+                repo.removeAppDex(stalePkg)
+            }
+
             // 存储版本号
             repo.saveVersion(version)
 
-            log("Compilation complete: version=$version, shared=${sharedEntries.size} rules, ${appGroups.size} app groups")
+            log("Compilation complete: version=$version, shared=${sharedEntries.size} rules, ${appGroups.size} app groups, ${stalePackages.size} stale removed")
             return CompilationResult(true)
 
         } catch (e: Exception) {

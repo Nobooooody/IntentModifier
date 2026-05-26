@@ -252,6 +252,15 @@ class ModifierRepository(private val context: Context) {
         return prefs.contains("${KEY_APP_DEX_PREFIX}$sanitizedPkg")
     }
 
+    fun removeAppDex(sanitizedPkg: String) {
+        prefs.edit().remove("${KEY_APP_DEX_PREFIX}$sanitizedPkg").apply()
+    }
+
+    fun getAllAppDexPackages(): Set<String> {
+        return prefs.all.keys.filter { it.startsWith(KEY_APP_DEX_PREFIX) }
+            .map { it.removePrefix(KEY_APP_DEX_PREFIX) }.toSet()
+    }
+
     // ─── Utilities ─────────────────────────────────────────────────────────────
 
     private fun optStringList(obj: JSONObject, key: String): List<String> {
