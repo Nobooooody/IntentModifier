@@ -30,7 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -121,7 +121,7 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
                             },
                             actions = {
                                 IconButton(onClick = { testCompileTrigger++ }) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                                    Icon(Icons.Default.Build, contentDescription = null)
                                 }
                                 IconButton(onClick = { saveTrigger++ }) {
                                     Icon(Icons.Default.Save, contentDescription = null)

@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Build as BuildIcon
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -66,7 +66,7 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                             },
                             actions = {
                                 IconButton(onClick = { testCompileTrigger++ }) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                                    Icon(Icons.Default.BuildIcon, contentDescription = null)
                                 }
                                 IconButton(onClick = { saveTrigger++ }) {
                                     Icon(Icons.Default.Save, contentDescription = null)
