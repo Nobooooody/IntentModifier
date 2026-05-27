@@ -85,11 +85,12 @@ class XposedInit : IXposedHookLoadPackage {
     private fun loadRulesIfNeeded(lpparam: XC_LoadPackage.LoadPackageParam, ctx: Context?) {
         try {
             val targetPkg = lpparam.packageName
-            val targetDataDir = "/data/data/$targetPkg"
+            val cacheDir = currentContext?.cacheDir ?: error("currentContext is null")
+            val rulesDir = File(cacheDir, "intent_modifier_rules")
 
             val remoteVersion = tryGetRemoteVersion(lpparam)
 
-            val localMetaFile = File("$targetDataDir/cache/intent_modifier_rules/meta.json")
+            val localMetaFile = File(rulesDir, "meta.json")
             var localVersion = 0L
             if (localMetaFile.exists()) {
                 try {
@@ -126,7 +127,6 @@ class XposedInit : IXposedHookLoadPackage {
             val appDexBase64 = tryGetRemoteAppDex(ctx, targetPkg)
 
             // 写入缓存
-            val rulesDir = File("$targetDataDir/cache/intent_modifier_rules")
             rulesDir.deleteRecursively()
             rulesDir.mkdirs()
 
@@ -152,7 +152,8 @@ class XposedInit : IXposedHookLoadPackage {
     }
 
     private fun tryLoadLocalCached(lpparam: XC_LoadPackage.LoadPackageParam, targetPkg: String): Boolean {
-        val rulesDir = File("/data/data/$targetPkg/cache/intent_modifier_rules")
+        val cacheDir = currentContext?.cacheDir ?: error("currentContext is null")
+        val rulesDir = File(cacheDir, "intent_modifier_rules")
         val sharedDex = File(rulesDir, "rules_shared.dex")
         val metaFile = File(rulesDir, "meta.json")
         if (!sharedDex.exists() || !metaFile.exists()) return false
@@ -166,7 +167,8 @@ class XposedInit : IXposedHookLoadPackage {
         try {
             if (compiledRules != null && lastVersion == version && lastVersion > 0) return
 
-            val rulesDir = "/data/data/$targetPkg/cache/intent_modifier_rules"
+            val cacheDir = currentContext?.cacheDir ?: error("currentContext is null")
+            val rulesDir = "${cacheDir.absolutePath}/intent_modifier_rules"
             val dexPaths = mutableListOf("$rulesDir/rules_shared.dex")
             val appDex = File("$rulesDir/rules_app.dex")
             if (appDex.exists()) dexPaths.add(appDex.absolutePath)
