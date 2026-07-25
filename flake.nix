@@ -1,7 +1,7 @@
 {
   description = "Dev shell flake for IntentModifier";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs?rev=d233902339c02a9c334e7e593de68855ad26c4cb";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs?rev=e7a3ca8092b61ff85b6a45bf863ea2b2d6a661b3";
   inputs.flake-compat = {
     url = "github:edolstra/flake-compat";
     flake = false;
