@@ -30,7 +30,7 @@
 
               # Update versions here
               buildToolsVersion = "36.0.0";
-              platformToolsVersion = "36.0.2";
+              platformToolsVersion = "37.0.1";
               platformVersion = "36";
               ndkVersion = "28.0.13004108";
 
