@@ -108,7 +108,7 @@ class RuleCompilationManager(private val context: Context) {
                     return fail("Class file not found for $ruleName", ruleName)
                 }
 
-                ruleEntries.add(RuleEntry(rule.id, ruleName, classFile, rule.targetPackages, rule.priority))
+                ruleEntries.add(RuleEntry(rule.id, rule.name, ruleName, classFile, rule.targetPackages, rule.priority))
             }
 
             // 编译 NormalRule
@@ -132,7 +132,7 @@ class RuleCompilationManager(private val context: Context) {
                     return fail("Class file not found for $ruleName", ruleName)
                 }
 
-                ruleEntries.add(RuleEntry(rule.id, ruleName, classFile, rule.targetPackages, rule.priority))
+                ruleEntries.add(RuleEntry(rule.id, rule.name, ruleName, classFile, rule.targetPackages, rule.priority))
             }
 
             val appGroups = mutableMapOf<String, MutableList<RuleEntry>>()
@@ -561,7 +561,7 @@ class RuleCompilationManager(private val context: Context) {
 
     private fun buildRegistrySource(groupName: String, entries: List<RuleEntry>): String {
         val entriesCode = entries.joinToString(",\n            ") { entry ->
-            """{"engine.${entry.className}", ${entry.priority}}"""
+            """{"engine.${entry.className}", ${entry.priority}, ${javaString(entry.id)}, ${javaString(entry.ruleName)}}"""
         }
 
         return """
@@ -575,6 +575,16 @@ class RuleCompilationManager(private val context: Context) {
                 }
             }
         """.trimIndent()
+    }
+
+    private fun javaString(value: String): String {
+        val escaped = value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\r", "\\r")
+            .replace("\n", "\\n")
+            .replace("\t", "\\t")
+        return "\"$escaped\""
     }
 
     // ─── 代码块处理 ─────────────────────────────────────────────────────────────
@@ -671,6 +681,7 @@ class RuleCompilationManager(private val context: Context) {
 
     private data class RuleEntry(
         val id: String,
+        val ruleName: String,
         val className: String,
         val classFile: File,
         val targetPackages: List<String>,

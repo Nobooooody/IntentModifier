@@ -32,6 +32,13 @@ class XposedInit : IXposedHookLoadPackage {
 
     private data class RulesState(val version: Long, val rules: CompiledRules)
 
+    private data class RegistryRule(
+        val className: String,
+        val priority: Int,
+        val ruleId: String,
+        val ruleName: String
+    )
+
     private companion object {
         private const val TAG = "IntentModifier"
         private const val KEY_COMPILED_VERSION = "compiled_version"
@@ -41,6 +48,11 @@ class XposedInit : IXposedHookLoadPackage {
 
     private fun log(msg: String) {
         XposedBridge.log("$TAG: $msg")
+    }
+
+    private fun logThrowable(msg: String, t: Throwable) {
+        XposedBridge.log("$TAG: $msg: ${t.javaClass.simpleName}: ${t.message}")
+        XposedBridge.log(t)
     }
 
     private fun logIntent(prefix: String, intent: Intent) {
@@ -236,7 +248,7 @@ class XposedInit : IXposedHookLoadPackage {
             val dexClassLoader = dalvik.system.DexClassLoader(path, optimizedDir.absolutePath, null, parentLoader)
 
             // 加载 shared RuleRegistry
-            val registryClasses = mutableListOf<Pair<String, String>>()
+            val registryClasses = mutableListOf<RegistryRule>()
             val sharedRegistry = loadRegistry(dexClassLoader, "engine.RuleRegistry_shared")
                 ?: run {
                     log("Shared RuleRegistry missing, refusing local cache")
@@ -256,20 +268,23 @@ class XposedInit : IXposedHookLoadPackage {
             }
 
             // 按 priority 降序排列
-            registryClasses.sortByDescending { it.second.toIntOrNull() ?: 0 }
+            registryClasses.sortByDescending { it.priority }
 
-            // 加载每条规则的方法
+            // 加载每条规则的方法；Class.forName(initialize=true) 主动触发静态初始化。
             val rules = mutableListOf<LoadedRule>()
             var failedRules = 0
-            for ((className, _) in registryClasses) {
+            for (entry in registryClasses) {
                 try {
-                    val ruleClass = dexClassLoader.loadClass(className)
+                    val ruleClass = Class.forName(entry.className, true, dexClassLoader)
                     val evaluateMethod = ruleClass.getMethod("evaluate", Context::class.java, Intent::class.java, Intent::class.java)
                     val executeMethod = ruleClass.getMethod("execute", Context::class.java, Intent::class.java, Intent::class.java)
-                    rules.add(LoadedRule(evaluateMethod, executeMethod))
+                    rules.add(LoadedRule(entry.ruleId, entry.ruleName, evaluateMethod, executeMethod))
                 } catch (t: Throwable) {
                     failedRules++
-                    log("Failed to load $className: ${t.message}")
+                    logThrowable(
+                        "Failed to load rule id=${entry.ruleId} name=${entry.ruleName} class=${entry.className}",
+                        t
+                    )
                 }
             }
 
@@ -287,13 +302,25 @@ class XposedInit : IXposedHookLoadPackage {
         }
     }
 
-    private fun loadRegistry(classLoader: ClassLoader, registryName: String): List<Pair<String, String>>? {
+    private fun loadRegistry(classLoader: ClassLoader, registryName: String): List<RegistryRule>? {
         return try {
             val registryClass = classLoader.loadClass(registryName)
-            val raw = registryClass.getMethod("getRules").invoke(null) as Array<Array<Any>>
-            raw.map { Pair(it[0] as String, (it[1] as Int).toString()) }
-        } catch (e: Exception) {
-            log("Registry $registryName not found: ${e.message}")
+            @Suppress("UNCHECKED_CAST")
+            val raw = registryClass.getMethod("getRules").invoke(null) as Array<Array<Any?>>
+            val mapped = raw.mapNotNull { row ->
+                val className = row.getOrNull(0) as? String ?: return@mapNotNull null
+                val priority = (row.getOrNull(1) as? Number)?.toInt() ?: 0
+                val ruleId = row.getOrNull(2) as? String ?: className
+                val ruleName = row.getOrNull(3) as? String ?: className
+                RegistryRule(className, priority, ruleId, ruleName)
+            }
+            if (mapped.size != raw.size) {
+                log("Registry $registryName malformed: ${raw.size - mapped.size} invalid entries")
+                return null
+            }
+            mapped
+        } catch (t: Throwable) {
+            logThrowable("Registry $registryName load failed", t)
             null
         }
     }
@@ -402,8 +429,11 @@ class XposedInit : IXposedHookLoadPackage {
                     executed = true
                     if (shouldBlock) break
                 }
-            } catch (e: Exception) {
-                log("Rule evaluation failed: ${e.message}")
+            } catch (t: Throwable) {
+                logThrowable(
+                    "Rule execution failed id=${rule.ruleId} name=${rule.ruleName}",
+                    t
+                )
             }
         }
         return if (executed) resultIntent else intent
@@ -562,6 +592,8 @@ private object ModulePrefsReader {
 }
 
 data class LoadedRule(
+    val ruleId: String,
+    val ruleName: String,
     val evaluateMethod: java.lang.reflect.Method,
     val executeMethod: java.lang.reflect.Method
 )
