@@ -482,19 +482,23 @@ class RuleCompilationManager(private val context: Context) {
                 private static final boolean BLOCK_SUBSEQUENT = ${rule.blockSubsequent};
 
                 public static boolean evaluate(Context ctx, Intent intent, Intent result) {
-                    if (intent.getComponent() == null) return false;
-                    String pkg = intent.getComponent().getPackageName();
-                    if (pkg == null) return false;
+                    String pkg = null;
+                    if (intent.getComponent() != null) {
+                        pkg = intent.getComponent().getPackageName();
+                    }
+                    if (pkg == null) pkg = intent.getPackage();
+
+                    String cls = intent.getComponent() != null ? intent.getComponent().getClassName() : null;
 
                     boolean matches = true;
                     if (!MATCH_PKG.isEmpty())
-                        matches = matches && pkg.equals(MATCH_PKG);
+                        matches = matches && pkg != null && pkg.equals(MATCH_PKG);
                     if (!MATCH_ACTION.isEmpty())
                         matches = matches && MATCH_ACTION.equals(intent.getAction());
                     if (!MATCH_CLASS.isEmpty())
-                        matches = matches && MATCH_CLASS.equals(intent.getComponent().getClassName());
-                    if (!MATCH_DATA.isEmpty() && intent.getData() != null)
-                        matches = matches && MATCH_DATA.equals(intent.getData().toString());
+                        matches = matches && classMatches(cls, MATCH_CLASS);
+                    if (!MATCH_DATA.isEmpty())
+                        matches = matches && intent.getData() != null && MATCH_DATA.equals(intent.getData().toString());
                     if (!MATCH_TYPE.isEmpty())
                         matches = matches && MATCH_TYPE.equals(intent.getType());
                     if (MATCH_CATEGORIES.length > 0) {
@@ -505,6 +509,21 @@ class RuleCompilationManager(private val context: Context) {
                         matches = matches && catMatch;
                     }
                     return matches;
+                }
+
+                private static boolean classMatches(String actual, String expected) {
+                    if (actual == null || expected == null) return false;
+                    if (actual.equals(expected)) return true;
+                    String actualShort = shortClassName(actual);
+                    String expectedShort = shortClassName(expected);
+                    if (!actualShort.equals(expectedShort)) return false;
+                    // 只配置短名或以 . 开头的类名时，允许跨包按短名匹配。
+                    return !expected.contains(".") || expected.startsWith(".");
+                }
+
+                private static String shortClassName(String name) {
+                    int dot = name.lastIndexOf('.');
+                    return dot >= 0 ? name.substring(dot + 1) : name;
                 }
 
                 public static boolean execute(Context ctx, Intent intent, Intent result) {
