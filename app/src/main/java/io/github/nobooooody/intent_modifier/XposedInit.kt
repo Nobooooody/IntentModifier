@@ -380,16 +380,24 @@ class XposedInit : IXposedHookLoadPackage {
             log("Need to update rules: remote=$remoteVersion, local=$localVersion")
 
             val remoteManifestRaw = tryGetRemoteManifest(ctx)
-            val remoteManifest = if (remoteManifestRaw != null && remoteManifestRaw.version == remoteVersion) {
-                remoteManifestRaw
-            } else {
-                if (remoteManifestRaw != null) {
-                    log("Manifest version mismatch: manifest=${remoteManifestRaw.version}, remote=$remoteVersion")
+            var updateVersion = remoteVersion
+            if (remoteManifestRaw != null && remoteManifestRaw.version != updateVersion) {
+                val refreshedVersion = tryGetRemoteVersion()
+                if (refreshedVersion != null && refreshedVersion != updateVersion) {
+                    log("Remote version changed during manifest read: $updateVersion -> $refreshedVersion")
+                    updateVersion = refreshedVersion
                 }
-                null
             }
+            val remoteManifest = remoteManifestRaw?.takeIf { it.version == updateVersion }
             if (remoteManifest == null) {
+                if (remoteManifestRaw != null) {
+                    log("Manifest version mismatch: manifest=${remoteManifestRaw.version}, effective=$updateVersion")
+                }
                 log("No matching manifest, skipping SHA-256 verification for this download")
+            }
+            if (rulesState?.version == updateVersion) {
+                log("Refresh resolved to already-loaded version $updateVersion")
+                return
             }
 
             val sanitizedPkg = targetPkg.replace('.', '_')
@@ -435,7 +443,7 @@ class XposedInit : IXposedHookLoadPackage {
             }
 
             val localManifest = remoteManifest?.takeIf { it.groups.isNotEmpty() }
-                ?: buildDerivedManifest(remoteVersion, targetPkg, sharedBytes, appBytes)
+                ?: buildDerivedManifest(updateVersion, targetPkg, sharedBytes, appBytes)
 
             val staging = File(root, "tmp-${UUID.randomUUID()}").also { it.mkdirs() }
             try {
@@ -452,7 +460,7 @@ class XposedInit : IXposedHookLoadPackage {
                     return
                 }
 
-                val finalDir = versionDir(root, remoteVersion)
+                val finalDir = versionDir(root, updateVersion)
                 if (finalDir.exists()) {
                     finalDir.deleteRecursively()
                 }
@@ -464,17 +472,17 @@ class XposedInit : IXposedHookLoadPackage {
                 }
 
                 val previousVersion = rulesState?.version
-                if (!loadDexAndBuildRules(lpparam, targetPkg, remoteVersion, finalDir)) {
-                    log("Failed to load downloaded DEX for version=$remoteVersion")
+                if (!loadDexAndBuildRules(lpparam, targetPkg, updateVersion, finalDir)) {
+                    log("Failed to load downloaded DEX for version=$updateVersion")
                     runCatching { finalDir.deleteRecursively() }
                     recordLoadFailure(now)
                     return
                 }
 
-                if (!writeCurrentVersion(root, remoteVersion)) {
+                if (!writeCurrentVersion(root, updateVersion)) {
                     log("Rules loaded but current cache pointer update failed; keeping new version dir")
                 }
-                cleanupVersions(root, remoteVersion, previousVersion)
+                cleanupVersions(root, updateVersion, previousVersion)
             } catch (t: Throwable) {
                 runCatching { staging.deleteRecursively() }
                 throw t
