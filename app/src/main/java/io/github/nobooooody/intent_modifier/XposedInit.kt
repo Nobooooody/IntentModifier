@@ -55,6 +55,8 @@ class XposedInit : IXposedHookLoadPackage {
         private const val KEY_COMPILED_VERSION = "compiled_version"
         private const val KEY_COMPILED_MANIFEST = "compiled_manifest"
         private const val KEY_PROVIDER_TOKEN = "provider_token"
+        private const val DEBUG_SKIP_XSP = "debug_skip_xsp"
+        private const val CREDENTIAL_FILE = ".credential"
         private const val RULE_VERSION_CHECK_INTERVAL_MS = 3_000L
         private const val PREWARM_WAIT_MS = 1_000L
         private const val LOG_INTENTS = false
@@ -422,7 +424,7 @@ class XposedInit : IXposedHookLoadPackage {
 
             val sanitizedPkg = targetPkg.replace('.', '_')
             val sharedGroup = remoteManifest?.groups?.get(RuleManifest.GROUP_SHARED)
-            val sharedBytes = tryGetRemoteDex(ctx, sharedGroup)
+            val sharedBytes = tryGetRemoteDex(ctx, targetPkg, sharedGroup)
             if (sharedBytes == null) {
                 log("No remote DEX available, falling back to local cached DEX")
                 if (!tryLoadLocalCached(lpparam, targetPkg)) {
@@ -688,7 +690,31 @@ class XposedInit : IXposedHookLoadPackage {
 
     // ─── 远端读取 ───────────────────────────────────────────────────────────────
 
+    private data class CachedCredential(val token: String, val packageName: String)
+
+    /**
+     * enroll 防抖：每个进程生命周期最多一次；若缓存凭证被拒，允许再补一次，
+     * 避免 XSP 失效时每个请求都打 Provider，也避免失效凭证造成死循环。
+     */
+    private object EnrollmentGuard {
+        @Volatile var attempted = false
+        @Volatile var retriedAfterRejection = false
+    }
+
+    /**
+     * 仅用于排障/验证：跳过后，本进程不读 XSharedPreferences，直接走 Provider。
+     * 不是安全开关，默认必须为 false。
+     */
+    private fun shouldSkipXsp(): Boolean {
+        return try {
+            ModulePrefsReader.getBoolean(DEBUG_SKIP_XSP, false)
+        } catch (t: Throwable) {
+            false
+        }
+    }
+
     private fun providerToken(): String? {
+        if (shouldSkipXsp()) return null
         return try {
             ModulePrefsReader.getString(KEY_PROVIDER_TOKEN, null)?.takeIf { it.isNotBlank() }
         } catch (t: Throwable) {
@@ -708,16 +734,194 @@ class XposedInit : IXposedHookLoadPackage {
         return if (cursor.moveToFirst()) cursor.getString(index) else "unknown"
     }
 
-    private fun tryGetRemoteVersion(): Long? {
-        try {
-            val version = ModulePrefsReader.getLong(KEY_COMPILED_VERSION, 0L)
-            if (version > 0) {
-                log("Got remote version=$version via XSharedPreferences")
-                return version
+    private fun credentialFile(ctx: Context): File =
+        File(rulesRoot(ctx.cacheDir), CREDENTIAL_FILE)
+
+    private fun readCredential(ctx: Context, targetPkg: String): CachedCredential? {
+        val file = credentialFile(ctx)
+        if (!file.isFile) return null
+        return try {
+            val json = JSONObject(file.readText())
+            val token = json.optString("token", "")
+            val pkg = json.optString("package", "")
+            if (token.isEmpty() || pkg.isEmpty()) {
+                log("Cached credential malformed, ignoring")
+                null
+            } else if (pkg != targetPkg) {
+                log("Cached credential package=$pkg does not match host=$targetPkg, ignoring")
+                null
+            } else {
+                CachedCredential(token, pkg)
             }
-            log("XSharedPreferences version is 0")
-        } catch (e: Exception) {
-            log("XSharedPreferences version failed: ${e.message}")
+        } catch (t: Throwable) {
+            log("Read cached credential failed: ${t.javaClass.simpleName}: ${t.message}")
+            null
+        }
+    }
+
+    private fun saveCredential(ctx: Context, token: String, targetPkg: String): Boolean {
+        val root = rulesRoot(ctx.cacheDir)
+        if (!root.isDirectory && !root.mkdirs()) {
+            log("Save credential failed: cache dir unavailable")
+            return false
+        }
+        val target = File(root, CREDENTIAL_FILE)
+        val temp = File(root, "$CREDENTIAL_FILE.tmp")
+        return try {
+            temp.writeText(JSONObject().put("token", token).put("package", targetPkg).toString())
+            // 凭证只允许宿主自己读取，不写日志、不写宿主 SharedPreferences。
+            temp.setReadable(false, false)
+            temp.setReadable(true, true)
+            temp.setWritable(false, false)
+            temp.setExecutable(false, false)
+            target.delete()
+            if (!temp.renameTo(target)) {
+                log("Save credential failed: rename failed")
+                temp.delete()
+                false
+            } else {
+                log("Cached credential saved for $targetPkg (owner-only)")
+                true
+            }
+        } catch (t: Throwable) {
+            log("Save credential failed: ${t.javaClass.simpleName}: ${t.message}")
+            runCatching { temp.delete() }
+            false
+        }
+    }
+
+    private fun clearCredential(ctx: Context) {
+        val file = credentialFile(ctx)
+        if (file.exists()) {
+            val deleted = file.delete()
+            log(if (deleted) "Cached credential cleared" else "Cached credential delete failed")
+        }
+    }
+
+    private fun currentProviderToken(ctx: Context, targetPkg: String): String? {
+        if (shouldSkipXsp()) return readCredential(ctx, targetPkg)?.token
+        return providerToken() ?: readCredential(ctx, targetPkg)?.token
+    }
+
+    private fun tryEnroll(ctx: Context, targetPkg: String, afterRejection: Boolean): String? {
+        synchronized(EnrollmentGuard) {
+            if (afterRejection) {
+                if (EnrollmentGuard.retriedAfterRejection) return null
+                EnrollmentGuard.retriedAfterRejection = true
+            } else {
+                if (EnrollmentGuard.attempted) return null
+                EnrollmentGuard.attempted = true
+            }
+        }
+        val uri = RuleProvider.URI_ENROLL.buildUpon()
+            .appendQueryParameter("package", targetPkg)
+            .build()
+        return try {
+            val cursor = ctx.contentResolver.query(uri, null, null, null, null) ?: run {
+                log("Enroll failed: Provider returned no cursor")
+                return null
+            }
+            cursor.use {
+                providerError(it)?.let { error ->
+                    log("Enroll denied: $error; 需要在 IM 中为该应用开启授权窗口")
+                    return null
+                }
+                if (!it.moveToFirst()) {
+                    log("Enroll failed: empty response")
+                    return null
+                }
+                val token = it.getString(it.getColumnIndex("token")) ?: ""
+                val pkg = it.getString(it.getColumnIndex("package")) ?: ""
+                if (token.isEmpty() || pkg.isEmpty()) {
+                    log("Enroll failed: malformed response")
+                    return null
+                }
+                if (pkg != targetPkg) {
+                    log("Enroll failed: issued package=$pkg expected=$targetPkg")
+                    return null
+                }
+                if (!saveCredential(ctx, token, pkg)) {
+                    log("Enroll succeeded but credential save failed")
+                    return null
+                }
+                log("Enroll succeeded for $pkg")
+                token
+            }
+        } catch (t: Throwable) {
+            log("Enroll failed: ${t.javaClass.simpleName}: ${t.message}")
+            null
+        }
+    }
+
+    /**
+     * 处理缺 token/无效 token：必要时清掉被拒的缓存凭证，并在防抖允许时 enroll。
+     * 返回可重试的新 token；null 表示按原有降级链（本地缓存 → 默认行为）处理。
+     */
+    private fun handleProviderAuthFailure(
+        ctx: Context,
+        targetPkg: String,
+        tokenUsed: String?,
+        error: String,
+        allowEnroll: Boolean
+    ): String? {
+        if (error != "missing_token" && error != "invalid_token") {
+            log("Provider denied ($error), not enrolling")
+            return null
+        }
+        val credential = readCredential(ctx, targetPkg)
+        val usedCredential = tokenUsed != null && credential?.token == tokenUsed
+        if (usedCredential) {
+            clearCredential(ctx)
+        }
+        if (!allowEnroll) return null
+        val token = tryEnroll(ctx, targetPkg, afterRejection = usedCredential)
+        if (token == null) {
+            log("Enroll unavailable; falling back to local cache/default behavior")
+        }
+        return token
+    }
+
+    /**
+     * 带凭证的 Provider 查询：首次失败且为缺 token/无效 token 时，最多 enroll 一次并重试。
+     */
+    private fun queryProviderAuthed(
+        ctx: Context,
+        uri: Uri,
+        targetPkg: String,
+        allowEnroll: Boolean = true
+    ): Pair<Cursor?, String?> {
+        val token = currentProviderToken(ctx, targetPkg)
+        val cursor = ctx.contentResolver.query(withProviderToken(uri, token), null, null, null, null)
+        val error = cursor?.let { providerError(it) }
+        if (error == null) return cursor to null
+        cursor?.close()
+        val retryToken = handleProviderAuthFailure(ctx, targetPkg, token, error, allowEnroll)
+            ?: return null to error
+        val retryCursor = ctx.contentResolver.query(
+            withProviderToken(uri, retryToken), null, null, null, null
+        )
+        val retryError = retryCursor?.let { providerError(it) }
+        if (retryError != null) {
+            retryCursor?.close()
+            return null to retryError
+        }
+        return retryCursor to null
+    }
+
+    private fun tryGetRemoteVersion(): Long? {
+        if (!shouldSkipXsp()) {
+            try {
+                val version = ModulePrefsReader.getLong(KEY_COMPILED_VERSION, 0L)
+                if (version > 0) {
+                    log("Got remote version=$version via XSharedPreferences")
+                    return version
+                }
+                log("XSharedPreferences version is 0")
+            } catch (e: Exception) {
+                log("XSharedPreferences version failed: ${e.message}")
+            }
+        } else {
+            log("debug_skip_xsp enabled, bypassing XSharedPreferences")
         }
 
         try {
@@ -745,38 +949,42 @@ class XposedInit : IXposedHookLoadPackage {
     }
 
     private fun tryGetRemoteManifest(ctx: Context?): RuleManifest? {
-        try {
-            val json = ModulePrefsReader.getString(KEY_COMPILED_MANIFEST, null)
-            if (!json.isNullOrEmpty()) {
-                val manifest = RuleManifest.fromJson(json)
-                if (manifest != null) {
-                    log("Got manifest via XSharedPreferences, version=${manifest.version}")
-                    return manifest
+        if (!shouldSkipXsp()) {
+            try {
+                val json = ModulePrefsReader.getString(KEY_COMPILED_MANIFEST, null)
+                if (!json.isNullOrEmpty()) {
+                    val manifest = RuleManifest.fromJson(json)
+                    if (manifest != null) {
+                        log("Got manifest via XSharedPreferences, version=${manifest.version}")
+                        return manifest
+                    }
+                    log("XSharedPreferences manifest invalid")
+                } else {
+                    log("XSharedPreferences compiled_manifest is empty")
                 }
-                log("XSharedPreferences manifest invalid")
-            } else {
-                log("XSharedPreferences compiled_manifest is empty")
+            } catch (t: Throwable) {
+                logThrowable("XSharedPreferences manifest failed", t)
             }
-        } catch (t: Throwable) {
-            logThrowable("XSharedPreferences manifest failed", t)
         }
 
         try {
             if (ctx == null) return null
-            val token = providerToken()
-            val tokenState = if (token != null) "with token" else "no token"
-            val uri = withProviderToken(RuleProvider.URI_META, token)
-            log("Falling back to ContentProvider for manifest ($tokenState)")
-            val cursor = ctx.contentResolver.query(uri, null, null, null, null)
+            val targetPkg = ctx.packageName
+            val token = currentProviderToken(ctx, targetPkg)
+            log(
+                "Falling back to ContentProvider for manifest " +
+                    "(${if (token != null) "with token" else "no token"})"
+            )
+            val (cursor, error) = queryProviderAuthed(ctx, RuleProvider.URI_META, targetPkg)
+            if (error != null) {
+                log("Provider manifest denied: $error")
+                return null
+            }
             cursor?.use {
-                providerError(it)?.let { err ->
-                    log("Provider manifest denied: $err")
-                    return null
-                }
                 if (it.moveToFirst()) {
                     val manifest = RuleManifest.fromJson(it.getString(0))
                     if (manifest != null) {
-                        log("Got manifest via ContentProvider ($tokenState), version=${manifest.version}")
+                        log("Got manifest via ContentProvider, version=${manifest.version}")
                         return manifest
                     }
                 }
@@ -788,21 +996,27 @@ class XposedInit : IXposedHookLoadPackage {
         return null
     }
 
-    private fun tryGetRemoteDex(ctx: Context?, group: DexGroupManifest?): ByteArray? {
-        try {
-            val dex = ModulePrefsReader.getString("shared_dex", null)
-            if (!dex.isNullOrEmpty()) {
-                log("Got shared DEX via XSharedPreferences")
-                return Base64.decode(dex, Base64.NO_WRAP)
+    private fun tryGetRemoteDex(
+        ctx: Context?,
+        targetPkg: String,
+        group: DexGroupManifest?
+    ): ByteArray? {
+        if (!shouldSkipXsp()) {
+            try {
+                val dex = ModulePrefsReader.getString("shared_dex", null)
+                if (!dex.isNullOrEmpty()) {
+                    log("Got shared DEX via XSharedPreferences")
+                    return Base64.decode(dex, Base64.NO_WRAP)
+                }
+                log("XSharedPreferences shared_dex is empty")
+            } catch (t: Throwable) {
+                logThrowable("XSharedPreferences shared_dex failed", t)
             }
-            log("XSharedPreferences shared_dex is empty")
-        } catch (t: Throwable) {
-            logThrowable("XSharedPreferences shared_dex failed", t)
         }
 
         if (ctx == null) return null
         log("Falling back to ContentProvider for shared DEX")
-        return fetchProviderDex(ctx, RuleProvider.URI_DEX, group)
+        return fetchProviderDex(ctx, RuleProvider.URI_DEX, group, targetPkg)
     }
 
     private fun tryGetRemoteAppDex(
@@ -810,57 +1024,107 @@ class XposedInit : IXposedHookLoadPackage {
         targetPkg: String,
         group: DexGroupManifest?
     ): ByteArray? {
-        try {
-            val sanitized = targetPkg.replace('.', '_')
-            val dex = ModulePrefsReader.getString("app_dex_$sanitized", null)
-            if (!dex.isNullOrEmpty()) {
-                log("Got app DEX for $targetPkg via XSharedPreferences")
-                return Base64.decode(dex, Base64.NO_WRAP)
+        if (!shouldSkipXsp()) {
+            try {
+                val sanitized = targetPkg.replace('.', '_')
+                val dex = ModulePrefsReader.getString("app_dex_$sanitized", null)
+                if (!dex.isNullOrEmpty()) {
+                    log("Got app DEX for $targetPkg via XSharedPreferences")
+                    return Base64.decode(dex, Base64.NO_WRAP)
+                }
+                log("XSharedPreferences app_dex_$sanitized is empty")
+            } catch (t: Throwable) {
+                logThrowable("XSharedPreferences app_dex failed", t)
             }
-            log("XSharedPreferences app_dex_$sanitized is empty")
-        } catch (t: Throwable) {
-            logThrowable("XSharedPreferences app_dex failed", t)
         }
 
         if (ctx == null) return null
         log("Falling back to ContentProvider for app DEX ($targetPkg)")
         val uri = Uri.withAppendedPath(RuleProvider.URI_DEX, targetPkg)
-        return fetchProviderDex(ctx, uri, group)
+        return fetchProviderDex(ctx, uri, group, targetPkg)
     }
 
-    private fun fetchProviderDex(ctx: Context, uri: Uri, group: DexGroupManifest?): ByteArray? {
-        val token = providerToken()
+    private sealed class ProviderDexResult {
+        class Success(val bytes: ByteArray) : ProviderDexResult()
+        object NoData : ProviderDexResult()
+        class Denied(val error: String, val tokenUsed: String?) : ProviderDexResult()
+    }
+
+    private fun fetchProviderDex(
+        ctx: Context,
+        uri: Uri,
+        group: DexGroupManifest?,
+        targetPkg: String
+    ): ByteArray? {
+        var token: String? = currentProviderToken(ctx, targetPkg)
+        var result = fetchProviderDexWithToken(ctx, uri, group, token)
+        if (result is ProviderDexResult.Denied) {
+            log("Provider DEX denied: ${result.error}")
+            val retryToken = handleProviderAuthFailure(
+                ctx, targetPkg, result.tokenUsed, result.error, allowEnroll = true
+            )
+            if (retryToken != null) {
+                token = retryToken
+                result = fetchProviderDexWithToken(ctx, uri, group, retryToken)
+            }
+        }
         val tokenState = if (token != null) "with token" else "no token"
+        return when (result) {
+            is ProviderDexResult.Success -> {
+                log("Got DEX via ContentProvider ($tokenState), ${result.bytes.size} bytes")
+                result.bytes
+            }
+            is ProviderDexResult.Denied -> {
+                log("Got no DEX via ContentProvider ($tokenState): ${result.error}")
+                null
+            }
+            ProviderDexResult.NoData -> {
+                log("Got no DEX via ContentProvider ($tokenState)")
+                null
+            }
+        }
+    }
+
+    private fun fetchProviderDexWithToken(
+        ctx: Context,
+        uri: Uri,
+        group: DexGroupManifest?,
+        token: String?
+    ): ProviderDexResult {
         val authedUri = withProviderToken(uri, token)
-        log("Provider DEX request ($tokenState)")
+        log("Provider DEX request (${if (token != null) "with token" else "no token"})")
         val knownSize = group?.size?.takeIf { it > 0L }
         if (knownSize != null && knownSize > CHUNK_SIZE_BYTES) {
-            return fetchProviderDexChunked(ctx, authedUri, knownSize)
+            return fetchProviderDexChunked(ctx, authedUri, knownSize, token)
         }
 
         return try {
-            val cursor = ctx.contentResolver.query(authedUri, null, null, null, null) ?: return null
+            val cursor = ctx.contentResolver.query(authedUri, null, null, null, null)
+                ?: return ProviderDexResult.NoData
             cursor.use {
                 providerError(it)?.let { err ->
-                    log("Provider DEX denied: $err")
-                    return null
+                    return ProviderDexResult.Denied(err, token)
                 }
                 if (it.moveToFirst()) {
                     val dex = it.getString(0)
                     if (!dex.isNullOrEmpty()) {
-                        log("Got DEX via ContentProvider ($tokenState), ${dex.length} base64 chars")
-                        return Base64.decode(dex, Base64.NO_WRAP)
+                        return ProviderDexResult.Success(Base64.decode(dex, Base64.NO_WRAP))
                     }
                 }
             }
-            null
+            ProviderDexResult.NoData
         } catch (t: Throwable) {
             logThrowable("Provider full DEX query failed, retrying in chunks", t)
-            fetchProviderDexChunked(ctx, authedUri, knownSize)
+            fetchProviderDexChunked(ctx, authedUri, knownSize, token)
         }
     }
 
-    private fun fetchProviderDexChunked(ctx: Context, baseUri: Uri, knownSize: Long?): ByteArray? {
+    private fun fetchProviderDexChunked(
+        ctx: Context,
+        baseUri: Uri,
+        knownSize: Long?,
+        token: String?
+    ): ProviderDexResult {
         try {
             val output = ByteArrayOutputStream()
             var offset = 0L
@@ -873,15 +1137,15 @@ class XposedInit : IXposedHookLoadPackage {
                     .appendQueryParameter("offset", offset.toString())
                     .appendQueryParameter("length", CHUNK_SIZE_BYTES.toString())
                     .build()
-                val cursor = ctx.contentResolver.query(chunkUri, null, null, null, null) ?: return null
+                val cursor = ctx.contentResolver.query(chunkUri, null, null, null, null)
+                    ?: return ProviderDexResult.NoData
                 var chunkBytes: ByteArray? = null
                 cursor.use {
                     providerError(it)?.let { err ->
-                        log("Provider chunked DEX denied: $err")
-                        return null
+                        return ProviderDexResult.Denied(err, token)
                     }
-                    if (!it.moveToFirst()) return null
-                    val encoded = it.getString(0) ?: return null
+                    if (!it.moveToFirst()) return ProviderDexResult.NoData
+                    val encoded = it.getString(0) ?: return ProviderDexResult.NoData
                     val totalIndex = it.getColumnIndex("totalSize")
                     if (total == null && totalIndex >= 0) {
                         val responseTotal = it.getLong(totalIndex)
@@ -890,7 +1154,7 @@ class XposedInit : IXposedHookLoadPackage {
                     chunkBytes = Base64.decode(encoded, Base64.NO_WRAP)
                 }
 
-                val bytes = chunkBytes ?: return null
+                val bytes = chunkBytes ?: return ProviderDexResult.NoData
                 if (bytes.isEmpty()) break
                 output.write(bytes)
                 if (total == null && bytes.size > CHUNK_SIZE_BYTES) {
@@ -905,13 +1169,13 @@ class XposedInit : IXposedHookLoadPackage {
             val result = output.toByteArray()
             if (total != null && result.size.toLong() != total) {
                 log("Chunked DEX size mismatch: expected=$total, actual=${result.size}")
-                return null
+                return ProviderDexResult.NoData
             }
             log("Fetched chunked DEX: ${result.size} bytes, chunks<=$CHUNK_SIZE_BYTES")
-            return result
+            return ProviderDexResult.Success(result)
         } catch (t: Throwable) {
             logThrowable("Provider chunked DEX query failed", t)
-            return null
+            return ProviderDexResult.NoData
         }
     }
 
@@ -1092,6 +1356,8 @@ private object ModulePrefsReader {
     }
 
     fun getLong(key: String, default: Long): Long = prefs.getLong(key, default)
+
+    fun getBoolean(key: String, default: Boolean): Boolean = prefs.getBoolean(key, default)
 
     fun getString(key: String, default: String?): String? = prefs.getString(key, default)
 

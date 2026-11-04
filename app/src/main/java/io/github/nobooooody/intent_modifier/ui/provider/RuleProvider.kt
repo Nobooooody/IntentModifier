@@ -96,7 +96,7 @@ class RuleProvider : ContentProvider() {
                 cursor.addRow(arrayOf(manifest))
                 cursor
             }
-            CODE_ENROLL -> handleEnroll(repo)
+            CODE_ENROLL -> handleEnroll(uri, repo)
             else -> null
         }
     }
@@ -175,17 +175,26 @@ class RuleProvider : ContentProvider() {
      * 本地模式授权：窗口开启 + 调用方 UID 的包与窗口目标包一致时发放一次性凭证；
      * 凭证表与窗口关闭在同一次 commit 内完成。窗口每次只发一个。
      */
-    private fun handleEnroll(repo: ModifierRepository): Cursor {
+    private fun handleEnroll(uri: Uri, repo: ModifierRepository): Cursor {
         synchronized(ENROLL_LOCK) {
             val now = System.currentTimeMillis()
             val until = repo.getEnrollWindowUntil()
+            val claimed = uri.getQueryParameter("package")
             if (until <= 0L || now >= until) {
-                Log.w(TAG, "enroll denied: window closed uid=${Binder.getCallingUid()} until=$until")
+                Log.w(
+                    TAG,
+                    "enroll denied: window closed uid=${Binder.getCallingUid()} " +
+                        "until=$until claimed=$claimed"
+                )
                 return errorCursor("enroll_window_closed")
             }
             val target = repo.getEnrollTargetPackage()
             if (target.isNullOrBlank()) {
-                Log.w(TAG, "enroll denied: target package missing uid=${Binder.getCallingUid()}")
+                Log.w(
+                    TAG,
+                    "enroll denied: target package missing uid=${Binder.getCallingUid()} " +
+                        "claimed=$claimed"
+                )
                 return errorCursor("enroll_target_missing")
             }
             val callerPkgs = callerPackages()
@@ -193,7 +202,7 @@ class RuleProvider : ContentProvider() {
                 Log.w(
                     TAG,
                     "enroll denied: package mismatch target=$target uid=${Binder.getCallingUid()} " +
-                        "packages=$callerPkgs"
+                        "packages=$callerPkgs claimed=$claimed"
                 )
                 return errorCursor("enroll_package_mismatch")
             }

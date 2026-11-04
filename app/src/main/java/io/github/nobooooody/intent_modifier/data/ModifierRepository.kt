@@ -202,6 +202,8 @@ class ModifierRepository(private val context: Context) {
         editor.putString(KEY_COMPILED_MANIFEST, manifestJson)
         editor.putLong(KEY_COMPILED_VERSION, version)
         // 能力 token 与 DEX/manifest 同批原子发布；旧数据没有该键时读取方按旧行为放行。
+        // 注意：这里的全局 token 会随每次发布轮换；/enroll 发放的包绑定凭证
+        // 存放在 KEY_PROVIDER_TOKENS，不随发布清除，只能由用户撤销。
         editor.putString(KEY_PROVIDER_TOKEN, newProviderToken())
         check(editor.commit()) { "Failed to commit compiled rules" }
     }
