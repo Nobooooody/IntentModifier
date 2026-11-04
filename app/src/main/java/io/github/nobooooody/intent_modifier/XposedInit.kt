@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
 import android.os.SystemClock
+import android.util.AtomicFile
 import android.util.Base64
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
@@ -21,7 +22,9 @@ import io.github.nobooooody.intent_modifier.ui.provider.RuleProvider
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.lang.reflect.Method
+import java.util.UUID
 
 class XposedInit : IXposedHookLoadPackage {
 
@@ -56,6 +59,11 @@ class XposedInit : IXposedHookLoadPackage {
         private const val BASE_RETRY_MS = 5_000L
         private const val MAX_RETRY_MS = 5 * 60_000L
         private const val CHUNK_SIZE_BYTES = 256 * 1024
+        private const val RULES_ROOT_DIR = "intent_modifier_rules"
+        private const val CURRENT_POINTER = "current"
+        private const val MANIFEST_FILE = "manifest.json"
+        private const val SHARED_DEX_FILE = "rules_shared.dex"
+        private const val APP_DEX_FILE = "rules_app.dex"
     }
 
     private fun log(msg: String) {
@@ -161,6 +169,161 @@ class XposedInit : IXposedHookLoadPackage {
         thread.start()
     }
 
+    // ─── 本地缓存目录 ───────────────────────────────────────────────────────────
+
+    private fun rulesRoot(cacheDir: File): File = File(cacheDir, RULES_ROOT_DIR)
+
+    private fun versionDir(root: File, version: Long): File = File(root, "v$version")
+
+    private fun readCurrentVersion(root: File): Long? {
+        val pointer = File(root, CURRENT_POINTER)
+        if (!pointer.exists()) return null
+        return try {
+            pointer.readText().trim().toLongOrNull()
+        } catch (t: Throwable) {
+            logThrowable("Read current cache pointer failed", t)
+            null
+        }
+    }
+
+    private fun latestVersionDir(root: File): Long? {
+        return root.listFiles()
+            ?.asSequence()
+            ?.filter { it.isDirectory && it.name.startsWith("v") }
+            ?.mapNotNull { it.name.removePrefix("v").toLongOrNull() }
+            ?.maxOrNull()
+    }
+
+    private fun readLocalManifest(dir: File): RuleManifest? {
+        val file = File(dir, MANIFEST_FILE)
+        if (!file.exists()) {
+            log("Local manifest missing at ${file.absolutePath}")
+            return null
+        }
+        return try {
+            RuleManifest.fromJson(file.readText())
+        } catch (t: Throwable) {
+            logThrowable("Local manifest read failed", t)
+            null
+        }
+    }
+
+    private fun validateLocalDir(dir: File, manifest: RuleManifest, targetPkg: String): Boolean {
+        if (manifest.groups.isEmpty()) {
+            log("Local manifest has no group hashes, rejecting version dir ${dir.name}")
+            return false
+        }
+        val sharedGroup = manifest.groups[RuleManifest.GROUP_SHARED]
+        if (sharedGroup == null) {
+            log("Local manifest missing shared group in ${dir.name}")
+            return false
+        }
+        val sharedDex = File(dir, SHARED_DEX_FILE)
+        if (!sharedDex.exists()) {
+            log("Local shared DEX missing in ${dir.name}")
+            return false
+        }
+        val sharedBytes = try {
+            sharedDex.readBytes()
+        } catch (t: Throwable) {
+            logThrowable("Local shared DEX read failed", t)
+            return false
+        }
+        if (!verifyDexBytes("local_shared/${dir.name}", sharedBytes, sharedGroup)) {
+            return false
+        }
+
+        val sanitizedPkg = targetPkg.replace('.', '_')
+        val appGroup = manifest.groups[sanitizedPkg]
+        val appDex = File(dir, APP_DEX_FILE)
+        if (appGroup != null) {
+            if (!appDex.exists()) {
+                log("Local app DEX missing for $targetPkg in ${dir.name}")
+                return false
+            }
+            val appBytes = try {
+                appDex.readBytes()
+            } catch (t: Throwable) {
+                logThrowable("Local app DEX read failed", t)
+                return false
+            }
+            if (!verifyDexBytes("local_app_$targetPkg/${dir.name}", appBytes, appGroup)) {
+                return false
+            }
+        } else if (appDex.exists()) {
+            log("Local app DEX not described by manifest, removing it: ${appDex.absolutePath}")
+            runCatching { appDex.delete() }
+        }
+        return true
+    }
+
+    private fun writeCurrentVersion(root: File, version: Long): Boolean {
+        val atomicFile = AtomicFile(File(root, CURRENT_POINTER))
+        var out: FileOutputStream? = null
+        return try {
+            out = atomicFile.startWrite()
+            out.write(version.toString().toByteArray())
+            atomicFile.finishWrite(out)
+            true
+        } catch (t: Throwable) {
+            out?.let { runCatching { atomicFile.failWrite(it) } }
+            logThrowable("Write current cache pointer failed", t)
+            false
+        }
+    }
+
+    private fun cleanupVersions(root: File, keepVersion: Long, previousVersion: Long?) {
+        val keep = mutableSetOf(keepVersion)
+        previousVersion?.let { keep.add(it) }
+        root.listFiles()?.forEach { file ->
+            when {
+                file.name == CURRENT_POINTER || file.name.startsWith("$CURRENT_POINTER.") -> Unit
+                file.isDirectory && file.name.startsWith("v") -> {
+                    val version = file.name.removePrefix("v").toLongOrNull()
+                    if (version != null && version !in keep) {
+                        log("Cleaning old cache version ${file.name}")
+                        runCatching { file.deleteRecursively() }
+                    }
+                }
+                file.name.startsWith("tmp-") -> runCatching { file.deleteRecursively() }
+                file.name == SHARED_DEX_FILE ||
+                    file.name == APP_DEX_FILE ||
+                    file.name == "meta.json" ||
+                    file.name == "optimized" -> runCatching { file.deleteRecursively() }
+            }
+        }
+    }
+
+    private fun buildDerivedManifest(
+        version: Long,
+        targetPkg: String,
+        sharedBytes: ByteArray,
+        appBytes: ByteArray?
+    ): RuleManifest {
+        val groups = mutableMapOf<String, DexGroupManifest>()
+        groups[RuleManifest.GROUP_SHARED] = DexGroupManifest(
+            sha256 = RuleManifest.sha256Hex(sharedBytes),
+            size = sharedBytes.size.toLong(),
+            ruleCount = 0,
+            targetPackages = emptyList()
+        )
+        if (appBytes != null) {
+            groups[targetPkg.replace('.', '_')] = DexGroupManifest(
+                sha256 = RuleManifest.sha256Hex(appBytes),
+                size = appBytes.size.toLong(),
+                ruleCount = 0,
+                targetPackages = listOf(targetPkg)
+            )
+        }
+        return RuleManifest(
+            version = version,
+            ruleCount = 0,
+            compiledAt = System.currentTimeMillis(),
+            enabledRuleHash = null,
+            groups = groups
+        )
+    }
+
     // ─── 规则加载 ───────────────────────────────────────────────────────────────
 
     @Synchronized
@@ -176,7 +339,7 @@ class XposedInit : IXposedHookLoadPackage {
                 log("Cannot load rules: currentContext is null")
                 return
             }
-            val rulesDir = File(cacheDir, "intent_modifier_rules")
+            val root = rulesRoot(cacheDir)
 
             if (now < nextLoadRetryAt) {
                 log(
@@ -197,15 +360,7 @@ class XposedInit : IXposedHookLoadPackage {
                 return
             }
 
-            val localMetaFile = File(rulesDir, "meta.json")
-            var localVersion = 0L
-            if (localMetaFile.exists()) {
-                try {
-                    localVersion = JSONObject(localMetaFile.readText()).optLong("version", 0)
-                } catch (e: Exception) {
-                    log("Failed to read local meta: ${e.message}")
-                }
-            }
+            val localVersion = readCurrentVersion(root) ?: latestVersionDir(root) ?: 0L
 
             if (remoteVersion == null || remoteVersion == 0L) {
                 log("No remote version available, trying local cached DEX")
@@ -266,28 +421,63 @@ class XposedInit : IXposedHookLoadPackage {
                 return
             }
 
-            // 写入缓存
-            rulesDir.deleteRecursively()
-            rulesDir.mkdirs()
-
-            val sharedDexFile = File(rulesDir, "rules_shared.dex")
-            sharedDexFile.writeBytes(sharedBytes)
-            sharedDexFile.setReadOnly()
-
-            if (appBytes != null) {
-                val appDexFile = File(rulesDir, "rules_app.dex")
-                appDexFile.writeBytes(appBytes)
-                appDexFile.setReadOnly()
+            if (remoteManifest != null && remoteManifest.groups.isNotEmpty()) {
+                if (sharedGroup == null) {
+                    log("Manifest missing shared group while remote DEX exists, rejecting update")
+                    recordLoadFailure(now)
+                    return
+                }
+                if (appBytes != null && appGroup == null) {
+                    log("Manifest missing app group for $targetPkg while app DEX exists, rejecting update")
+                    recordLoadFailure(now)
+                    return
+                }
             }
 
-            localMetaFile.writeText(
-                remoteManifest?.toJson()
-                    ?: JSONObject().apply { put("version", remoteVersion) }.toString()
-            )
+            val localManifest = remoteManifest?.takeIf { it.groups.isNotEmpty() }
+                ?: buildDerivedManifest(remoteVersion, targetPkg, sharedBytes, appBytes)
 
-            if (!loadDexAndBuildRules(lpparam, targetPkg, remoteVersion)) {
-                log("Failed to load downloaded DEX for version=$remoteVersion")
-                recordLoadFailure(now)
+            val staging = File(root, "tmp-${UUID.randomUUID()}").also { it.mkdirs() }
+            try {
+                File(staging, SHARED_DEX_FILE).writeBytes(sharedBytes)
+                if (appBytes != null) {
+                    File(staging, APP_DEX_FILE).writeBytes(appBytes)
+                }
+                File(staging, MANIFEST_FILE).writeText(localManifest.toJson())
+
+                if (!validateLocalDir(staging, localManifest, targetPkg)) {
+                    log("Staged cache failed integrity validation, keeping previous version")
+                    staging.deleteRecursively()
+                    recordLoadFailure(now)
+                    return
+                }
+
+                val finalDir = versionDir(root, remoteVersion)
+                if (finalDir.exists()) {
+                    finalDir.deleteRecursively()
+                }
+                if (!staging.renameTo(finalDir)) {
+                    log("Failed to move staged cache to ${finalDir.absolutePath}")
+                    staging.deleteRecursively()
+                    recordLoadFailure(now)
+                    return
+                }
+
+                val previousVersion = rulesState?.version
+                if (!loadDexAndBuildRules(lpparam, targetPkg, remoteVersion, finalDir)) {
+                    log("Failed to load downloaded DEX for version=$remoteVersion")
+                    runCatching { finalDir.deleteRecursively() }
+                    recordLoadFailure(now)
+                    return
+                }
+
+                if (!writeCurrentVersion(root, remoteVersion)) {
+                    log("Rules loaded but current cache pointer update failed; keeping new version dir")
+                }
+                cleanupVersions(root, remoteVersion, previousVersion)
+            } catch (t: Throwable) {
+                runCatching { staging.deleteRecursively() }
+                throw t
             }
 
         } catch (t: Throwable) {
@@ -298,98 +488,75 @@ class XposedInit : IXposedHookLoadPackage {
 
     private fun tryLoadLocalCached(lpparam: XC_LoadPackage.LoadPackageParam, targetPkg: String): Boolean {
         val cacheDir = currentContext?.cacheDir ?: return false
-        val rulesDir = File(cacheDir, "intent_modifier_rules")
-        val sharedDex = File(rulesDir, "rules_shared.dex")
-        val metaFile = File(rulesDir, "meta.json")
-        if (!sharedDex.exists() || !metaFile.exists()) return false
+        val root = rulesRoot(cacheDir)
+        if (!root.isDirectory) return false
 
-        val metaText = try {
-            metaFile.readText()
-        } catch (t: Throwable) {
-            logThrowable("Local meta read failed", t)
-            return false
-        }
-        val manifest = RuleManifest.fromJson(metaText)
-        val version = manifest?.version
-            ?: try { JSONObject(metaText).optLong("version", 0) } catch (e: Exception) { 0L }
-
-        if (manifest != null && manifest.groups.isNotEmpty()) {
-            val sharedGroup = manifest.groups[RuleManifest.GROUP_SHARED]
-            if (sharedGroup == null) {
-                log("Local manifest missing shared group, dropping cache")
-                runCatching { rulesDir.deleteRecursively() }
-                return false
-            }
-            val sharedBytes = try {
-                sharedDex.readBytes()
-            } catch (t: Throwable) {
-                logThrowable("Local shared DEX read failed", t)
-                runCatching { rulesDir.deleteRecursively() }
-                return false
-            }
-            if (!verifyDexBytes("local_shared", sharedBytes, sharedGroup)) {
-                log("Local shared DEX failed integrity check, dropping cache")
-                runCatching { rulesDir.deleteRecursively() }
-                return false
-            }
-
-            val sanitizedPkg = targetPkg.replace('.', '_')
-            val appGroup = manifest.groups[sanitizedPkg]
-            val appDex = File(rulesDir, "rules_app.dex")
-            if (appGroup != null) {
-                if (!appDex.exists()) {
-                    log("Local manifest expects app DEX for $targetPkg but file is missing, dropping cache")
-                    runCatching { rulesDir.deleteRecursively() }
-                    return false
+        val currentVersion = readCurrentVersion(root)
+        val candidates = mutableListOf<Long>()
+        currentVersion?.let { candidates.add(it) }
+        root.listFiles()
+            ?.mapNotNull { file ->
+                if (file.isDirectory && file.name.startsWith("v")) {
+                    file.name.removePrefix("v").toLongOrNull()
+                } else {
+                    null
                 }
-                val appBytes = try {
-                    appDex.readBytes()
-                } catch (t: Throwable) {
-                    logThrowable("Local app DEX read failed", t)
-                    runCatching { rulesDir.deleteRecursively() }
-                    return false
-                }
-                if (!verifyDexBytes("local_app_$targetPkg", appBytes, appGroup)) {
-                    log("Local app DEX failed integrity check, dropping cache")
-                    runCatching { rulesDir.deleteRecursively() }
-                    return false
-                }
-            } else if (appDex.exists()) {
-                log("Local app DEX not described by manifest, removing it")
-                runCatching { appDex.delete() }
             }
-        } else {
-            log("Local manifest has no group hashes, accepting legacy cache without verification")
-        }
+            ?.sortedDescending()
+            ?.filter { it != currentVersion }
+            ?.let { candidates.addAll(it) }
 
-        val loaded = loadDexAndBuildRules(lpparam, targetPkg, version)
-        if (!loaded) {
-            log("Local rules version=$version failed to load, dropping cache")
-            runCatching { rulesDir.deleteRecursively() }
+        for (version in candidates.distinct()) {
+            val dir = versionDir(root, version)
+            if (!dir.isDirectory) continue
+            val manifest = readLocalManifest(dir) ?: continue
+            if (!validateLocalDir(dir, manifest, targetPkg)) {
+                log("Cleaning invalid local version ${dir.name}")
+                runCatching { dir.deleteRecursively() }
+                continue
+            }
+
+            val previousVersion = rulesState?.version
+            if (loadDexAndBuildRules(lpparam, targetPkg, version, dir)) {
+                if (currentVersion != version) {
+                    if (!writeCurrentVersion(root, version)) {
+                        log("Local version $version loaded but current pointer update failed")
+                    }
+                }
+                cleanupVersions(root, version, previousVersion)
+                log("Local rules version=$version loaded")
+                return true
+            }
+
+            log("Local version $version failed to load, deleting")
+            runCatching { dir.deleteRecursively() }
         }
-        return loaded
+        return false
     }
 
-    private fun loadDexAndBuildRules(lpparam: XC_LoadPackage.LoadPackageParam, targetPkg: String, version: Long): Boolean {
+    private fun loadDexAndBuildRules(
+        lpparam: XC_LoadPackage.LoadPackageParam,
+        targetPkg: String,
+        version: Long,
+        versionDir: File
+    ): Boolean {
         try {
             if (rulesState?.version == version) {
                 resetLoadFailure()
                 return true
             }
 
-            val cacheDir = currentContext?.cacheDir ?: return false
-            val rulesDir = "${cacheDir.absolutePath}/intent_modifier_rules"
-            val sharedDex = File("$rulesDir/rules_shared.dex")
+            val sharedDex = File(versionDir, SHARED_DEX_FILE)
             if (!sharedDex.exists()) {
-                log("Shared DEX missing at $sharedDex")
+                log("Shared DEX missing at ${sharedDex.absolutePath}")
                 return false
             }
 
+            val appDex = File(versionDir, APP_DEX_FILE)
             val dexPaths = mutableListOf(sharedDex.absolutePath)
-            val appDex = File("$rulesDir/rules_app.dex")
             if (appDex.exists()) dexPaths.add(appDex.absolutePath)
 
-            val optimizedDir = File("$rulesDir/optimized").also { it.mkdirs() }
+            val optimizedDir = File(versionDir, "optimized").also { it.mkdirs() }
             val path = dexPaths.joinToString(":")
             val parentLoader = lpparam.classLoader
             val dexClassLoader = dalvik.system.DexClassLoader(path, optimizedDir.absolutePath, null, parentLoader)
