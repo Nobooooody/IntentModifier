@@ -233,6 +233,32 @@ class ModifierRepository(private val context: Context) {
         prefs.edit().putLong(KEY_COMPILED_VERSION, version).apply()
     }
 
+    /**
+     * 一次性提交 shared DEX、app DEX、manifest 与 version，避免中间态对外可见。
+     * 使用 commit() 同步落盘；失败时抛出异常，由调用方转为编译发布失败。
+     */
+    fun publishCompiledRules(
+        sharedDexBase64: String,
+        appDexBase64: Map<String, String>,
+        manifestJson: String,
+        version: Long
+    ) {
+        val existingAppPackages = getAllAppDexPackages()
+        val editor = prefs.edit()
+        editor.putString(KEY_SHARED_DEX, sharedDexBase64)
+        for ((sanitizedPkg, dexBase64) in appDexBase64) {
+            editor.putString("$KEY_APP_DEX_PREFIX$sanitizedPkg", dexBase64)
+        }
+        for (stalePkg in existingAppPackages - appDexBase64.keys) {
+            editor.remove("$KEY_APP_DEX_PREFIX$stalePkg")
+        }
+        editor.putString(KEY_COMPILED_MANIFEST, manifestJson)
+        editor.putLong(KEY_COMPILED_VERSION, version)
+        check(editor.commit()) { "Failed to commit compiled rules" }
+    }
+
+    fun getCompiledManifest(): String? = prefs.getString(KEY_COMPILED_MANIFEST, null)
+
     // v2 残留方法，Stage 2 后移除
     fun saveCompiledDex(dexBase64: String, version: Long, ruleCount: Int) {
         prefs.edit()
@@ -315,6 +341,7 @@ class ModifierRepository(private val context: Context) {
         const val KEY_JAVA_CODE_RULES = "java_code_rules"
         const val KEY_NORMAL_RULES = "normal_rules"
         const val KEY_COMPILED_VERSION = "compiled_version"
+        const val KEY_COMPILED_MANIFEST = "compiled_manifest"
         const val KEY_SHARED_DEX = "shared_dex"
         const val KEY_APP_DEX_PREFIX = "app_dex_"
 

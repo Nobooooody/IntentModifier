@@ -13,6 +13,7 @@ import io.github.nobooooody.intent_modifier.data.JavaCodeRule
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.data.NormalRule
 import org.eclipse.jdt.internal.compiler.batch.Main
+import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
@@ -37,6 +38,7 @@ data class CompilationResult(
 
 data class CompiledArtifact(
     val version: Long,
+    val compiledAt: Long,
     val runDir: File,
     val sharedDex: File,
     val appDexFiles: Map<String, File>,
@@ -171,6 +173,7 @@ class RuleCompilationManager(private val context: Context) {
             return CompileOutcome.Success(
                 CompiledArtifact(
                     version = version,
+                    compiledAt = version,
                     runDir = runDir,
                     sharedDex = sharedDex,
                     appDexFiles = appDexFiles,
@@ -187,24 +190,35 @@ class RuleCompilationManager(private val context: Context) {
     @Synchronized
     fun publish(artifact: CompiledArtifact): CompilationResult {
         return try {
-            repo.saveSharedDex(Base64.encodeToString(artifact.sharedDex.readBytes(), Base64.NO_WRAP))
-
+            val version = maxOf(
+                artifact.version,
+                repo.getCompiledVersion() + 1,
+                System.currentTimeMillis()
+            )
+            val sharedDexBase64 = Base64.encodeToString(
+                artifact.sharedDex.readBytes(),
+                Base64.NO_WRAP
+            )
+            val appDexBase64 = linkedMapOf<String, String>()
             for ((sanitizedPkg, dexFile) in artifact.appDexFiles) {
-                repo.saveAppDex(sanitizedPkg, Base64.encodeToString(dexFile.readBytes(), Base64.NO_WRAP))
+                appDexBase64[sanitizedPkg] = Base64.encodeToString(dexFile.readBytes(), Base64.NO_WRAP)
             }
+            val manifest = JSONObject().apply {
+                put("version", version)
+                put("ruleCount", artifact.ruleCount)
+                put("compiledAt", artifact.compiledAt)
+            }.toString()
 
-            val stalePackages = repo.getAllAppDexPackages() - artifact.appDexFiles.keys
-            for (stalePkg in stalePackages) {
-                log("Removing stale app DEX for $stalePkg")
-                repo.removeAppDex(stalePkg)
-            }
-
-            // 版本号最后写：只有完整依赖全部落盘后才对外可见
-            repo.saveVersion(artifact.version)
+            repo.publishCompiledRules(
+                sharedDexBase64 = sharedDexBase64,
+                appDexBase64 = appDexBase64,
+                manifestJson = manifest,
+                version = version
+            )
 
             log(
-                "Compilation published: version=${artifact.version}, ${artifact.ruleCount} rules, " +
-                    "${artifact.appDexFiles.size} app groups, ${stalePackages.size} stale removed"
+                "Compilation published atomically: version=$version, ${artifact.ruleCount} rules, " +
+                    "${artifact.appDexFiles.size} app groups"
             )
             CompilationResult(true)
         } catch (e: Exception) {
