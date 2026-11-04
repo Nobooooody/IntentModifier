@@ -605,7 +605,7 @@ class RuleCompilationManager(private val context: Context) {
         if (code.isNullOrEmpty()) {
             return """
                 public static boolean evaluate(Context ctx, Intent intent, Intent result) {
-                    return false;
+                    return true;
                 }
             """.trimIndent()
         }

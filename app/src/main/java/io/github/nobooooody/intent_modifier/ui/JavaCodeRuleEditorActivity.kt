@@ -182,6 +182,10 @@ fun JavaCodeRuleForm(
             Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
             return
         }
+        if (condition.isBlank() && action.isBlank()) {
+            Toast.makeText(ctx, R.string.condition_or_action_required, Toast.LENGTH_SHORT).show()
+            return
+        }
         isSaving = true
         val rule = JavaCodeRule(
             id = editingRule?.id ?: UUID.randomUUID().toString(),
