@@ -8,6 +8,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -88,6 +91,8 @@ import io.github.nobooooody.intent_modifier.data.JavaCodeRule
 import io.github.nobooooody.intent_modifier.data.LauncherHook
 import io.github.nobooooody.intent_modifier.data.NormalRule
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
+import io.github.nobooooody.intent_modifier.data.RuleHash
+import io.github.nobooooody.intent_modifier.data.RuleManifest
 import io.github.nobooooody.intent_modifier.engine.MutationResult
 import io.github.nobooooody.intent_modifier.engine.RuleMutationCoordinator
 import io.github.nobooooody.intent_modifier.engine.RuleSnapshot
@@ -111,11 +116,39 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        checkRuleManifestConsistency()
         setContent {
             IntentModifierTheme {
                 MainScreen()
             }
         }
+    }
+
+    private fun checkRuleManifestConsistency() {
+        val appContext = applicationContext
+        Thread({
+            try {
+                val repo = ModifierRepository(appContext)
+                val javaRules = repo.getJavaCodeRules()
+                val normalRules = repo.getNormalRules()
+                val hasCompiledRules =
+                    javaRules.any { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) } ||
+                        normalRules.any { it.enabled }
+                if (!hasCompiledRules) return@Thread
+
+                val currentHash = RuleHash.compute(javaRules, normalRules)
+                val manifest = repo.getCompiledManifest()?.let { RuleManifest.fromJson(it) }
+                if (manifest?.enabledRuleHash == currentHash) return@Thread
+
+                Log.i("IntentModifier", "Rule manifest hash mismatch, scheduling recompile")
+                RuleMutationCoordinator.get(appContext).mutate { it }
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(appContext, R.string.compiling_all_rules, Toast.LENGTH_SHORT).show()
+                }
+            } catch (t: Throwable) {
+                Log.e("IntentModifier", "Rule manifest consistency check failed", t)
+            }
+        }, "IntentModifier-consistency-check").apply { isDaemon = true }.start()
     }
 }
 

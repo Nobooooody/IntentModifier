@@ -13,6 +13,7 @@ import io.github.nobooooody.intent_modifier.data.JavaCodeRule
 import io.github.nobooooody.intent_modifier.data.DexGroupManifest
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.data.NormalRule
+import io.github.nobooooody.intent_modifier.data.RuleHash
 import io.github.nobooooody.intent_modifier.data.RuleManifest
 import org.eclipse.jdt.internal.compiler.batch.Main
 import java.io.File
@@ -187,7 +188,8 @@ class RuleCompilationManager(private val context: Context) {
                     ruleCount = ruleEntries.size,
                     sharedRuleCount = sharedEntries.size,
                     appGroupRuleCounts = appGroups.mapValues { it.value.size },
-                    appGroupTargetPackages = appTargetPackages.mapValues { it.value.toList() }
+                    appGroupTargetPackages = appTargetPackages.mapValues { it.value.toList() },
+                    enabledRuleHash = RuleHash.compute(javaRules, normalRules)
                 )
             )
         } catch (e: Exception) {
