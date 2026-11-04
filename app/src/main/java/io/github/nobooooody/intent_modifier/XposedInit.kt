@@ -643,6 +643,7 @@ const val HOOK_INSTRUMENTATION = "android.app.Instrumentation"
 const val HOOK_LAUNCHER3 = "com.android.launcher3.Launcher"
 
 object LauncherHooksLoader {
+    private const val TAG = "IntentModifier"
     private var hooks = mapOf<String, LoadedLauncherHook>()
     private var lastLoad = 0L
     private const val CACHE_DURATION = 5000L
@@ -653,26 +654,57 @@ object LauncherHooksLoader {
         return hooks
     }
 
+    private fun log(msg: String) {
+        XposedBridge.log("$TAG: $msg")
+    }
+
     private fun loadHooks() {
         lastLoad = System.currentTimeMillis()
+        val allPrefs = try {
+            ModulePrefsReader.all()
+        } catch (t: Throwable) {
+            log("launcher_hooks read failed, falling back to $HOOK_INSTRUMENTATION: ${t.javaClass.simpleName}: ${t.message}")
+            hooks = emptyMap()
+            return
+        }
+
+        if (allPrefs.isEmpty()) {
+            log("launcher_hooks read failed or module prefs empty, falling back to $HOOK_INSTRUMENTATION")
+            hooks = emptyMap()
+            return
+        }
+
+        val jsonStr = allPrefs["launcher_hooks"] as? String
+        if (jsonStr == null) {
+            log("launcher_hooks not configured, falling back to $HOOK_INSTRUMENTATION")
+            hooks = emptyMap()
+            return
+        }
+        if (jsonStr.isBlank() || jsonStr == "{}") {
+            log("launcher_hooks is an empty map, falling back to $HOOK_INSTRUMENTATION")
+            hooks = emptyMap()
+            return
+        }
+
         val newHooks = mutableMapOf<String, LoadedLauncherHook>()
         try {
-            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", "intent_modifier_config")
-            xprefs.makeWorldReadable()
-            val jsonStr = xprefs.getString("launcher_hooks", null)
-            if (jsonStr.isNullOrEmpty() || jsonStr == "{}") {
-                hooks = emptyMap()
-                return
-            }
             val json = JSONObject(jsonStr)
             json.keys().forEach { pkg ->
                 val hookJson = json.getJSONObject(pkg)
                 newHooks[pkg] = LoadedLauncherHook(pkg, hookJson.optString("hookType", HOOK_INSTRUMENTATION))
             }
-            hooks = newHooks
-        } catch (e: Exception) {
+        } catch (t: Throwable) {
+            log("launcher_hooks parse failed, falling back to $HOOK_INSTRUMENTATION: ${t.javaClass.simpleName}: ${t.message}")
             hooks = emptyMap()
+            return
         }
+
+        if (newHooks.isEmpty()) {
+            log("launcher_hooks parsed to an empty map, falling back to $HOOK_INSTRUMENTATION")
+        } else {
+            log("launcher_hooks loaded ${newHooks.size} entries")
+        }
+        hooks = newHooks
     }
 }
 
