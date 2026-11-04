@@ -30,6 +30,8 @@ class XposedInit : IXposedHookLoadPackage {
     private var hasRuleChecked = false
     private var lastRuleCheckAt = 0L
 
+    private val ruleReentrancy: ThreadLocal<Int> = ThreadLocal.withInitial { 0 }
+
     private data class RulesState(val version: Long, val rules: CompiledRules)
 
     private data class RegistryRule(
@@ -410,13 +412,14 @@ class XposedInit : IXposedHookLoadPackage {
         val rules = rulesState?.rules
         if (rules == null || rules.list.isEmpty()) return intent
 
+        val ruleIntent = Intent(intent)
         val resultIntent = Intent(intent)
         var executed = false
         for (rule in rules.list) {
             try {
-                val matched = rule.evaluateMethod.invoke(null, currentContext, intent, resultIntent) as? Boolean ?: false
+                val matched = rule.evaluateMethod.invoke(null, currentContext, ruleIntent, resultIntent) as? Boolean ?: false
                 if (matched) {
-                    val shouldBlock = rule.executeMethod.invoke(null, currentContext, intent, resultIntent) as? Boolean ?: true
+                    val shouldBlock = rule.executeMethod.invoke(null, currentContext, ruleIntent, resultIntent) as? Boolean ?: true
                     executed = true
                     if (shouldBlock) break
                 }
@@ -439,17 +442,8 @@ class XposedInit : IXposedHookLoadPackage {
                 Context::class.java, IBinder::class.java, IBinder::class.java, Activity::class.java, Intent::class.java, Int::class.javaPrimitiveType, Bundle::class.java,
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (currentContext == null) {
-                            currentContext = AndroidAppHelper.currentApplication()?.applicationContext
-                        }
-                        loadRulesIfNeeded(lpparam, currentContext)
                         val intent = param.args[4] as? Intent ?: return
-
-                        logIntent("$TAG: Original", intent)
-                        val modifiedIntent = applyRules(intent)
-                        if (modifiedIntent !== intent) {
-                            logIntent("$TAG: Modified", modifiedIntent)
-                        }
+                        val modifiedIntent = applyHookRules(lpparam, "Instrumentation", intent) ?: return
                         param.args[4] = modifiedIntent
                     }
                 })
@@ -462,26 +456,16 @@ class XposedInit : IXposedHookLoadPackage {
         try {
             val classLoader = lpparam.classLoader
             val cls = Class.forName("com.android.launcher3.Launcher", false, classLoader)
+            var hooked = 0
             for (method in cls.declaredMethods) {
-                if (method.name == "startActivitySafely") {
-                    XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
-                            if (currentContext == null) {
-                                currentContext = AndroidAppHelper.currentApplication()?.applicationContext
-                            }
-                            loadRulesIfNeeded(lpparam, currentContext)
-                            val intent = param.args[1] as? Intent ?: return
-
-                            logIntent("$TAG L3: Original", intent)
-                            val modifiedIntent = applyRules(intent)
-                            if (modifiedIntent !== intent) {
-                                logIntent("$TAG L3: Modified", modifiedIntent)
-                            }
-                            param.args[1] = modifiedIntent
-                        }
-                    })
-                    return
-                }
+                if (method.name != "startActivitySafely") continue
+                val intentIndex = method.parameterTypes.indexOf(Intent::class.java)
+                if (intentIndex < 0) continue
+                hookMethodWithIntent(lpparam, "Launcher3", method, intentIndex)
+                hooked++
+            }
+            if (hooked == 0) {
+                log("Launcher3.startActivitySafely with Intent parameter not found")
             }
         } catch (t: Throwable) {
             logThrowable("Failed to hook Launcher3", t)
@@ -492,59 +476,78 @@ class XposedInit : IXposedHookLoadPackage {
         try {
             val cls = Class.forName(hookClassName, false, lpparam.classLoader)
             val methods = cls.declaredMethods
-            var hooked = false
+            var hooked = 0
             for (method in methods) {
-                if (method.name.contains("startActivity") && method.parameterTypes.any { it == Intent::class.java }) {
-                    val intentIndex = method.parameterTypes.indexOf(Intent::class.java)
+                if (!method.name.contains("startActivity")) continue
+                val intentIndex = method.parameterTypes.indexOf(Intent::class.java)
+                if (intentIndex < 0) continue
+                hookMethodWithIntent(lpparam, "Custom", method, intentIndex)
+                hooked++
+            }
+            if (hooked == 0) {
+                for (method in methods) {
+                    if (!method.name.contains("startActivity")) continue
                     XposedBridge.hookMethod(method, object : XC_MethodHook() {
                         override fun beforeHookedMethod(param: MethodHookParam) {
-                            if (currentContext == null) {
-                                currentContext = AndroidAppHelper.currentApplication()?.applicationContext
+                            for (i in param.args.indices) {
+                                val intent = param.args[i] as? Intent ?: continue
+                                val modifiedIntent = applyHookRules(lpparam, "Custom", intent) ?: return
+                                param.args[i] = modifiedIntent
+                                return
                             }
-                            loadRulesIfNeeded(lpparam, currentContext)
-                            val intent = param.args[intentIndex] as? Intent ?: return
-                            logIntent("$TAG Custom: Original", intent)
-                            val modifiedIntent = applyRules(intent)
-                            if (modifiedIntent !== intent) {
-                                logIntent("$TAG Custom: Modified", modifiedIntent)
-                            }
-                            param.args[intentIndex] = modifiedIntent
                         }
                     })
-                    log("Hooked $hookClassName.$method")
-                    hooked = true
+                    log("Hooked $hookClassName.${method.name} (fallback)")
                 }
-            }
-            if (!hooked) {
-                for (method in methods) {
-                    if (method.name.contains("startActivity")) {
-                        XposedBridge.hookMethod(method, object : XC_MethodHook() {
-                            override fun beforeHookedMethod(param: MethodHookParam) {
-                                if (currentContext == null) {
-                                    currentContext = AndroidAppHelper.currentApplication()?.applicationContext
-                                }
-                                loadRulesIfNeeded(lpparam, currentContext)
-                                for (i in param.args.indices) {
-                                    if (param.args[i] is Intent) {
-                                        val intent = param.args[i] as Intent
-                                        logIntent("$TAG Custom: Original", intent)
-                                        val modifiedIntent = applyRules(intent)
-                                        if (modifiedIntent !== intent) {
-                                            logIntent("$TAG Custom: Modified", modifiedIntent)
-                                        }
-                                        param.args[i] = modifiedIntent
-                                        return
-                                    }
-                                }
-                            }
-                        })
-                        log("Hooked $hookClassName.$method (fallback)")
-                        return
-                    }
+                if (methods.none { it.name.contains("startActivity") }) {
+                    log("No startActivity method found in $hookClassName")
                 }
             }
         } catch (t: Throwable) {
             logThrowable("Failed to hook custom class $hookClassName", t)
+        }
+    }
+
+    private fun hookMethodWithIntent(
+        lpparam: XC_LoadPackage.LoadPackageParam,
+        label: String,
+        method: Method,
+        intentIndex: Int
+    ) {
+        XposedBridge.hookMethod(method, object : XC_MethodHook() {
+            override fun beforeHookedMethod(param: MethodHookParam) {
+                val intent = param.args.getOrNull(intentIndex) as? Intent ?: return
+                val modifiedIntent = applyHookRules(lpparam, label, intent) ?: return
+                param.args[intentIndex] = modifiedIntent
+            }
+        })
+        log("Hooked $label ${method.declaringClass.name}#${method.name} intentArg=$intentIndex")
+    }
+
+    private fun applyHookRules(
+        lpparam: XC_LoadPackage.LoadPackageParam,
+        label: String,
+        intent: Intent
+    ): Intent? {
+        val depth = ruleReentrancy.get() ?: 0
+        if (depth > 0) return null
+        ruleReentrancy.set(depth + 1)
+        return try {
+            if (currentContext == null) {
+                currentContext = AndroidAppHelper.currentApplication()?.applicationContext
+            }
+            loadRulesIfNeeded(lpparam, currentContext)
+            logIntent("$TAG $label: Original", intent)
+            val modifiedIntent = applyRules(intent)
+            if (modifiedIntent !== intent) {
+                logIntent("$TAG $label: Modified", modifiedIntent)
+            }
+            modifiedIntent
+        } catch (t: Throwable) {
+            logThrowable("Rule hook failed label=$label", t)
+            null
+        } finally {
+            ruleReentrancy.set((ruleReentrancy.get() ?: 1) - 1)
         }
     }
 }
