@@ -809,6 +809,10 @@ class XposedInit : IXposedHookLoadPackage {
                 val bytes = chunkBytes ?: return null
                 if (bytes.isEmpty()) break
                 output.write(bytes)
+                if (total == null && bytes.size > CHUNK_SIZE_BYTES) {
+                    log("Provider returned an oversized chunk; assuming chunk parameters are ignored")
+                    break
+                }
                 offset += bytes.size
                 if (total != null && offset >= total) break
                 if (total == null && bytes.size < CHUNK_SIZE_BYTES) break
