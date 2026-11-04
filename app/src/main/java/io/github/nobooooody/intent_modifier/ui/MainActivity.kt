@@ -186,15 +186,19 @@ private sealed interface DisplayRule {
 // ─── Import types ─────────────────────────────────────────────────────────────
 
 private sealed class ImportResult {
-    data class Success(val javaRules: List<JavaCodeRule>, val normalRules: List<NormalRule>, val count: Int) : ImportResult()
+    data class Success(
+        val newJavaRules: List<JavaCodeRule>,
+        val newNormalRules: List<NormalRule>,
+        val count: Int
+    ) : ImportResult()
+
     data class Conflict(
         val conflictJavaRules: List<JavaCodeRule>,
         val conflictNormalRules: List<NormalRule>,
         val currentJavaRules: MutableList<JavaCodeRule>,
         val currentNormalRules: MutableList<NormalRule>,
         val newJavaRules: List<JavaCodeRule>,
-        val newNormalRules: List<NormalRule>,
-        val repo: ModifierRepository
+        val newNormalRules: List<NormalRule>
     ) : ImportResult()
 }
 
@@ -209,9 +213,7 @@ private fun handleImportText(ctx: Context, jsonStr: String, repo: ModifierReposi
         val currentJavaRules = repo.getJavaCodeRules().toMutableList()
         val currentNormalRules = repo.getNormalRules().toMutableList()
 
-        val existingJavaIds = currentJavaRules.map { it.id }.toSet()
-        val existingNormalIds = currentNormalRules.map { it.id }.toSet()
-        val allExistingIds = existingJavaIds + existingNormalIds
+        val allExistingIds = currentJavaRules.map { it.id }.toSet() + currentNormalRules.map { it.id }.toSet()
 
         val newJavaRules = importedJava.filter { it.id !in allExistingIds }
         val newNormalRules = importedNormal.filter { it.id !in allExistingIds }
@@ -222,15 +224,11 @@ private fun handleImportText(ctx: Context, jsonStr: String, repo: ModifierReposi
             onResult(ImportResult.Conflict(
                 conflictJavaRules, conflictNormalRules,
                 currentJavaRules, currentNormalRules,
-                newJavaRules, newNormalRules, repo
+                newJavaRules, newNormalRules
             ))
         } else {
-            currentJavaRules.addAll(importedJava)
-            currentNormalRules.addAll(importedNormal)
-            repo.saveJavaCodeRules(currentJavaRules)
-            repo.saveNormalRules(currentNormalRules)
-            onResult(ImportResult.Success(currentJavaRules, currentNormalRules, importedJava.size + importedNormal.size))
-            Toast.makeText(ctx, ctx.getString(R.string.import_success, importedJava.size + importedNormal.size), Toast.LENGTH_SHORT).show()
+            // 导入的落盘/编译统一由 RuleMutationCoordinator 完成，这里只计算候选。
+            onResult(ImportResult.Success(newJavaRules, newNormalRules, newJavaRules.size + newNormalRules.size))
         }
     } catch (e: Exception) {
         Toast.makeText(ctx, R.string.import_failed, Toast.LENGTH_SHORT).show()
@@ -290,6 +288,38 @@ private fun RulesScreen() {
         }
     }
 
+    fun applyImportedRules(
+        newJavaRules: List<JavaCodeRule>,
+        newNormalRules: List<NormalRule>,
+        count: Int
+    ) {
+        scope.launch {
+            val result = try {
+                coordinator.mutate { snapshot ->
+                    val existingIds = snapshot.javaRules.map { it.id }.toSet() +
+                        snapshot.normalRules.map { it.id }.toSet()
+                    snapshot.copy(
+                        javaRules = snapshot.javaRules + newJavaRules.filterNot { it.id in existingIds },
+                        normalRules = snapshot.normalRules + newNormalRules.filterNot { it.id in existingIds }
+                    )
+                }.await()
+            } catch (e: Exception) {
+                MutationResult.Failure(e.message ?: e.javaClass.simpleName)
+            }
+            when (result) {
+                is MutationResult.Success -> {
+                    Toast.makeText(ctx, ctx.getString(R.string.import_success, count), Toast.LENGTH_SHORT).show()
+                }
+                is MutationResult.Failure -> {
+                    val prefix = ctx.getString(R.string.compile_failed)
+                    val ruleName = result.ruleName?.let { "$it: " } ?: ""
+                    Toast.makeText(ctx, "$prefix\n$ruleName${result.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+            refresh()
+        }
+    }
+
     val editorLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -342,10 +372,7 @@ private fun RulesScreen() {
                 handleImportText(ctx, text, repo) { result ->
                     when (result) {
                         is ImportResult.Success -> {
-                            rules = result.javaRules
-                            normalRules = result.normalRules
-                            selectedDisplayIndices.clear()
-                            isSelectionMode = false
+                            applyImportedRules(result.newJavaRules, result.newNormalRules, result.count)
                         }
                         is ImportResult.Conflict -> {
                             val intent = Intent(ctx, ConflictResolutionActivity::class.java).apply {
@@ -441,9 +468,7 @@ private fun RulesScreen() {
                                             handleImportText(ctx, clip.getItemAt(0).text.toString(), repo) { result ->
                                                 when (result) {
                                                     is ImportResult.Success -> {
-                                                        rules = result.javaRules
-                                                        normalRules = result.normalRules
-                                                        Toast.makeText(ctx, ctx.getString(R.string.import_success, result.count), Toast.LENGTH_SHORT).show()
+                                                        applyImportedRules(result.newJavaRules, result.newNormalRules, result.count)
                                                     }
                                                     is ImportResult.Conflict -> {
                                                         val intent = Intent(ctx, ConflictResolutionActivity::class.java).apply {

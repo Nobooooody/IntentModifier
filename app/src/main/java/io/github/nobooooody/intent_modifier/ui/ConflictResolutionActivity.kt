@@ -42,12 +42,21 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.JavaCodeRule
-import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.data.NormalRule
+import io.github.nobooooody.intent_modifier.engine.MutationResult
+import io.github.nobooooody.intent_modifier.engine.RuleMutationCoordinator
+import io.github.nobooooody.intent_modifier.engine.RuleSnapshot
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
 class ConflictResolutionActivity : ComponentActivity() {
+
+    private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     companion object {
         const val EXTRA_CONFLICT_JAVA_RULES = "conflict_java_rules"
@@ -91,12 +100,35 @@ class ConflictResolutionActivity : ComponentActivity() {
                     newJavaRules = newJavaRules,
                     newNormalRules = newNormalRules,
                     onResolved = { resolvedJava, resolvedNormal ->
-                        ModifierRepository(this@ConflictResolutionActivity).apply {
-                            saveJavaCodeRules(resolvedJava)
-                            saveNormalRules(resolvedNormal)
+                        uiScope.launch {
+                            val result = try {
+                                RuleMutationCoordinator.get(this@ConflictResolutionActivity)
+                                    .mutate { RuleSnapshot(resolvedJava, resolvedNormal) }
+                                    .await()
+                            } catch (e: Exception) {
+                                MutationResult.Failure(e.message ?: e.javaClass.simpleName)
+                            }
+                            when (result) {
+                                is MutationResult.Success -> {
+                                    Toast.makeText(
+                                        this@ConflictResolutionActivity,
+                                        R.string.saved,
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    setResult(Activity.RESULT_OK)
+                                    finish()
+                                }
+                                is MutationResult.Failure -> {
+                                    val prefix = getString(R.string.compile_failed)
+                                    val ruleName = result.ruleName?.let { "$it: " } ?: ""
+                                    Toast.makeText(
+                                        this@ConflictResolutionActivity,
+                                        "$prefix\n$ruleName${result.message}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
                         }
-                        setResult(Activity.RESULT_OK)
-                        finish()
                     },
                     onCancel = {
                         setResult(Activity.RESULT_CANCELED)
@@ -105,6 +137,11 @@ class ConflictResolutionActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onDestroy() {
+        uiScope.cancel()
+        super.onDestroy()
     }
 
     private fun parseJavaRules(json: String): List<JavaCodeRule> {
@@ -525,7 +562,6 @@ private fun ConflictResolutionScreen(
                         workingCurrentNormal.addAll(resolvedNormal)
 
                         onResolved(workingCurrentJava, workingCurrentNormal)
-                        Toast.makeText(ctx, ctx.getString(R.string.import_success, newJavaRules.size + newNormalRules.size + resolvedJava.size + resolvedNormal.size), Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.weight(1f)
                 ) {
