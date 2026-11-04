@@ -79,9 +79,12 @@ data class RuleManifest(
 
         fun sha256Hex(bytes: ByteArray): String {
             val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+            val hex = "0123456789abcdef"
             val builder = StringBuilder(digest.size * 2)
             for (b in digest) {
-                builder.append(String.format("%02x", b.toInt() and 0xff))
+                val value = b.toInt() and 0xff
+                builder.append(hex[value ushr 4])
+                builder.append(hex[value and 0x0f])
             }
             return builder.toString()
         }
