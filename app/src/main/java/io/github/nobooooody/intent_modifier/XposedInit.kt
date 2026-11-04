@@ -734,6 +734,19 @@ class XposedInit : IXposedHookLoadPackage {
         return if (cursor.moveToFirst()) cursor.getString(index) else "unknown"
     }
 
+    private fun providerUnavailableHint(t: Throwable?): String {
+        val message = t?.message ?: ""
+        return if (t is IllegalArgumentException ||
+            message.contains("Failed to find provider info", ignoreCase = true) ||
+            message.contains("Unable to find provider", ignoreCase = true) ||
+            message.contains("Unknown URL", ignoreCase = true)
+        ) {
+            "；IM 可能处于 stopped 状态，请先打开一次 IM"
+        } else {
+            ""
+        }
+    }
+
     private fun credentialFile(ctx: Context): File =
         File(rulesRoot(ctx.cacheDir), CREDENTIAL_FILE)
 
@@ -848,7 +861,7 @@ class XposedInit : IXposedHookLoadPackage {
                 token
             }
         } catch (t: Throwable) {
-            log("Enroll failed: ${t.javaClass.simpleName}: ${t.message}")
+            log("Enroll failed: ${t.javaClass.simpleName}: ${t.message}${providerUnavailableHint(t)}")
             null
         }
     }
@@ -928,6 +941,9 @@ class XposedInit : IXposedHookLoadPackage {
             val ctx = currentContext ?: return null
             log("Falling back to ContentProvider for version (anonymous)")
             val cursor = ctx.contentResolver.query(RuleProvider.URI_VERSION, null, null, null, null)
+            if (cursor == null) {
+                log("ContentProvider version returned null；IM 可能处于 stopped 状态，请先打开一次 IM")
+            }
             cursor?.use {
                 providerError(it)?.let { err ->
                     log("Provider version denied: $err")
@@ -942,7 +958,7 @@ class XposedInit : IXposedHookLoadPackage {
                 }
             }
         } catch (e: Exception) {
-            log("ContentProvider version failed: ${e.message}")
+            log("ContentProvider version failed: ${e.message}${providerUnavailableHint(e)}")
         }
 
         return null
@@ -980,6 +996,10 @@ class XposedInit : IXposedHookLoadPackage {
                 log("Provider manifest denied: $error")
                 return null
             }
+            if (cursor == null) {
+                log("Provider manifest returned null；IM 可能处于 stopped 状态，请先打开一次 IM")
+                return null
+            }
             cursor?.use {
                 if (it.moveToFirst()) {
                     val manifest = RuleManifest.fromJson(it.getString(0))
@@ -990,7 +1010,7 @@ class XposedInit : IXposedHookLoadPackage {
                 }
             }
         } catch (t: Throwable) {
-            logThrowable("ContentProvider manifest failed", t)
+            logThrowable("ContentProvider manifest failed${providerUnavailableHint(t)}", t)
         }
 
         return null
@@ -1114,7 +1134,7 @@ class XposedInit : IXposedHookLoadPackage {
             }
             ProviderDexResult.NoData
         } catch (t: Throwable) {
-            logThrowable("Provider full DEX query failed, retrying in chunks", t)
+            logThrowable("Provider full DEX query failed, retrying in chunks${providerUnavailableHint(t)}", t)
             fetchProviderDexChunked(ctx, authedUri, knownSize, token)
         }
     }
@@ -1174,7 +1194,7 @@ class XposedInit : IXposedHookLoadPackage {
             log("Fetched chunked DEX: ${result.size} bytes, chunks<=$CHUNK_SIZE_BYTES")
             return ProviderDexResult.Success(result)
         } catch (t: Throwable) {
-            logThrowable("Provider chunked DEX query failed", t)
+            logThrowable("Provider chunked DEX query failed${providerUnavailableHint(t)}", t)
             return ProviderDexResult.NoData
         }
     }

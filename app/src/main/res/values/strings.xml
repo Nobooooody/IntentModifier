@@ -202,4 +202,25 @@
     <string name="batch_delete_confirm_message">Are you sure you want to delete %1$d rules?</string>
     <string name="close">Close</string>
     <string name="condition_or_action_required">Please fill in condition or action</string>
+    <!-- Local mode authorization -->
+    <string name="local_auth_section">Local mode authorization</string>
+    <string name="local_auth_desc">Only needed for local mode (LSPatch/npatch). XSP-capable frameworks read module prefs directly and do not need pairing.</string>
+    <string name="local_auth_start">Choose app and open window</string>
+    <string name="local_auth_window_active">Window: %1$s, %2$d s left</string>
+    <string name="local_auth_window_note">One token per window; bound to the package and its UID; no issuance after the window closes.</string>
+    <string name="local_auth_issued">Authorized: %1$s (window closed)</string>
+    <string name="local_auth_cancel_window">Cancel window</string>
+    <string name="local_auth_no_window">No authorization window</string>
+    <string name="local_auth_authorized_list">Authorized apps</string>
+    <string name="local_auth_no_credentials">No credentials yet</string>
+    <string name="local_auth_issued_at">Issued at %1$s</string>
+    <string name="local_auth_unknown_time">Unknown time</string>
+    <string name="local_auth_revoke">Revoke</string>
+    <string name="local_auth_revoke_title">Revoke authorization</string>
+    <string name="local_auth_revoke_message">After revocation, this app must pair again; on next launch it will fall back to local cache/default behavior.</string>
+    <string name="local_auth_require_token">Require token for Provider reads</string>
+    <string name="local_auth_require_warning">When enabled, hosts without a credential cannot read via Provider; XSP-capable frameworks are unaffected.</string>
+    <string name="local_auth_require_title">Enable token check?</string>
+    <string name="local_auth_require_confirm">Enable</string>
+
 </resources>

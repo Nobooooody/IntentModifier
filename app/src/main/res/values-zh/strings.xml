@@ -202,4 +202,25 @@
     <string name="batch_delete_confirm_message">确定要删除 %1$d 条规则吗？</string>
     <string name="close">关闭</string>
     <string name="condition_or_action_required">请填写条件或动作</string>
+    <!-- 本地模式授权 -->
+    <string name="local_auth_section">本地模式授权</string>
+    <string name="local_auth_desc">仅本地模式（LSPatch/npatch）需要。XSP 可用的框架直接读取模块 prefs，无需配对。</string>
+    <string name="local_auth_start">选择应用并开启窗口</string>
+    <string name="local_auth_window_active">授权窗口：%1$s，剩余 %2$d 秒</string>
+    <string name="local_auth_window_note">窗口期内只发放一次；凭证绑定该包及其 UID；窗口关闭后不再发放。</string>
+    <string name="local_auth_issued">已授权：%1$s（窗口已关闭）</string>
+    <string name="local_auth_cancel_window">取消窗口</string>
+    <string name="local_auth_no_window">未开启授权窗口</string>
+    <string name="local_auth_authorized_list">已授权应用</string>
+    <string name="local_auth_no_credentials">暂无已授权凭证</string>
+    <string name="local_auth_issued_at">发放时间：%1$s</string>
+    <string name="local_auth_unknown_time">未知时间</string>
+    <string name="local_auth_revoke">撤销</string>
+    <string name="local_auth_revoke_title">撤销授权</string>
+    <string name="local_auth_revoke_message">撤销后该应用需重新配对；下次启动会退回本地缓存/默认行为。</string>
+    <string name="local_auth_require_token">Provider 读取需要 token</string>
+    <string name="local_auth_require_warning">开启后，未持有凭证的宿主将无法通过 Provider 读取；XSP 可用的框架不受影响。</string>
+    <string name="local_auth_require_title">开启 token 校验？</string>
+    <string name="local_auth_require_confirm">开启</string>
+
 </resources>

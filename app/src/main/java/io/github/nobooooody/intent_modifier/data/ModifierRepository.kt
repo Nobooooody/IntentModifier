@@ -220,19 +220,50 @@ class ModifierRepository(private val context: Context) {
 
     fun getEnrollTargetPackage(): String? = prefs.getString(KEY_ENROLL_TARGET_PACKAGE, null)
 
-    fun getProviderTokens(): Map<String, String> {
+    fun getProviderTokens(): Map<String, String> =
+        getEnrollmentCredentials().mapValues { it.value.token }
+
+    fun getEnrollmentCredentials(): Map<String, EnrollmentCredential> {
         val raw = prefs.getString(KEY_PROVIDER_TOKENS, null) ?: return emptyMap()
         return try {
             val json = JSONObject(raw)
             buildMap {
                 json.keys().forEach { pkg ->
-                    val token = json.optString(pkg, "")
-                    if (token.isNotEmpty()) put(pkg, token)
+                    when (val value = json.opt(pkg)) {
+                        is String -> {
+                            // 兼容早期只存 token 字符串的格式，发放时间显示为未知。
+                            if (value.isNotEmpty()) put(pkg, EnrollmentCredential(value, 0L))
+                        }
+                        is JSONObject -> {
+                            val token = value.optString("token", "")
+                            if (token.isNotEmpty()) {
+                                put(pkg, EnrollmentCredential(token, value.optLong("issuedAt", 0L)))
+                            }
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
             emptyMap()
         }
+    }
+
+    fun startEnrollWindow(targetPackage: String, durationMs: Long = 60_000L) {
+        prefs.edit()
+            .putLong(KEY_ENROLL_WINDOW_UNTIL, System.currentTimeMillis() + durationMs)
+            .putString(KEY_ENROLL_TARGET_PACKAGE, targetPackage)
+            .commit()
+    }
+
+    fun cancelEnrollWindow() {
+        prefs.edit()
+            .putLong(KEY_ENROLL_WINDOW_UNTIL, 0L)
+            .remove(KEY_ENROLL_TARGET_PACKAGE)
+            .commit()
+    }
+
+    fun setProviderTokenRequired(required: Boolean) {
+        prefs.edit().putBoolean(KEY_PROVIDER_REQUIRE_TOKEN, required).commit()
     }
 
     /**
@@ -241,14 +272,30 @@ class ModifierRepository(private val context: Context) {
      */
     fun issueEnrollmentToken(targetPackage: String): String? {
         val token = newProviderToken()
-        val tokens = getProviderTokens().toMutableMap()
-        tokens[targetPackage] = token
-        val json = JSONObject()
-        tokens.forEach { (pkg, value) -> json.put(pkg, value) }
+        val credentials = getEnrollmentCredentials().toMutableMap()
+        credentials[targetPackage] = EnrollmentCredential(token, System.currentTimeMillis())
         val editor = prefs.edit()
-        editor.putString(KEY_PROVIDER_TOKENS, json.toString())
+        editor.putString(KEY_PROVIDER_TOKENS, credentialsToJson(credentials))
         editor.putLong(KEY_ENROLL_WINDOW_UNTIL, 0L)
         return if (editor.commit()) token else null
+    }
+
+    fun revokeEnrollmentToken(targetPackage: String) {
+        val credentials = getEnrollmentCredentials().toMutableMap()
+        if (!credentials.containsKey(targetPackage)) return
+        credentials.remove(targetPackage)
+        prefs.edit().putString(KEY_PROVIDER_TOKENS, credentialsToJson(credentials)).commit()
+    }
+
+    private fun credentialsToJson(credentials: Map<String, EnrollmentCredential>): String {
+        val json = JSONObject()
+        credentials.forEach { (pkg, credential) ->
+            json.put(pkg, JSONObject().apply {
+                put("token", credential.token)
+                put("issuedAt", credential.issuedAtMs)
+            })
+        }
+        return json.toString()
     }
 
     private fun newProviderToken(): String {
@@ -362,6 +409,11 @@ class ModifierRepository(private val context: Context) {
 data class LauncherHook(
     val packageName: String,
     val hookType: String = HOOK_INSTRUMENTATION
+)
+
+data class EnrollmentCredential(
+    val token: String,
+    val issuedAtMs: Long
 )
 
 const val HOOK_INSTRUMENTATION = "android.app.Instrumentation"

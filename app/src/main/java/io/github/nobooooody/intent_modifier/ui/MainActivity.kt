@@ -19,6 +19,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -67,8 +70,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -98,9 +103,13 @@ import io.github.nobooooody.intent_modifier.engine.RuleMutationCoordinator
 import io.github.nobooooody.intent_modifier.engine.RuleSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -1117,14 +1126,52 @@ private fun HookTypeDialog(pkg: String, existingHook: LauncherHook?, onDismiss: 
 @Composable
 private fun SettingsScreen() {
     val ctx = LocalContext.current
+    val repo = remember { ModifierRepository(ctx) }
     var showLangDialog by remember { mutableStateOf(false) }
+    var showRequireDialog by remember { mutableStateOf(false) }
+    var pendingRevoke by remember { mutableStateOf<String?>(null) }
     val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
     var currentLang by remember { mutableStateOf(prefs.getString("language", "system") ?: "system") }
+
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            nowMs = System.currentTimeMillis()
+        }
+    }
+
+    val pickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val pkg = result.data?.getStringExtra("package")
+            if (!pkg.isNullOrBlank()) {
+                repo.startEnrollWindow(pkg)
+                Toast.makeText(
+                    ctx,
+                    ctx.getString(R.string.local_auth_window_active, pkg, 60),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    val until = repo.getEnrollWindowUntil()
+    val target = repo.getEnrollTargetPackage()
+    val active = until > 0L && nowMs < until
+    val remaining = if (active) ((until - nowMs) / 1000L).toInt().coerceAtLeast(0) else 0
+    val credentials = repo.getEnrollmentCredentials()
+    val requireToken = repo.isProviderTokenRequired()
+    val issued = !active && !target.isNullOrBlank() && credentials.containsKey(target)
 
     Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }) }
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { showLangDialog = true }
@@ -1147,6 +1194,123 @@ private fun SettingsScreen() {
                     }
                 }
             }
+
+            Spacer(Modifier.height(24.dp))
+            Text(stringResource(R.string.local_auth_section), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.local_auth_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                    when {
+                        active -> {
+                            Text(
+                                stringResource(R.string.local_auth_window_active, target.orEmpty(), remaining),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            TextButton(onClick = { repo.cancelEnrollWindow() }) {
+                                Text(stringResource(R.string.local_auth_cancel_window))
+                            }
+                        }
+                        issued -> {
+                            Text(
+                                stringResource(R.string.local_auth_issued, target.orEmpty()),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = { pickerLauncher.launch(Intent(ctx, AppPickerActivity::class.java)) }) {
+                                Text(stringResource(R.string.local_auth_start))
+                            }
+                        }
+                        else -> {
+                            Text(stringResource(R.string.local_auth_no_window), style = MaterialTheme.typography.bodyLarge)
+                            Spacer(Modifier.height(8.dp))
+                            Button(onClick = { pickerLauncher.launch(Intent(ctx, AppPickerActivity::class.java)) }) {
+                                Text(stringResource(R.string.local_auth_start))
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.local_auth_window_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text(stringResource(R.string.local_auth_authorized_list), style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(8.dp))
+            if (credentials.isEmpty()) {
+                Text(
+                    stringResource(R.string.local_auth_no_credentials),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                credentials.forEach { (pkg, credential) ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(appDisplayLabel(ctx, pkg), style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    pkg,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                val issuedText = if (credential.issuedAtMs > 0L) {
+                                    formatIssuedAt(credential.issuedAtMs)
+                                } else {
+                                    stringResource(R.string.local_auth_unknown_time)
+                                }
+                                Text(
+                                    stringResource(R.string.local_auth_issued_at, issuedText),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            TextButton(onClick = { pendingRevoke = pkg }) {
+                                Text(stringResource(R.string.local_auth_revoke))
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.local_auth_require_token), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(R.string.local_auth_require_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (requireToken) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = requireToken,
+                        onCheckedChange = { checked ->
+                            if (checked) showRequireDialog = true
+                            else repo.setProviderTokenRequired(false)
+                        }
+                    )
+                }
+            }
         }
 
         if (showLangDialog) {
@@ -1161,7 +1325,56 @@ private fun SettingsScreen() {
                 }
             )
         }
+        if (showRequireDialog) {
+            AlertDialog(
+                onDismissRequest = { showRequireDialog = false },
+                title = { Text(stringResource(R.string.local_auth_require_title)) },
+                text = { Text(stringResource(R.string.local_auth_require_warning)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        repo.setProviderTokenRequired(true)
+                        showRequireDialog = false
+                    }) { Text(stringResource(R.string.local_auth_require_confirm)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRequireDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+        if (pendingRevoke != null) {
+            AlertDialog(
+                onDismissRequest = { pendingRevoke = null },
+                title = { Text(stringResource(R.string.local_auth_revoke_title)) },
+                text = { Text(stringResource(R.string.local_auth_revoke_message)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        pendingRevoke?.let { repo.revokeEnrollmentToken(it) }
+                        pendingRevoke = null
+                    }) { Text(stringResource(R.string.local_auth_revoke)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingRevoke = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
     }
+}
+
+private fun appDisplayLabel(ctx: Context, packageName: String): String {
+    return try {
+        ctx.packageManager.getApplicationInfo(packageName, 0)
+            .loadLabel(ctx.packageManager).toString()
+    } catch (e: Exception) {
+        packageName
+    }
+}
+
+private fun formatIssuedAt(ms: Long): String {
+    return SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(ms))
 }
 
 // ─── Language Dialog ──────────────────────────────────────────────────────────
