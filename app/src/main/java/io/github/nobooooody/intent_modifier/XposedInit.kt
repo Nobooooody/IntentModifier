@@ -22,9 +22,12 @@ import java.lang.reflect.Method
 
 class XposedInit : IXposedHookLoadPackage {
 
+    @Volatile
     var currentContext: Context? = null
-    private var lastVersion: Long = 0
-    private var compiledRules: CompiledRules? = null
+    @Volatile
+    private var rulesState: RulesState? = null
+
+    private data class RulesState(val version: Long, val rules: CompiledRules)
 
     private companion object {
         private const val TAG = "IntentModifier"
@@ -82,10 +85,14 @@ class XposedInit : IXposedHookLoadPackage {
 
     // ─── 规则加载 ───────────────────────────────────────────────────────────────
 
+    @Synchronized
     private fun loadRulesIfNeeded(lpparam: XC_LoadPackage.LoadPackageParam, ctx: Context?) {
         try {
             val targetPkg = lpparam.packageName
-            val cacheDir = currentContext?.cacheDir ?: error("currentContext is null")
+            val cacheDir = ctx?.cacheDir ?: run {
+                log("Cannot load rules: currentContext is null")
+                return
+            }
             val rulesDir = File(cacheDir, "intent_modifier_rules")
 
             val remoteVersion = tryGetRemoteVersion(lpparam)
@@ -144,7 +151,9 @@ class XposedInit : IXposedHookLoadPackage {
                 put("version", remoteVersion)
             }.toString())
 
-            loadDexAndBuildRules(lpparam, targetPkg, remoteVersion)
+            if (!loadDexAndBuildRules(lpparam, targetPkg, remoteVersion)) {
+                log("Failed to load downloaded DEX for version=$remoteVersion")
+            }
 
         } catch (e: Exception) {
             log("Failed to load rules: ${e.message}")
@@ -152,24 +161,34 @@ class XposedInit : IXposedHookLoadPackage {
     }
 
     private fun tryLoadLocalCached(lpparam: XC_LoadPackage.LoadPackageParam, targetPkg: String): Boolean {
-        val cacheDir = currentContext?.cacheDir ?: error("currentContext is null")
+        val cacheDir = currentContext?.cacheDir ?: return false
         val rulesDir = File(cacheDir, "intent_modifier_rules")
         val sharedDex = File(rulesDir, "rules_shared.dex")
         val metaFile = File(rulesDir, "meta.json")
         if (!sharedDex.exists() || !metaFile.exists()) return false
 
         val version = try { JSONObject(metaFile.readText()).optLong("version", 0) } catch (e: Exception) { 0L }
-        loadDexAndBuildRules(lpparam, targetPkg, version)
-        return true
+        val loaded = loadDexAndBuildRules(lpparam, targetPkg, version)
+        if (!loaded) {
+            log("Local rules version=$version failed to load, dropping cache")
+            runCatching { rulesDir.deleteRecursively() }
+        }
+        return loaded
     }
 
-    private fun loadDexAndBuildRules(lpparam: XC_LoadPackage.LoadPackageParam, targetPkg: String, version: Long) {
+    private fun loadDexAndBuildRules(lpparam: XC_LoadPackage.LoadPackageParam, targetPkg: String, version: Long): Boolean {
         try {
-            if (compiledRules != null && lastVersion == version && lastVersion > 0) return
+            if (rulesState?.version == version) return true
 
-            val cacheDir = currentContext?.cacheDir ?: error("currentContext is null")
+            val cacheDir = currentContext?.cacheDir ?: return false
             val rulesDir = "${cacheDir.absolutePath}/intent_modifier_rules"
-            val dexPaths = mutableListOf("$rulesDir/rules_shared.dex")
+            val sharedDex = File("$rulesDir/rules_shared.dex")
+            if (!sharedDex.exists()) {
+                log("Shared DEX missing at $sharedDex")
+                return false
+            }
+
+            val dexPaths = mutableListOf(sharedDex.absolutePath)
             val appDex = File("$rulesDir/rules_app.dex")
             if (appDex.exists()) dexPaths.add(appDex.absolutePath)
 
@@ -180,12 +199,22 @@ class XposedInit : IXposedHookLoadPackage {
 
             // 加载 shared RuleRegistry
             val registryClasses = mutableListOf<Pair<String, String>>()
-            loadRegistry(dexClassLoader, "engine.RuleRegistry_shared")?.let { registryClasses.addAll(it) }
+            val sharedRegistry = loadRegistry(dexClassLoader, "engine.RuleRegistry_shared")
+                ?: run {
+                    log("Shared RuleRegistry missing, refusing local cache")
+                    return false
+                }
+            registryClasses.addAll(sharedRegistry)
 
             // 如果有 app DEX，加载 app RuleRegistry
             if (appDex.exists()) {
                 val sanitizedPkg = targetPkg.replace('.', '_')
-                loadRegistry(dexClassLoader, "engine.RuleRegistry_app_$sanitizedPkg")?.let { registryClasses.addAll(it) }
+                val appRegistry = loadRegistry(dexClassLoader, "engine.RuleRegistry_app_$sanitizedPkg")
+                    ?: run {
+                        log("App RuleRegistry missing for $targetPkg, refusing local cache")
+                        return false
+                    }
+                registryClasses.addAll(appRegistry)
             }
 
             // 按 priority 降序排列
@@ -193,23 +222,30 @@ class XposedInit : IXposedHookLoadPackage {
 
             // 加载每条规则的方法
             val rules = mutableListOf<LoadedRule>()
+            var failedRules = 0
             for ((className, _) in registryClasses) {
                 try {
                     val ruleClass = dexClassLoader.loadClass(className)
                     val evaluateMethod = ruleClass.getMethod("evaluate", Context::class.java, Intent::class.java, Intent::class.java)
                     val executeMethod = ruleClass.getMethod("execute", Context::class.java, Intent::class.java, Intent::class.java)
                     rules.add(LoadedRule(evaluateMethod, executeMethod))
-                    log("Loaded $className")
-                } catch (e: Exception) {
-                    log("Failed to load $className: ${e.message}")
+                } catch (t: Throwable) {
+                    failedRules++
+                    log("Failed to load $className: ${t.message}")
                 }
             }
 
-            compiledRules = if (rules.isNotEmpty()) CompiledRules(rules) else null
-            lastVersion = version
-            log("Successfully loaded ${rules.size} rules from ${dexPaths.size} DEX file(s)")
-        } catch (e: Exception) {
-            log("Failed to load DEX: ${e.message}")
+            if (failedRules > 0 && rules.isEmpty()) {
+                log("All ${registryClasses.size} rules failed to load, refusing local cache")
+                return false
+            }
+
+            rulesState = RulesState(version, CompiledRules(rules))
+            log("Successfully loaded ${rules.size} rules from ${dexPaths.size} DEX file(s), version=$version")
+            return true
+        } catch (t: Throwable) {
+            log("Failed to load DEX: ${t.message}")
+            return false
         }
     }
 
@@ -321,7 +357,7 @@ class XposedInit : IXposedHookLoadPackage {
     // ─── 规则执行 ───────────────────────────────────────────────────────────────
 
     private fun applyRules(intent: Intent): Intent {
-        val rules = compiledRules
+        val rules = rulesState?.rules
         if (rules == null || rules.list.isEmpty()) return intent
 
         val resultIntent = Intent(intent)
