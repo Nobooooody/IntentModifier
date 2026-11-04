@@ -322,7 +322,13 @@ class XposedInit : IXposedHookLoadPackage {
             }
 
             if (failedRules > 0) {
-                log("$failedRules of ${registryClasses.size} rules failed to load, refusing local cache")
+                log(
+                    "$failedRules of ${registryClasses.size} rules failed to load/initialize and were excluded; " +
+                        "${rules.size} remaining"
+                )
+            }
+            if (registryClasses.isNotEmpty() && rules.isEmpty()) {
+                log("All ${registryClasses.size} rules failed to load, refusing local cache")
                 return false
             }
 
