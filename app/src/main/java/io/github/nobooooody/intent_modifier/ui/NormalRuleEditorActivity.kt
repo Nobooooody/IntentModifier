@@ -80,6 +80,7 @@ import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.ExtraItem
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.data.NormalRule
+import io.github.nobooooody.intent_modifier.engine.CompileOutcome
 import io.github.nobooooody.intent_modifier.engine.RuleCompilationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -330,15 +331,22 @@ fun NormalRuleForm(
                     customFlags = customFlags.trim().toIntOrNull(),
                     extras = extras
                 )
-                val result = withContext(Dispatchers.IO) { manager.compileAllRules(emptyList(), listOf(testRule)) }
+                val outcome = withContext(Dispatchers.IO) {
+                    val result = manager.compile(emptyList(), listOf(testRule))
+                    if (result is CompileOutcome.Success) manager.discard(result.artifact)
+                    result
+                }
                 withContext(Dispatchers.Main) {
-                    if (result.success) {
-                        Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
-                    } else {
-                        val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
-                        val displayMsg = if (result.errorRuleName != null) "${result.errorRuleName}:\n$msg" else msg
-                        Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
-                        errorDialogMessage = displayMsg
+                    when (outcome) {
+                        is CompileOutcome.Success -> {
+                            Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
+                        }
+                        is CompileOutcome.Failure -> {
+                            val msg = outcome.message
+                            val displayMsg = if (outcome.ruleName != null) "${outcome.ruleName}:\n$msg" else msg
+                            Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
+                            errorDialogMessage = displayMsg
+                        }
                     }
                 }
             } catch (e: Exception) {

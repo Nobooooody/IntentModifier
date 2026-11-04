@@ -15,6 +15,7 @@ import io.github.nobooooody.intent_modifier.data.NormalRule
 import org.eclipse.jdt.internal.compiler.batch.Main
 import java.io.File
 import java.security.MessageDigest
+import java.util.UUID
 
 data class LoadedRuleInfo(
     val evaluateMethod: java.lang.reflect.Method,
@@ -34,6 +35,19 @@ data class CompilationResult(
     val errorRuleName: String? = null
 )
 
+data class CompiledArtifact(
+    val version: Long,
+    val runDir: File,
+    val sharedDex: File,
+    val appDexFiles: Map<String, File>,
+    val ruleCount: Int
+)
+
+sealed interface CompileOutcome {
+    data class Success(val artifact: CompiledArtifact) : CompileOutcome
+    data class Failure(val message: String, val ruleName: String? = null) : CompileOutcome
+}
+
 class RuleCompilationManager(private val context: Context) {
     private val TAG = "RuleCompilationManager"
     private val setting = JavaEngineSetting(context)
@@ -46,27 +60,31 @@ class RuleCompilationManager(private val context: Context) {
         private const val KEY_RULE_COUNT = "rule_count"
     }
 
-    // ─── 新编译入口：编译所有规则（JavaCodeRule + NormalRule）─────────────────────
+    // ─── 编译入口：compile 只产出 artifact，publish 才落 SharedPreferences ────────
 
-    fun compileAllRules(
+    @Synchronized
+    fun compile(
         javaRules: List<JavaCodeRule>,
         normalRules: List<NormalRule>,
         onProgress: ((String) -> Unit)? = null
-    ): CompilationResult {
+    ): CompileOutcome {
+        val runsDir = File(context.filesDir, "compile_runs").also { it.mkdirs() }
+        val runDir = File(runsDir, UUID.randomUUID().toString()).also { it.mkdirs() }
+
+        fun fail(message: String, ruleName: String? = null): CompileOutcome {
+            log(message)
+            discardRun(runDir)
+            return CompileOutcome.Failure(message, ruleName)
+        }
+
         try {
             log("Starting compilation: ${javaRules.size} JavaCodeRule + ${normalRules.size} NormalRule")
 
             if (!setting.ensureAllJarsInstalled()) {
-                log("Failed to install required JAR files")
-                return CompilationResult(false, "Failed to install required JAR files")
+                return fail("Failed to install required JAR files")
             }
 
-            val cacheDir = File(context.filesDir, "compile_cache").also { it.mkdirs() }
-            cacheDir.deleteRecursively()
-            cacheDir.mkdirs()
-
-            val classOutputDir = File(cacheDir, "classes").also { it.mkdirs() }
-
+            val classOutputDir = File(runDir, "classes").also { it.mkdirs() }
             val ruleEntries = mutableListOf<RuleEntry>()
 
             // 编译 JavaCodeRule
@@ -75,20 +93,19 @@ class RuleCompilationManager(private val context: Context) {
                 val prefix = rule.id.take(8)
                 val ruleName = "Rule_$prefix"
                 val sourceCode = buildJavaCodeTemplate(ruleName, rule)
-                val sourceFile = File(cacheDir, "$ruleName.java")
+                val sourceFile = File(runDir, "$ruleName.java")
                 sourceFile.writeText(sourceCode)
 
                 onProgress?.invoke("Compiling $ruleName...")
-                if (!compileSingleSource(sourceFile, ruleName, classOutputDir, cacheDir)) {
-                    val errorLog = File(cacheDir, "compile_$ruleName.log").readText()
+                if (!compileSingleSource(sourceFile, ruleName, classOutputDir, runDir)) {
+                    val errorLog = readCompileLog(runDir, ruleName)
                     log("Compilation failed for $ruleName:\n$errorLog")
-                    return CompilationResult(false, errorLog, ruleName)
+                    return fail(errorLog, ruleName)
                 }
 
                 val classFile = findClassFile(classOutputDir, ruleName)
                 if (classFile == null) {
-                    log("Class file not found for $ruleName")
-                    return CompilationResult(false, "Class file not found for $ruleName", ruleName)
+                    return fail("Class file not found for $ruleName", ruleName)
                 }
 
                 ruleEntries.add(RuleEntry(rule.id, ruleName, classFile, rule.targetPackages, rule.priority))
@@ -100,20 +117,19 @@ class RuleCompilationManager(private val context: Context) {
                 val prefix = rule.id.take(8)
                 val ruleName = "Rule_$prefix"
                 val sourceCode = buildNormalTemplate(ruleName, rule)
-                val sourceFile = File(cacheDir, "$ruleName.java")
+                val sourceFile = File(runDir, "$ruleName.java")
                 sourceFile.writeText(sourceCode)
 
                 onProgress?.invoke("Compiling $ruleName...")
-                if (!compileSingleSource(sourceFile, ruleName, classOutputDir, cacheDir)) {
-                    val errorLog = File(cacheDir, "compile_$ruleName.log").readText()
+                if (!compileSingleSource(sourceFile, ruleName, classOutputDir, runDir)) {
+                    val errorLog = readCompileLog(runDir, ruleName)
                     log("Compilation failed for $ruleName:\n$errorLog")
-                    return CompilationResult(false, errorLog, ruleName)
+                    return fail(errorLog, ruleName)
                 }
 
                 val classFile = findClassFile(classOutputDir, ruleName)
                 if (classFile == null) {
-                    log("Class file not found for $ruleName")
-                    return CompilationResult(false, "Class file not found for $ruleName", ruleName)
+                    return fail("Class file not found for $ruleName", ruleName)
                 }
 
                 ruleEntries.add(RuleEntry(rule.id, ruleName, classFile, rule.targetPackages, rule.priority))
@@ -137,43 +153,86 @@ class RuleCompilationManager(private val context: Context) {
             val version = System.currentTimeMillis()
             onProgress?.invoke("Converting to DEX...")
 
-            // 编译 shared DEX（可能为空）
-            val sharedDex = buildGroupDex(sharedEntries, classOutputDir, cacheDir, "shared")?.let { dexFile ->
-                repo.saveSharedDex(Base64.encodeToString(dexFile.readBytes(), Base64.NO_WRAP))
-                true
-            } ?: run {
-                log("Failed to create shared DEX")
-                return CompilationResult(false, "Failed to create shared DEX")
-            }
+            // 编译 shared DEX（空规则集也会生成只含空 registry 的 DEX）
+            val sharedDex = buildGroupDex(sharedEntries, classOutputDir, runDir, "shared")
+                ?: return fail("Failed to create shared DEX")
 
             // 编译 per-app DEX
+            val appDexFiles = linkedMapOf<String, File>()
             for ((sanitizedPkg, entries) in appGroups) {
                 val registryName = "RuleRegistry_app_$sanitizedPkg"
                 onProgress?.invoke("Building $registryName")
-                buildGroupDex(entries, classOutputDir, cacheDir, "app_$sanitizedPkg")?.let { dexFile ->
-                    repo.saveAppDex(sanitizedPkg, Base64.encodeToString(dexFile.readBytes(), Base64.NO_WRAP))
-                } ?: run {
-                    log("Failed to create app DEX for $sanitizedPkg")
-                    return CompilationResult(false, "Failed to create app DEX for $sanitizedPkg")
-                }
+                val dexFile = buildGroupDex(entries, classOutputDir, runDir, "app_$sanitizedPkg")
+                    ?: return fail("Failed to create app DEX for $sanitizedPkg")
+                appDexFiles[sanitizedPkg] = dexFile
             }
 
-            // 清理过期 per-app DEX
-            val stalePackages = repo.getAllAppDexPackages() - appGroups.keys
+            log("Compilation staged: version=$version, ${ruleEntries.size} rules, ${appGroups.size} app groups")
+            return CompileOutcome.Success(
+                CompiledArtifact(
+                    version = version,
+                    runDir = runDir,
+                    sharedDex = sharedDex,
+                    appDexFiles = appDexFiles,
+                    ruleCount = ruleEntries.size
+                )
+            )
+        } catch (e: Exception) {
+            log("Compilation failed: ${e.message}")
+            discardRun(runDir)
+            return CompileOutcome.Failure(e.message ?: "Unknown error")
+        }
+    }
+
+    @Synchronized
+    fun publish(artifact: CompiledArtifact): CompilationResult {
+        return try {
+            repo.saveSharedDex(Base64.encodeToString(artifact.sharedDex.readBytes(), Base64.NO_WRAP))
+
+            for ((sanitizedPkg, dexFile) in artifact.appDexFiles) {
+                repo.saveAppDex(sanitizedPkg, Base64.encodeToString(dexFile.readBytes(), Base64.NO_WRAP))
+            }
+
+            val stalePackages = repo.getAllAppDexPackages() - artifact.appDexFiles.keys
             for (stalePkg in stalePackages) {
                 log("Removing stale app DEX for $stalePkg")
                 repo.removeAppDex(stalePkg)
             }
 
-            // 存储版本号
-            repo.saveVersion(version)
+            // 版本号最后写：只有完整依赖全部落盘后才对外可见
+            repo.saveVersion(artifact.version)
 
-            log("Compilation complete: version=$version, shared=${sharedEntries.size} rules, ${appGroups.size} app groups, ${stalePackages.size} stale removed")
-            return CompilationResult(true)
-
+            log(
+                "Compilation published: version=${artifact.version}, ${artifact.ruleCount} rules, " +
+                    "${artifact.appDexFiles.size} app groups, ${stalePackages.size} stale removed"
+            )
+            CompilationResult(true)
         } catch (e: Exception) {
-            log("Compilation failed: ${e.message}")
-            return CompilationResult(false, e.message ?: "Unknown error")
+            log("Publish failed: ${e.message}")
+            CompilationResult(false, e.message ?: "Publish failed")
+        } finally {
+            discardRun(artifact.runDir)
+        }
+    }
+
+    @Synchronized
+    fun discard(artifact: CompiledArtifact) {
+        discardRun(artifact.runDir)
+    }
+
+    /**
+     * 兼容旧调用方：编译成功后立即发布。
+     * 测试编译不要用这个方法，应改用 compile() + discard()。
+     */
+    @Synchronized
+    fun compileAllRules(
+        javaRules: List<JavaCodeRule>,
+        normalRules: List<NormalRule>,
+        onProgress: ((String) -> Unit)? = null
+    ): CompilationResult {
+        return when (val outcome = compile(javaRules, normalRules, onProgress)) {
+            is CompileOutcome.Failure -> CompilationResult(false, outcome.message, outcome.ruleName)
+            is CompileOutcome.Success -> publish(outcome.artifact)
         }
     }
 
@@ -195,6 +254,17 @@ class RuleCompilationManager(private val context: Context) {
     }
 
     // ─── 辅助方法 ───────────────────────────────────────────────────────────────
+
+    private fun readCompileLog(runDir: File, ruleName: String): String {
+        return File(runDir, "compile_$ruleName.log")
+            .takeIf { it.exists() }
+            ?.readText()
+            ?: "Compilation failed for $ruleName"
+    }
+
+    private fun discardRun(runDir: File) {
+        runCatching { runDir.deleteRecursively() }
+    }
 
     private fun compileSingleSource(sourceFile: File, ruleName: String, classOutputDir: File, cacheDir: File): Boolean {
         val logFilePath = setting.createAndCleanFile(File(cacheDir, "compile_$ruleName.log"))
