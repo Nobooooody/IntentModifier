@@ -247,7 +247,7 @@ fun JavaCodeRuleForm(
             try {
                 val manager = RuleCompilationManager(ctx)
                 val testRule = JavaCodeRule(
-                    enabled = true, name = "Test",
+                    enabled = true, name = name.trim().ifEmpty { "Test" },
                     condition = condition.trim(), action = action.trim(),
                     imports = imports.trim(), members = members.trim()
                 )
