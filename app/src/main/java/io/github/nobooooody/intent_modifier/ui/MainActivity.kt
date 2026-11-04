@@ -1134,10 +1134,23 @@ private fun SettingsScreen() {
     var currentLang by remember { mutableStateOf(prefs.getString("language", "system") ?: "system") }
 
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var windowUntil by remember { mutableLongStateOf(repo.getEnrollWindowUntil()) }
+    var target by remember { mutableStateOf(repo.getEnrollTargetPackage()) }
+    var credentials by remember { mutableStateOf(repo.getEnrollmentCredentials()) }
+    var requireToken by remember { mutableStateOf(repo.isProviderTokenRequired()) }
+
+    fun refreshLocalAuthState() {
+        windowUntil = repo.getEnrollWindowUntil()
+        target = repo.getEnrollTargetPackage()
+        credentials = repo.getEnrollmentCredentials()
+        requireToken = repo.isProviderTokenRequired()
+    }
+
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000)
             nowMs = System.currentTimeMillis()
+            refreshLocalAuthState()
         }
     }
 
@@ -1148,6 +1161,7 @@ private fun SettingsScreen() {
             val pkg = result.data?.getStringExtra("package")
             if (!pkg.isNullOrBlank()) {
                 repo.startEnrollWindow(pkg)
+                refreshLocalAuthState()
                 Toast.makeText(
                     ctx,
                     ctx.getString(R.string.local_auth_window_active, pkg, 60),
@@ -1157,12 +1171,8 @@ private fun SettingsScreen() {
         }
     }
 
-    val until = repo.getEnrollWindowUntil()
-    val target = repo.getEnrollTargetPackage()
-    val active = until > 0L && nowMs < until
-    val remaining = if (active) ((until - nowMs) / 1000L).toInt().coerceAtLeast(0) else 0
-    val credentials = repo.getEnrollmentCredentials()
-    val requireToken = repo.isProviderTokenRequired()
+    val active = windowUntil > 0L && nowMs < windowUntil
+    val remaining = if (active) ((windowUntil - nowMs) / 1000L).toInt().coerceAtLeast(0) else 0
     val issued = !active && !target.isNullOrBlank() && credentials.containsKey(target)
 
     Scaffold(contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -1213,7 +1223,10 @@ private fun SettingsScreen() {
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Spacer(Modifier.height(6.dp))
-                            TextButton(onClick = { repo.cancelEnrollWindow() }) {
+                            TextButton(onClick = {
+                                repo.cancelEnrollWindow()
+                                refreshLocalAuthState()
+                            }) {
                                 Text(stringResource(R.string.local_auth_cancel_window))
                             }
                         }
@@ -1306,7 +1319,10 @@ private fun SettingsScreen() {
                         checked = requireToken,
                         onCheckedChange = { checked ->
                             if (checked) showRequireDialog = true
-                            else repo.setProviderTokenRequired(false)
+                            else {
+                                repo.setProviderTokenRequired(false)
+                                requireToken = false
+                            }
                         }
                     )
                 }
@@ -1333,6 +1349,7 @@ private fun SettingsScreen() {
                 confirmButton = {
                     TextButton(onClick = {
                         repo.setProviderTokenRequired(true)
+                        refreshLocalAuthState()
                         showRequireDialog = false
                     }) { Text(stringResource(R.string.local_auth_require_confirm)) }
                 },
@@ -1350,7 +1367,10 @@ private fun SettingsScreen() {
                 text = { Text(stringResource(R.string.local_auth_revoke_message)) },
                 confirmButton = {
                     TextButton(onClick = {
-                        pendingRevoke?.let { repo.revokeEnrollmentToken(it) }
+                        pendingRevoke?.let {
+                            repo.revokeEnrollmentToken(it)
+                            refreshLocalAuthState()
+                        }
                         pendingRevoke = null
                     }) { Text(stringResource(R.string.local_auth_revoke)) }
                 },
