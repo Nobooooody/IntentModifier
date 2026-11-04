@@ -272,6 +272,24 @@ class XposedInit : IXposedHookLoadPackage {
         }
     }
 
+    /**
+     * Android 14+ 的 ART 拒绝从可写文件加载 DEX；缓存写出后必须去掉写权限。
+     * 目标权限等价于 -r--------，与旧版缓存保持一致。
+     */
+    private fun makeDexReadOnly(file: File) {
+        try {
+            file.setReadable(true, true)
+            file.setWritable(false, false)
+            file.setExecutable(false, false)
+        } catch (t: Throwable) {
+            log("Failed to mark DEX read-only: ${file.absolutePath}: ${t.javaClass.simpleName}: ${t.message}")
+            return
+        }
+        if (file.canWrite()) {
+            log("DEX remains writable: ${file.absolutePath}")
+        }
+    }
+
     private fun cleanupVersions(root: File, keepVersion: Long, previousVersion: Long?) {
         val keep = mutableSetOf(keepVersion)
         previousVersion?.let { keep.add(it) }
@@ -447,9 +465,13 @@ class XposedInit : IXposedHookLoadPackage {
 
             val staging = File(root, "tmp-${UUID.randomUUID()}").also { it.mkdirs() }
             try {
-                File(staging, SHARED_DEX_FILE).writeBytes(sharedBytes)
+                val stagedSharedDex = File(staging, SHARED_DEX_FILE)
+                stagedSharedDex.writeBytes(sharedBytes)
+                makeDexReadOnly(stagedSharedDex)
                 if (appBytes != null) {
-                    File(staging, APP_DEX_FILE).writeBytes(appBytes)
+                    val stagedAppDex = File(staging, APP_DEX_FILE)
+                    stagedAppDex.writeBytes(appBytes)
+                    makeDexReadOnly(stagedAppDex)
                 }
                 File(staging, MANIFEST_FILE).writeText(localManifest.toJson())
 
@@ -568,6 +590,9 @@ class XposedInit : IXposedHookLoadPackage {
             val appDex = File(versionDir, APP_DEX_FILE)
             val dexPaths = mutableListOf(sharedDex.absolutePath)
             if (appDex.exists()) dexPaths.add(appDex.absolutePath)
+
+            // 兼容修复前写出的缓存：加载前统一去掉写权限。
+            dexPaths.forEach { makeDexReadOnly(File(it)) }
 
             val optimizedDir = File(versionDir, "optimized").also { it.mkdirs() }
             val path = dexPaths.joinToString(":")
