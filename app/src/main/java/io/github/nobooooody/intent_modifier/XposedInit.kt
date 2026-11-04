@@ -29,6 +29,8 @@ class XposedInit : IXposedHookLoadPackage {
 
     private var hasRuleChecked = false
     private var lastRuleCheckAt = 0L
+    private var loadFailureCount = 0
+    private var nextLoadRetryAt = 0L
 
     private val ruleReentrancy: ThreadLocal<Int> = ThreadLocal.withInitial { 0 }
 
@@ -47,6 +49,8 @@ class XposedInit : IXposedHookLoadPackage {
         private const val RULE_VERSION_CHECK_INTERVAL_MS = 3_000L
         private const val PREWARM_WAIT_MS = 1_000L
         private const val LOG_INTENTS = false
+        private const val BASE_RETRY_MS = 5_000L
+        private const val MAX_RETRY_MS = 5 * 60_000L
     }
 
     private fun log(msg: String) {
@@ -56,6 +60,22 @@ class XposedInit : IXposedHookLoadPackage {
     private fun logThrowable(msg: String, t: Throwable) {
         XposedBridge.log("$TAG: $msg: ${t.javaClass.simpleName}: ${t.message}")
         XposedBridge.log(t)
+    }
+
+    private fun recordLoadFailure(now: Long) {
+        loadFailureCount++
+        val shift = (loadFailureCount - 1).coerceIn(0, 6)
+        val delayMs = (BASE_RETRY_MS shl shift).coerceAtMost(MAX_RETRY_MS)
+        nextLoadRetryAt = now + delayMs
+        log("Rule load failed ($loadFailureCount time(s)), next retry in ${delayMs}ms")
+    }
+
+    private fun resetLoadFailure() {
+        if (loadFailureCount > 0) {
+            log("Rule load recovered after $loadFailureCount failure(s)")
+        }
+        loadFailureCount = 0
+        nextLoadRetryAt = 0L
     }
 
     private fun logIntent(prefix: String, intent: Intent) {
@@ -132,6 +152,17 @@ class XposedInit : IXposedHookLoadPackage {
             }
             val rulesDir = File(cacheDir, "intent_modifier_rules")
 
+            if (now < nextLoadRetryAt) {
+                log(
+                    "Rule refresh backoff active: failures=$loadFailureCount, " +
+                        "retryIn=${nextLoadRetryAt - now}ms"
+                )
+                if (rulesState == null) {
+                    tryLoadLocalCached(lpparam, targetPkg)
+                }
+                return
+            }
+
             ModulePrefsReader.refresh(now)
             val remoteVersion = tryGetRemoteVersion()
             val state = rulesState
@@ -152,7 +183,9 @@ class XposedInit : IXposedHookLoadPackage {
 
             if (remoteVersion == null || remoteVersion == 0L) {
                 log("No remote version available, trying local cached DEX")
-                tryLoadLocalCached(lpparam, targetPkg)
+                if (!tryLoadLocalCached(lpparam, targetPkg)) {
+                    recordLoadFailure(now)
+                }
                 return
             }
 
@@ -169,7 +202,9 @@ class XposedInit : IXposedHookLoadPackage {
             val sharedDexBase64 = tryGetRemoteDex(ctx)
             if (sharedDexBase64.isNullOrEmpty()) {
                 log("No remote DEX available, falling back to local cached DEX")
-                tryLoadLocalCached(lpparam, targetPkg)
+                if (!tryLoadLocalCached(lpparam, targetPkg)) {
+                    recordLoadFailure(now)
+                }
                 return
             }
 
@@ -196,10 +231,12 @@ class XposedInit : IXposedHookLoadPackage {
 
             if (!loadDexAndBuildRules(lpparam, targetPkg, remoteVersion)) {
                 log("Failed to load downloaded DEX for version=$remoteVersion")
+                recordLoadFailure(now)
             }
 
         } catch (t: Throwable) {
             logThrowable("Failed to load rules", t)
+            recordLoadFailure(SystemClock.elapsedRealtime())
         }
     }
 
@@ -221,7 +258,10 @@ class XposedInit : IXposedHookLoadPackage {
 
     private fun loadDexAndBuildRules(lpparam: XC_LoadPackage.LoadPackageParam, targetPkg: String, version: Long): Boolean {
         try {
-            if (rulesState?.version == version) return true
+            if (rulesState?.version == version) {
+                resetLoadFailure()
+                return true
+            }
 
             val cacheDir = currentContext?.cacheDir ?: return false
             val rulesDir = "${cacheDir.absolutePath}/intent_modifier_rules"
@@ -287,6 +327,7 @@ class XposedInit : IXposedHookLoadPackage {
             }
 
             rulesState = RulesState(version, CompiledRules(rules))
+            resetLoadFailure()
             log("Successfully loaded ${rules.size} rules from ${dexPaths.size} DEX file(s), version=$version")
             return true
         } catch (t: Throwable) {
