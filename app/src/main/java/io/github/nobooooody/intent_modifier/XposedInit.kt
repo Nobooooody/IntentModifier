@@ -518,6 +518,11 @@ class XposedInit : IXposedHookLoadPackage {
             val dir = versionDir(root, version)
             if (!dir.isDirectory) continue
             val manifest = readLocalManifest(dir) ?: continue
+            if (manifest.version != version) {
+                log("Local manifest version=${manifest.version} does not match dir=${dir.name}, dropping it")
+                runCatching { dir.deleteRecursively() }
+                continue
+            }
             if (!validateLocalDir(dir, manifest, targetPkg)) {
                 log("Cleaning invalid local version ${dir.name}")
                 runCatching { dir.deleteRecursively() }
