@@ -2,8 +2,10 @@ package io.github.nobooooody.intent_modifier.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.SecureRandom
 
 class ModifierRepository(private val context: Context) {
 
@@ -199,10 +201,59 @@ class ModifierRepository(private val context: Context) {
         }
         editor.putString(KEY_COMPILED_MANIFEST, manifestJson)
         editor.putLong(KEY_COMPILED_VERSION, version)
+        // 能力 token 与 DEX/manifest 同批原子发布；旧数据没有该键时读取方按旧行为放行。
+        editor.putString(KEY_PROVIDER_TOKEN, newProviderToken())
         check(editor.commit()) { "Failed to commit compiled rules" }
     }
 
     fun getCompiledManifest(): String? = prefs.getString(KEY_COMPILED_MANIFEST, null)
+
+    // ─── Provider 能力 token ──────────────────────────────────────────────────
+
+    fun getProviderToken(): String? = prefs.getString(KEY_PROVIDER_TOKEN, null)
+
+    fun isProviderTokenRequired(): Boolean = prefs.getBoolean(KEY_PROVIDER_REQUIRE_TOKEN, false)
+
+    fun getEnrollWindowUntil(): Long = prefs.getLong(KEY_ENROLL_WINDOW_UNTIL, 0L)
+
+    fun getEnrollTargetPackage(): String? = prefs.getString(KEY_ENROLL_TARGET_PACKAGE, null)
+
+    fun getProviderTokens(): Map<String, String> {
+        val raw = prefs.getString(KEY_PROVIDER_TOKENS, null) ?: return emptyMap()
+        return try {
+            val json = JSONObject(raw)
+            buildMap {
+                json.keys().forEach { pkg ->
+                    val token = json.optString(pkg, "")
+                    if (token.isNotEmpty()) put(pkg, token)
+                }
+            }
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
+
+    /**
+     * 授权窗口内为目标包发放一次性凭证，并把窗口关闭与凭证表写入同一次 commit。
+     * 返回 null 表示写入失败。
+     */
+    fun issueEnrollmentToken(targetPackage: String): String? {
+        val token = newProviderToken()
+        val tokens = getProviderTokens().toMutableMap()
+        tokens[targetPackage] = token
+        val json = JSONObject()
+        tokens.forEach { (pkg, value) -> json.put(pkg, value) }
+        val editor = prefs.edit()
+        editor.putString(KEY_PROVIDER_TOKENS, json.toString())
+        editor.putLong(KEY_ENROLL_WINDOW_UNTIL, 0L)
+        return if (editor.commit()) token else null
+    }
+
+    private fun newProviderToken(): String {
+        val bytes = ByteArray(32)
+        SECURE_RANDOM.nextBytes(bytes)
+        return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+    }
 
     // v2 残留方法，Stage 2 后移除
     fun saveCompiledDex(dexBase64: String, version: Long, ruleCount: Int) {
@@ -281,6 +332,8 @@ class ModifierRepository(private val context: Context) {
     fun sanitizePackageName(pkg: String): String = pkg.replace('.', '_')
 
     companion object {
+        private val SECURE_RANDOM = SecureRandom()
+
         const val KEY_ENABLED = "module_enabled"
         const val KEY_LAUNCHER_HOOKS = "launcher_hooks"
         const val KEY_JAVA_CODE_RULES = "java_code_rules"
@@ -289,6 +342,13 @@ class ModifierRepository(private val context: Context) {
         const val KEY_COMPILED_MANIFEST = "compiled_manifest"
         const val KEY_SHARED_DEX = "shared_dex"
         const val KEY_APP_DEX_PREFIX = "app_dex_"
+
+        // Provider 能力 token 与本地模式授权窗口
+        const val KEY_PROVIDER_TOKEN = "provider_token"
+        const val KEY_PROVIDER_REQUIRE_TOKEN = "provider_require_token"
+        const val KEY_PROVIDER_TOKENS = "provider_tokens"
+        const val KEY_ENROLL_WINDOW_UNTIL = "enroll_window_until"
+        const val KEY_ENROLL_TARGET_PACKAGE = "enroll_target_package"
 
         // v2 遗留（保留以便读取旧数据，Stage 2 后移除）
         const val KEY_COMPILED_DEX = "compiled_dex"

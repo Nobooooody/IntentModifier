@@ -11,6 +11,7 @@ import android.os.Binder
 import android.util.Base64
 import android.util.Log
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
+import java.security.MessageDigest
 
 class RuleProvider : ContentProvider() {
 
@@ -21,23 +22,29 @@ class RuleProvider : ContentProvider() {
         const val PATH_VERSION = "version"
         const val PATH_DEX = "dex"
         const val PATH_META = "meta"
+        const val PATH_ENROLL = "enroll"
 
         private const val CODE_VERSION = 1
         private const val CODE_DEX = 2
         private const val CODE_DEX_APP = 3
         private const val CODE_META = 4
+        private const val CODE_ENROLL = 5
 
         val CONTENT_URI: Uri = Uri.parse("content://$AUTHORITY")
         val URI_VERSION: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_VERSION)
         val URI_DEX: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_DEX)
         val URI_META: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_META)
+        val URI_ENROLL: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_ENROLL)
 
         private val URI_MATCHER = UriMatcher(UriMatcher.NO_MATCH).apply {
             addURI(AUTHORITY, PATH_VERSION, CODE_VERSION)
             addURI(AUTHORITY, PATH_DEX, CODE_DEX)
             addURI(AUTHORITY, "$PATH_DEX/*", CODE_DEX_APP)
             addURI(AUTHORITY, PATH_META, CODE_META)
+            addURI(AUTHORITY, PATH_ENROLL, CODE_ENROLL)
         }
+
+        private val ENROLL_LOCK = Any()
     }
 
     override fun onCreate(): Boolean = true
@@ -52,8 +59,21 @@ class RuleProvider : ContentProvider() {
         logCaller(uri)
         val ctx = context ?: return null
         val repo = ModifierRepository(ctx)
+        val code = URI_MATCHER.match(uri)
 
-        return when (URI_MATCHER.match(uri)) {
+        if (code == CODE_META || code == CODE_DEX || code == CODE_DEX_APP) {
+            val auth = checkAuth(uri, repo)
+            if (!auth.allowed) {
+                Log.w(
+                    TAG,
+                    "auth denied path=${uri.path} status=${auth.status} uid=${Binder.getCallingUid()}"
+                )
+                return errorCursor(auth.error ?: "unauthorized")
+            }
+            Log.i(TAG, "auth ok path=${uri.path} status=${auth.status} uid=${Binder.getCallingUid()}")
+        }
+
+        return when (code) {
             CODE_VERSION -> {
                 val version = repo.getCompiledVersion()
                 val cursor = MatrixCursor(arrayOf("version"))
@@ -76,6 +96,7 @@ class RuleProvider : ContentProvider() {
                 cursor.addRow(arrayOf(manifest))
                 cursor
             }
+            CODE_ENROLL -> handleEnroll(repo)
             else -> null
         }
     }
@@ -84,7 +105,108 @@ class RuleProvider : ContentProvider() {
         CODE_VERSION -> "vnd.android.cursor.item/long"
         CODE_DEX, CODE_DEX_APP -> "vnd.android.cursor.item/string"
         CODE_META -> "vnd.android.cursor.item/json"
+        CODE_ENROLL -> "vnd.android.cursor.item/string"
         else -> null
+    }
+
+    private data class AuthResult(
+        val allowed: Boolean,
+        val status: String,
+        val error: String? = null
+    )
+
+    /**
+     * token 证明的是“调用方能够读取模块私有 prefs（XSP），或曾在授权窗口内为目标包领取过凭证”，
+     * 不是“调用方一定是 hook 代码”。同一 UID 下的普通代码同样可能持有凭证。
+     */
+    private fun checkAuth(uri: Uri, repo: ModifierRepository): AuthResult {
+        if (!repo.isProviderTokenRequired()) {
+            return AuthResult(true, "disabled")
+        }
+        val globalToken = repo.getProviderToken()
+        if (globalToken.isNullOrEmpty()) {
+            // 旧数据没有 token：保持旧行为，避免升级即失效。
+            return AuthResult(true, "legacy_no_token")
+        }
+        val provided = uri.getQueryParameter("token")
+        if (provided.isNullOrEmpty()) {
+            return AuthResult(false, "missing_token", "missing_token")
+        }
+        if (secureEquals(provided, globalToken)) {
+            return AuthResult(true, "ok_global")
+        }
+        val callerPkgs = callerPackages()
+        var packageMatch = false
+        for ((pkg, token) in repo.getProviderTokens()) {
+            if (secureEquals(provided, token) && callerPkgs.contains(pkg)) {
+                packageMatch = true
+            }
+        }
+        return if (packageMatch) {
+            AuthResult(true, "ok_package")
+        } else {
+            AuthResult(false, "invalid_token", "invalid_token")
+        }
+    }
+
+    private fun callerPackages(): Set<String> {
+        return try {
+            context?.packageManager
+                ?.getPackagesForUid(Binder.getCallingUid())
+                ?.toSet()
+                ?: emptySet()
+        } catch (t: Throwable) {
+            emptySet()
+        }
+    }
+
+    private fun secureEquals(a: String, b: String): Boolean {
+        return MessageDigest.isEqual(
+            a.toByteArray(Charsets.UTF_8),
+            b.toByteArray(Charsets.UTF_8)
+        )
+    }
+
+    private fun errorCursor(message: String): Cursor {
+        return MatrixCursor(arrayOf("error")).apply { addRow(arrayOf(message)) }
+    }
+
+    /**
+     * 本地模式授权：窗口开启 + 调用方 UID 的包与窗口目标包一致时发放一次性凭证；
+     * 凭证表与窗口关闭在同一次 commit 内完成。窗口每次只发一个。
+     */
+    private fun handleEnroll(repo: ModifierRepository): Cursor {
+        synchronized(ENROLL_LOCK) {
+            val now = System.currentTimeMillis()
+            val until = repo.getEnrollWindowUntil()
+            if (until <= 0L || now >= until) {
+                Log.w(TAG, "enroll denied: window closed uid=${Binder.getCallingUid()} until=$until")
+                return errorCursor("enroll_window_closed")
+            }
+            val target = repo.getEnrollTargetPackage()
+            if (target.isNullOrBlank()) {
+                Log.w(TAG, "enroll denied: target package missing uid=${Binder.getCallingUid()}")
+                return errorCursor("enroll_target_missing")
+            }
+            val callerPkgs = callerPackages()
+            if (!callerPkgs.contains(target)) {
+                Log.w(
+                    TAG,
+                    "enroll denied: package mismatch target=$target uid=${Binder.getCallingUid()} " +
+                        "packages=$callerPkgs"
+                )
+                return errorCursor("enroll_package_mismatch")
+            }
+            val token = repo.issueEnrollmentToken(target)
+            if (token == null) {
+                Log.w(TAG, "enroll failed: write error target=$target")
+                return errorCursor("enroll_write_failed")
+            }
+            Log.i(TAG, "enroll issued: target=$target uid=${Binder.getCallingUid()}")
+            return MatrixCursor(arrayOf("token", "package")).apply {
+                addRow(arrayOf(token, target))
+            }
+        }
     }
 
     private fun logCaller(uri: Uri) {
@@ -92,7 +214,9 @@ class RuleProvider : ContentProvider() {
             val uid = Binder.getCallingUid()
             val packages = context?.packageManager?.getPackagesForUid(uid)
                 ?.joinToString(",") ?: "unknown"
-            Log.i(TAG, "query path=${uri.path} query=${uri.query} uid=$uid packages=$packages")
+            // 只记录参数名，避免把 token 写进日志。
+            val paramNames = uri.queryParameterNames?.joinToString(",") ?: ""
+            Log.i(TAG, "query path=${uri.path} params=[$paramNames] uid=$uid packages=$packages")
         } catch (t: Throwable) {
             Log.w(TAG, "query caller log failed", t)
         }

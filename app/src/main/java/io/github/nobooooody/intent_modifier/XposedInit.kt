@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AndroidAppHelper
 import android.content.Context
 import android.content.Intent
+import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
@@ -53,6 +54,7 @@ class XposedInit : IXposedHookLoadPackage {
         private const val TAG = "IntentModifier"
         private const val KEY_COMPILED_VERSION = "compiled_version"
         private const val KEY_COMPILED_MANIFEST = "compiled_manifest"
+        private const val KEY_PROVIDER_TOKEN = "provider_token"
         private const val RULE_VERSION_CHECK_INTERVAL_MS = 3_000L
         private const val PREWARM_WAIT_MS = 1_000L
         private const val LOG_INTENTS = false
@@ -686,6 +688,26 @@ class XposedInit : IXposedHookLoadPackage {
 
     // ─── 远端读取 ───────────────────────────────────────────────────────────────
 
+    private fun providerToken(): String? {
+        return try {
+            ModulePrefsReader.getString(KEY_PROVIDER_TOKEN, null)?.takeIf { it.isNotBlank() }
+        } catch (t: Throwable) {
+            log("XSharedPreferences provider_token failed: ${t.javaClass.simpleName}: ${t.message}")
+            null
+        }
+    }
+
+    private fun withProviderToken(uri: Uri, token: String?): Uri {
+        return if (token.isNullOrEmpty()) uri
+        else uri.buildUpon().appendQueryParameter("token", token).build()
+    }
+
+    private fun providerError(cursor: Cursor): String? {
+        val index = cursor.getColumnIndex("error")
+        if (index < 0) return null
+        return if (cursor.moveToFirst()) cursor.getString(index) else "unknown"
+    }
+
     private fun tryGetRemoteVersion(): Long? {
         try {
             val version = ModulePrefsReader.getLong(KEY_COMPILED_VERSION, 0L)
@@ -700,13 +722,17 @@ class XposedInit : IXposedHookLoadPackage {
 
         try {
             val ctx = currentContext ?: return null
-            log("Falling back to ContentProvider for version")
+            log("Falling back to ContentProvider for version (anonymous)")
             val cursor = ctx.contentResolver.query(RuleProvider.URI_VERSION, null, null, null, null)
             cursor?.use {
+                providerError(it)?.let { err ->
+                    log("Provider version denied: $err")
+                    return null
+                }
                 if (it.moveToFirst()) {
                     val version = it.getLong(0)
                     if (version > 0) {
-                        log("Got remote version=$version via ContentProvider")
+                        log("Got remote version=$version via ContentProvider (anonymous)")
                         return version
                     }
                 }
@@ -737,13 +763,20 @@ class XposedInit : IXposedHookLoadPackage {
 
         try {
             if (ctx == null) return null
-            log("Falling back to ContentProvider for manifest")
-            val cursor = ctx.contentResolver.query(RuleProvider.URI_META, null, null, null, null)
+            val token = providerToken()
+            val tokenState = if (token != null) "with token" else "no token"
+            val uri = withProviderToken(RuleProvider.URI_META, token)
+            log("Falling back to ContentProvider for manifest ($tokenState)")
+            val cursor = ctx.contentResolver.query(uri, null, null, null, null)
             cursor?.use {
+                providerError(it)?.let { err ->
+                    log("Provider manifest denied: $err")
+                    return null
+                }
                 if (it.moveToFirst()) {
                     val manifest = RuleManifest.fromJson(it.getString(0))
                     if (manifest != null) {
-                        log("Got manifest via ContentProvider, version=${manifest.version}")
+                        log("Got manifest via ContentProvider ($tokenState), version=${manifest.version}")
                         return manifest
                     }
                 }
@@ -796,17 +829,26 @@ class XposedInit : IXposedHookLoadPackage {
     }
 
     private fun fetchProviderDex(ctx: Context, uri: Uri, group: DexGroupManifest?): ByteArray? {
+        val token = providerToken()
+        val tokenState = if (token != null) "with token" else "no token"
+        val authedUri = withProviderToken(uri, token)
+        log("Provider DEX request ($tokenState)")
         val knownSize = group?.size?.takeIf { it > 0L }
         if (knownSize != null && knownSize > CHUNK_SIZE_BYTES) {
-            return fetchProviderDexChunked(ctx, uri, knownSize)
+            return fetchProviderDexChunked(ctx, authedUri, knownSize)
         }
 
         return try {
-            val cursor = ctx.contentResolver.query(uri, null, null, null, null) ?: return null
+            val cursor = ctx.contentResolver.query(authedUri, null, null, null, null) ?: return null
             cursor.use {
+                providerError(it)?.let { err ->
+                    log("Provider DEX denied: $err")
+                    return null
+                }
                 if (it.moveToFirst()) {
                     val dex = it.getString(0)
                     if (!dex.isNullOrEmpty()) {
+                        log("Got DEX via ContentProvider ($tokenState), ${dex.length} base64 chars")
                         return Base64.decode(dex, Base64.NO_WRAP)
                     }
                 }
@@ -814,7 +856,7 @@ class XposedInit : IXposedHookLoadPackage {
             null
         } catch (t: Throwable) {
             logThrowable("Provider full DEX query failed, retrying in chunks", t)
-            fetchProviderDexChunked(ctx, uri, knownSize)
+            fetchProviderDexChunked(ctx, authedUri, knownSize)
         }
     }
 
@@ -834,6 +876,10 @@ class XposedInit : IXposedHookLoadPackage {
                 val cursor = ctx.contentResolver.query(chunkUri, null, null, null, null) ?: return null
                 var chunkBytes: ByteArray? = null
                 cursor.use {
+                    providerError(it)?.let { err ->
+                        log("Provider chunked DEX denied: $err")
+                        return null
+                    }
                     if (!it.moveToFirst()) return null
                     val encoded = it.getString(0) ?: return null
                     val totalIndex = it.getColumnIndex("totalSize")
