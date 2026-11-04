@@ -15,6 +15,8 @@ import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.XSharedPreferences
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import io.github.nobooooody.intent_modifier.data.DexGroupManifest
+import io.github.nobooooody.intent_modifier.data.RuleManifest
 import io.github.nobooooody.intent_modifier.ui.provider.RuleProvider
 import org.json.JSONObject
 import java.io.File
@@ -46,6 +48,7 @@ class XposedInit : IXposedHookLoadPackage {
     private companion object {
         private const val TAG = "IntentModifier"
         private const val KEY_COMPILED_VERSION = "compiled_version"
+        private const val KEY_COMPILED_MANIFEST = "compiled_manifest"
         private const val RULE_VERSION_CHECK_INTERVAL_MS = 3_000L
         private const val PREWARM_WAIT_MS = 1_000L
         private const val LOG_INTENTS = false
@@ -76,6 +79,27 @@ class XposedInit : IXposedHookLoadPackage {
         }
         loadFailureCount = 0
         nextLoadRetryAt = 0L
+    }
+
+    private fun verifyDexBytes(name: String, bytes: ByteArray, group: DexGroupManifest?): Boolean {
+        if (group == null) {
+            log("No manifest hash for $name, accepting legacy DEX")
+            return true
+        }
+        if (group.sha256.isBlank()) {
+            log("Manifest hash missing for $name, rejecting DEX")
+            return false
+        }
+        if (group.size > 0 && bytes.size.toLong() != group.size) {
+            log("DEX size mismatch for $name: expected=${group.size}, actual=${bytes.size}")
+            return false
+        }
+        val actual = RuleManifest.sha256Hex(bytes)
+        if (!actual.equals(group.sha256, ignoreCase = true)) {
+            log("DEX hash mismatch for $name: expected=${group.sha256}, actual=$actual")
+            return false
+        }
+        return true
     }
 
     private fun logIntent(prefix: String, intent: Intent) {
@@ -211,23 +235,60 @@ class XposedInit : IXposedHookLoadPackage {
             // 尝试下载 app-specific DEX
             val appDexBase64 = tryGetRemoteAppDex(ctx, targetPkg)
 
+            val remoteManifestRaw = tryGetRemoteManifest(ctx)
+            val remoteManifest = if (remoteManifestRaw != null && remoteManifestRaw.version == remoteVersion) {
+                remoteManifestRaw
+            } else {
+                if (remoteManifestRaw != null) {
+                    log("Manifest version mismatch: manifest=${remoteManifestRaw.version}, remote=$remoteVersion")
+                }
+                null
+            }
+            if (remoteManifest == null) {
+                log("No matching manifest, skipping SHA-256 verification for this download")
+            }
+
+            val sharedBytes = Base64.decode(sharedDexBase64, Base64.NO_WRAP)
+            val appBytes = appDexBase64?.let { Base64.decode(it, Base64.NO_WRAP) }
+            val sharedGroup = remoteManifest?.groups?.get(RuleManifest.GROUP_SHARED)
+            if (!verifyDexBytes("shared", sharedBytes, sharedGroup)) {
+                recordLoadFailure(now)
+                return
+            }
+            if (appBytes != null) {
+                val sanitizedPkg = targetPkg.replace('.', '_')
+                val appGroup = remoteManifest?.groups?.get(sanitizedPkg)
+                if (!verifyDexBytes("app_$targetPkg", appBytes, appGroup)) {
+                    recordLoadFailure(now)
+                    return
+                }
+            } else {
+                val expectedAppGroup = remoteManifest?.groups?.get(targetPkg.replace('.', '_'))
+                if (expectedAppGroup != null) {
+                    log("Manifest expects app DEX for $targetPkg but provider returned none")
+                    recordLoadFailure(now)
+                    return
+                }
+            }
+
             // 写入缓存
             rulesDir.deleteRecursively()
             rulesDir.mkdirs()
 
             val sharedDexFile = File(rulesDir, "rules_shared.dex")
-            sharedDexFile.writeBytes(Base64.decode(sharedDexBase64, Base64.NO_WRAP))
+            sharedDexFile.writeBytes(sharedBytes)
             sharedDexFile.setReadOnly()
 
-            if (appDexBase64 != null) {
+            if (appBytes != null) {
                 val appDexFile = File(rulesDir, "rules_app.dex")
-                appDexFile.writeBytes(Base64.decode(appDexBase64, Base64.NO_WRAP))
+                appDexFile.writeBytes(appBytes)
                 appDexFile.setReadOnly()
             }
 
-            localMetaFile.writeText(JSONObject().apply {
-                put("version", remoteVersion)
-            }.toString())
+            localMetaFile.writeText(
+                remoteManifest?.toJson()
+                    ?: JSONObject().apply { put("version", remoteVersion) }.toString()
+            )
 
             if (!loadDexAndBuildRules(lpparam, targetPkg, remoteVersion)) {
                 log("Failed to load downloaded DEX for version=$remoteVersion")
@@ -247,7 +308,65 @@ class XposedInit : IXposedHookLoadPackage {
         val metaFile = File(rulesDir, "meta.json")
         if (!sharedDex.exists() || !metaFile.exists()) return false
 
-        val version = try { JSONObject(metaFile.readText()).optLong("version", 0) } catch (e: Exception) { 0L }
+        val metaText = try {
+            metaFile.readText()
+        } catch (t: Throwable) {
+            logThrowable("Local meta read failed", t)
+            return false
+        }
+        val manifest = RuleManifest.fromJson(metaText)
+        val version = manifest?.version
+            ?: try { JSONObject(metaText).optLong("version", 0) } catch (e: Exception) { 0L }
+
+        if (manifest != null && manifest.groups.isNotEmpty()) {
+            val sharedGroup = manifest.groups[RuleManifest.GROUP_SHARED]
+            if (sharedGroup == null) {
+                log("Local manifest missing shared group, dropping cache")
+                runCatching { rulesDir.deleteRecursively() }
+                return false
+            }
+            val sharedBytes = try {
+                sharedDex.readBytes()
+            } catch (t: Throwable) {
+                logThrowable("Local shared DEX read failed", t)
+                runCatching { rulesDir.deleteRecursively() }
+                return false
+            }
+            if (!verifyDexBytes("local_shared", sharedBytes, sharedGroup)) {
+                log("Local shared DEX failed integrity check, dropping cache")
+                runCatching { rulesDir.deleteRecursively() }
+                return false
+            }
+
+            val sanitizedPkg = targetPkg.replace('.', '_')
+            val appGroup = manifest.groups[sanitizedPkg]
+            val appDex = File(rulesDir, "rules_app.dex")
+            if (appGroup != null) {
+                if (!appDex.exists()) {
+                    log("Local manifest expects app DEX for $targetPkg but file is missing, dropping cache")
+                    runCatching { rulesDir.deleteRecursively() }
+                    return false
+                }
+                val appBytes = try {
+                    appDex.readBytes()
+                } catch (t: Throwable) {
+                    logThrowable("Local app DEX read failed", t)
+                    runCatching { rulesDir.deleteRecursively() }
+                    return false
+                }
+                if (!verifyDexBytes("local_app_$targetPkg", appBytes, appGroup)) {
+                    log("Local app DEX failed integrity check, dropping cache")
+                    runCatching { rulesDir.deleteRecursively() }
+                    return false
+                }
+            } else if (appDex.exists()) {
+                log("Local app DEX not described by manifest, removing it")
+                runCatching { appDex.delete() }
+            }
+        } else {
+            log("Local manifest has no group hashes, accepting legacy cache without verification")
+        }
+
         val loaded = loadDexAndBuildRules(lpparam, targetPkg, version)
         if (!loaded) {
             log("Local rules version=$version failed to load, dropping cache")
@@ -394,6 +513,43 @@ class XposedInit : IXposedHookLoadPackage {
             }
         } catch (e: Exception) {
             log("ContentProvider version failed: ${e.message}")
+        }
+
+        return null
+    }
+
+    private fun tryGetRemoteManifest(ctx: Context?): RuleManifest? {
+        try {
+            val json = ModulePrefsReader.getString(KEY_COMPILED_MANIFEST, null)
+            if (!json.isNullOrEmpty()) {
+                val manifest = RuleManifest.fromJson(json)
+                if (manifest != null) {
+                    log("Got manifest via XSharedPreferences, version=${manifest.version}")
+                    return manifest
+                }
+                log("XSharedPreferences manifest invalid")
+            } else {
+                log("XSharedPreferences compiled_manifest is empty")
+            }
+        } catch (t: Throwable) {
+            logThrowable("XSharedPreferences manifest failed", t)
+        }
+
+        try {
+            if (ctx == null) return null
+            log("Falling back to ContentProvider for manifest")
+            val cursor = ctx.contentResolver.query(RuleProvider.URI_META, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val manifest = RuleManifest.fromJson(it.getString(0))
+                    if (manifest != null) {
+                        log("Got manifest via ContentProvider, version=${manifest.version}")
+                        return manifest
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            logThrowable("ContentProvider manifest failed", t)
         }
 
         return null

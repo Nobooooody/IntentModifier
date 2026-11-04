@@ -10,10 +10,11 @@ import dalvik.system.DexClassLoader
 import io.github.nobooooody.intent_modifier.compiler.JavaEngineSetting
 import io.github.nobooooody.intent_modifier.compiler.JavaPrintWriter
 import io.github.nobooooody.intent_modifier.data.JavaCodeRule
+import io.github.nobooooody.intent_modifier.data.DexGroupManifest
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.data.NormalRule
+import io.github.nobooooody.intent_modifier.data.RuleManifest
 import org.eclipse.jdt.internal.compiler.batch.Main
-import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
 import java.util.UUID
@@ -42,7 +43,11 @@ data class CompiledArtifact(
     val runDir: File,
     val sharedDex: File,
     val appDexFiles: Map<String, File>,
-    val ruleCount: Int
+    val ruleCount: Int,
+    val sharedRuleCount: Int = 0,
+    val appGroupRuleCounts: Map<String, Int> = emptyMap(),
+    val appGroupTargetPackages: Map<String, List<String>> = emptyMap(),
+    val enabledRuleHash: String? = null
 )
 
 sealed interface CompileOutcome {
@@ -138,6 +143,7 @@ class RuleCompilationManager(private val context: Context) {
             }
 
             val appGroups = mutableMapOf<String, MutableList<RuleEntry>>()
+            val appTargetPackages = mutableMapOf<String, MutableSet<String>>()
             val sharedEntries: List<RuleEntry>
             if (ruleEntries.isEmpty()) {
                 log("No enabled rules to compile, generating empty DEX")
@@ -148,6 +154,7 @@ class RuleCompilationManager(private val context: Context) {
                     for (pkg in entry.targetPackages) {
                         val sanitized = repo.sanitizePackageName(pkg)
                         appGroups.getOrPut(sanitized) { mutableListOf() }.add(entry)
+                        appTargetPackages.getOrPut(sanitized) { mutableSetOf() }.add(pkg)
                     }
                 }
             }
@@ -177,7 +184,10 @@ class RuleCompilationManager(private val context: Context) {
                     runDir = runDir,
                     sharedDex = sharedDex,
                     appDexFiles = appDexFiles,
-                    ruleCount = ruleEntries.size
+                    ruleCount = ruleEntries.size,
+                    sharedRuleCount = sharedEntries.size,
+                    appGroupRuleCounts = appGroups.mapValues { it.value.size },
+                    appGroupTargetPackages = appTargetPackages.mapValues { it.value.toList() }
                 )
             )
         } catch (e: Exception) {
@@ -195,19 +205,37 @@ class RuleCompilationManager(private val context: Context) {
                 repo.getCompiledVersion() + 1,
                 System.currentTimeMillis()
             )
-            val sharedDexBase64 = Base64.encodeToString(
-                artifact.sharedDex.readBytes(),
-                Base64.NO_WRAP
-            )
+
+            val sharedBytes = artifact.sharedDex.readBytes()
+            val sharedDexBase64 = Base64.encodeToString(sharedBytes, Base64.NO_WRAP)
+
             val appDexBase64 = linkedMapOf<String, String>()
+            val groups = linkedMapOf<String, DexGroupManifest>()
+            groups[RuleManifest.GROUP_SHARED] = DexGroupManifest(
+                sha256 = RuleManifest.sha256Hex(sharedBytes),
+                size = sharedBytes.size.toLong(),
+                ruleCount = artifact.sharedRuleCount,
+                targetPackages = emptyList()
+            )
+
             for ((sanitizedPkg, dexFile) in artifact.appDexFiles) {
-                appDexBase64[sanitizedPkg] = Base64.encodeToString(dexFile.readBytes(), Base64.NO_WRAP)
+                val bytes = dexFile.readBytes()
+                appDexBase64[sanitizedPkg] = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                groups[sanitizedPkg] = DexGroupManifest(
+                    sha256 = RuleManifest.sha256Hex(bytes),
+                    size = bytes.size.toLong(),
+                    ruleCount = artifact.appGroupRuleCounts[sanitizedPkg] ?: 0,
+                    targetPackages = artifact.appGroupTargetPackages[sanitizedPkg] ?: emptyList()
+                )
             }
-            val manifest = JSONObject().apply {
-                put("version", version)
-                put("ruleCount", artifact.ruleCount)
-                put("compiledAt", artifact.compiledAt)
-            }.toString()
+
+            val manifest = RuleManifest(
+                version = version,
+                ruleCount = artifact.ruleCount,
+                compiledAt = artifact.compiledAt,
+                enabledRuleHash = artifact.enabledRuleHash,
+                groups = groups
+            ).toJson()
 
             repo.publishCompiledRules(
                 sharedDexBase64 = sharedDexBase64,
@@ -218,7 +246,7 @@ class RuleCompilationManager(private val context: Context) {
 
             log(
                 "Compilation published atomically: version=$version, ${artifact.ruleCount} rules, " +
-                    "${artifact.appDexFiles.size} app groups"
+                    "${artifact.appDexFiles.size} app groups, manifest=${manifest.length} bytes"
             )
             CompilationResult(true)
         } catch (e: Exception) {

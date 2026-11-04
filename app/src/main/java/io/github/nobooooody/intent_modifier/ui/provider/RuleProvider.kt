@@ -16,19 +16,23 @@ class RuleProvider : ContentProvider() {
 
         const val PATH_VERSION = "version"
         const val PATH_DEX = "dex"
+        const val PATH_META = "meta"
 
         private const val CODE_VERSION = 1
         private const val CODE_DEX = 2
         private const val CODE_DEX_APP = 3
+        private const val CODE_META = 4
 
         val CONTENT_URI: Uri = Uri.parse("content://$AUTHORITY")
         val URI_VERSION: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_VERSION)
         val URI_DEX: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_DEX)
+        val URI_META: Uri = Uri.withAppendedPath(CONTENT_URI, PATH_META)
 
         private val URI_MATCHER = UriMatcher(UriMatcher.NO_MATCH).apply {
             addURI(AUTHORITY, PATH_VERSION, CODE_VERSION)
             addURI(AUTHORITY, PATH_DEX, CODE_DEX)
             addURI(AUTHORITY, "$PATH_DEX/*", CODE_DEX_APP)
+            addURI(AUTHORITY, PATH_META, CODE_META)
         }
     }
 
@@ -66,6 +70,12 @@ class RuleProvider : ContentProvider() {
                 cursor.addRow(arrayOf(dex))
                 cursor
             }
+            CODE_META -> {
+                val manifest = repo.getCompiledManifest() ?: return null
+                val cursor = MatrixCursor(arrayOf("manifest"))
+                cursor.addRow(arrayOf(manifest))
+                cursor
+            }
             else -> null
         }
     }
@@ -73,6 +83,7 @@ class RuleProvider : ContentProvider() {
     override fun getType(uri: Uri): String? = when (URI_MATCHER.match(uri)) {
         CODE_VERSION -> "vnd.android.cursor.item/long"
         CODE_DEX, CODE_DEX_APP -> "vnd.android.cursor.item/string"
+        CODE_META -> "vnd.android.cursor.item/json"
         else -> null
     }
 
