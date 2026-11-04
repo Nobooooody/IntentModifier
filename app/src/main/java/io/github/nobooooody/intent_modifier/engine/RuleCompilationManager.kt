@@ -66,17 +66,30 @@ class RuleCompilationManager(private val context: Context) {
         private const val KEY_COMPILED_DEX = "compiled_dex"
         private const val KEY_RULES_HASH = "rules_hash"
         private const val KEY_RULE_COUNT = "rule_count"
+        private const val RUN_RETENTION_MS = 6 * 60 * 60_000L
+        private const val MAX_RUN_DIRS = 32
+
+        // 引擎级锁：覆盖 ECJ/D8/jar 安装，所有 RuleCompilationManager 实例共享。
+        private val GLOBAL_COMPILE_LOCK = Any()
     }
 
     // ─── 编译入口：compile 只产出 artifact，publish 才落 SharedPreferences ────────
 
-    @Synchronized
     fun compile(
+        javaRules: List<JavaCodeRule>,
+        normalRules: List<NormalRule>,
+        onProgress: ((String) -> Unit)? = null
+    ): CompileOutcome = synchronized(GLOBAL_COMPILE_LOCK) {
+        compileUnlocked(javaRules, normalRules, onProgress)
+    }
+
+    private fun compileUnlocked(
         javaRules: List<JavaCodeRule>,
         normalRules: List<NormalRule>,
         onProgress: ((String) -> Unit)? = null
     ): CompileOutcome {
         val runsDir = File(context.filesDir, "compile_runs").also { it.mkdirs() }
+        cleanupCompileRuns(runsDir)
         val runDir = File(runsDir, UUID.randomUUID().toString()).also { it.mkdirs() }
 
         fun fail(message: String, ruleName: String? = null): CompileOutcome {
@@ -199,8 +212,11 @@ class RuleCompilationManager(private val context: Context) {
         }
     }
 
-    @Synchronized
-    fun publish(artifact: CompiledArtifact): CompilationResult {
+    fun publish(artifact: CompiledArtifact): CompilationResult = synchronized(GLOBAL_COMPILE_LOCK) {
+        publishUnlocked(artifact)
+    }
+
+    private fun publishUnlocked(artifact: CompiledArtifact): CompilationResult {
         return try {
             val version = maxOf(
                 artifact.version,
@@ -268,15 +284,14 @@ class RuleCompilationManager(private val context: Context) {
      * 兼容旧调用方：编译成功后立即发布。
      * 测试编译不要用这个方法，应改用 compile() + discard()。
      */
-    @Synchronized
     fun compileAllRules(
         javaRules: List<JavaCodeRule>,
         normalRules: List<NormalRule>,
         onProgress: ((String) -> Unit)? = null
-    ): CompilationResult {
-        return when (val outcome = compile(javaRules, normalRules, onProgress)) {
+    ): CompilationResult = synchronized(GLOBAL_COMPILE_LOCK) {
+        when (val outcome = compileUnlocked(javaRules, normalRules, onProgress)) {
             is CompileOutcome.Failure -> CompilationResult(false, outcome.message, outcome.ruleName)
-            is CompileOutcome.Success -> publish(outcome.artifact)
+            is CompileOutcome.Success -> publishUnlocked(outcome.artifact)
         }
     }
 
@@ -304,6 +319,20 @@ class RuleCompilationManager(private val context: Context) {
             .takeIf { it.exists() }
             ?.readText()
             ?: "Compilation failed for $ruleName"
+    }
+
+    private fun cleanupCompileRuns(runsDir: File) {
+        val dirs = runsDir.listFiles { file -> file.isDirectory }
+            ?.sortedByDescending { it.lastModified() }
+            ?: return
+        val now = System.currentTimeMillis()
+        dirs.forEachIndexed { index, dir ->
+            val expired = now - dir.lastModified() > RUN_RETENTION_MS
+            if (expired || index >= MAX_RUN_DIRS) {
+                log("Cleaning stale compile run ${dir.name}")
+                runCatching { dir.deleteRecursively() }
+            }
+        }
     }
 
     private fun discardRun(runDir: File) {
