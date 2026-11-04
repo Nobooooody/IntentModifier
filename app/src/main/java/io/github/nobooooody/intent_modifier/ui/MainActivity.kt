@@ -96,6 +96,8 @@ import io.github.nobooooody.intent_modifier.data.RuleManifest
 import io.github.nobooooody.intent_modifier.engine.MutationResult
 import io.github.nobooooody.intent_modifier.engine.RuleMutationCoordinator
 import io.github.nobooooody.intent_modifier.engine.RuleSnapshot
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -137,7 +139,22 @@ class MainActivity : ComponentActivity() {
                 if (manifest == null && javaRules.isEmpty() && normalRules.isEmpty()) return@Thread
 
                 Log.i("IntentModifier", "Rule manifest hash mismatch, scheduling recompile")
-                RuleMutationCoordinator.get(appContext).mutate { it }
+                val deferred = RuleMutationCoordinator.get(appContext).mutate { it }
+                CoroutineScope(Dispatchers.Main).launch {
+                    val result = deferred.await()
+                    if (result is MutationResult.Failure) {
+                        Toast.makeText(
+                            appContext,
+                            formatCompileFailure(
+                                appContext.getString(R.string.compile_failed),
+                                result.message,
+                                result.ruleName,
+                                result.line
+                            ),
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
                 Handler(Looper.getMainLooper()).post {
                     Toast.makeText(appContext, R.string.compiling_all_rules, Toast.LENGTH_SHORT).show()
                 }
