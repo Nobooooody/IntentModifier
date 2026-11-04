@@ -7,12 +7,15 @@ import android.content.UriMatcher
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
+import android.os.Binder
 import android.util.Base64
+import android.util.Log
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 
 class RuleProvider : ContentProvider() {
 
     companion object {
+        private const val TAG = "RuleProvider"
         const val AUTHORITY = "io.github.nobooooody.intent_modifier.provider"
 
         const val PATH_VERSION = "version"
@@ -46,6 +49,7 @@ class RuleProvider : ContentProvider() {
         selectionArgs: Array<out String>?,
         sortOrder: String?
     ): Cursor? {
+        logCaller(uri)
         val ctx = context ?: return null
         val repo = ModifierRepository(ctx)
 
@@ -81,6 +85,17 @@ class RuleProvider : ContentProvider() {
         CODE_DEX, CODE_DEX_APP -> "vnd.android.cursor.item/string"
         CODE_META -> "vnd.android.cursor.item/json"
         else -> null
+    }
+
+    private fun logCaller(uri: Uri) {
+        try {
+            val uid = Binder.getCallingUid()
+            val packages = context?.packageManager?.getPackagesForUid(uid)
+                ?.joinToString(",") ?: "unknown"
+            Log.i(TAG, "query path=${uri.path} query=${uri.query} uid=$uid packages=$packages")
+        } catch (t: Throwable) {
+            Log.w(TAG, "query caller log failed", t)
+        }
     }
 
     /**
