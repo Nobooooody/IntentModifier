@@ -44,6 +44,7 @@ class XposedInit : IXposedHookLoadPackage {
         private const val KEY_COMPILED_VERSION = "compiled_version"
         private const val RULE_VERSION_CHECK_INTERVAL_MS = 3_000L
         private const val PREWARM_WAIT_MS = 1_000L
+        private const val LOG_INTENTS = false
     }
 
     private fun log(msg: String) {
@@ -56,28 +57,18 @@ class XposedInit : IXposedHookLoadPackage {
     }
 
     private fun logIntent(prefix: String, intent: Intent) {
-        val extrasStr = buildString {
-            intent.extras?.keySet()?.forEach { key ->
-                if (isNotEmpty()) append(", ")
-                append("$key=")
-                when (val v = intent.extras?.get(key)) {
-                    is Boolean -> append(v.toString())
-                    is BooleanArray -> append(v.contentToString())
-                    is Int -> append(v.toString())
-                    is IntArray -> append(v.contentToString())
-                    is Long -> append(v.toString())
-                    is LongArray -> append(v.contentToString())
-                    is Float -> append(v.toString())
-                    is FloatArray -> append(v.contentToString())
-                    is DoubleArray -> append(v.contentToString())
-                    is String -> append(v)
-                    is Array<*> -> append(v.contentToString())
-                    is android.os.Parcelable -> append(v.javaClass.simpleName)
-                    else -> append(v?.toString() ?: "null")
-                }
-            }
+        if (!LOG_INTENTS) return
+        try {
+            val extraKeys = intent.extras?.keySet()?.joinToString(",") ?: ""
+            val dataScheme = intent.data?.scheme ?: ""
+            XposedBridge.log(
+                "$prefix pkg=${intent.`package`}, component=${intent.component}, action=${intent.action}, " +
+                    "dataScheme=$dataScheme, type=${intent.type}, flags=${intent.flags}, " +
+                    "categories=${intent.categories}, extraKeys=[$extraKeys]"
+            )
+        } catch (t: Throwable) {
+            log("Intent log failed: ${t.javaClass.simpleName}: ${t.message}")
         }
-        XposedBridge.log("$prefix pkg=${intent.`package`}, component=${intent.component}, action=${intent.action}, data=${intent.data}, dataString=${intent.dataString}, type=${intent.type}, flags=${intent.flags}, categories=${intent.categories}, extras={$extrasStr}")
     }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
@@ -205,8 +196,8 @@ class XposedInit : IXposedHookLoadPackage {
                 log("Failed to load downloaded DEX for version=$remoteVersion")
             }
 
-        } catch (e: Exception) {
-            log("Failed to load rules: ${e.message}")
+        } catch (t: Throwable) {
+            logThrowable("Failed to load rules", t)
         }
     }
 
@@ -442,25 +433,29 @@ class XposedInit : IXposedHookLoadPackage {
     // ─── Hook 方法 ──────────────────────────────────────────────────────────────
 
     private fun hookInstrumentation(lpparam: XC_LoadPackage.LoadPackageParam) {
-        XposedHelpers.findAndHookMethod(
-            "android.app.Instrumentation", lpparam.classLoader, "execStartActivity",
-            Context::class.java, IBinder::class.java, IBinder::class.java, Activity::class.java, Intent::class.java, Int::class.javaPrimitiveType, Bundle::class.java,
-            object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
-                    if (currentContext == null) {
-                        currentContext = AndroidAppHelper.currentApplication()?.applicationContext
-                    }
-                    loadRulesIfNeeded(lpparam, currentContext)
-                    val intent = param.args[4] as? Intent ?: return
+        try {
+            XposedHelpers.findAndHookMethod(
+                "android.app.Instrumentation", lpparam.classLoader, "execStartActivity",
+                Context::class.java, IBinder::class.java, IBinder::class.java, Activity::class.java, Intent::class.java, Int::class.javaPrimitiveType, Bundle::class.java,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        if (currentContext == null) {
+                            currentContext = AndroidAppHelper.currentApplication()?.applicationContext
+                        }
+                        loadRulesIfNeeded(lpparam, currentContext)
+                        val intent = param.args[4] as? Intent ?: return
 
-                    logIntent("$TAG: Original", intent)
-                    val modifiedIntent = applyRules(intent)
-                    if (modifiedIntent !== intent) {
-                        logIntent("$TAG: Modified", modifiedIntent)
+                        logIntent("$TAG: Original", intent)
+                        val modifiedIntent = applyRules(intent)
+                        if (modifiedIntent !== intent) {
+                            logIntent("$TAG: Modified", modifiedIntent)
+                        }
+                        param.args[4] = modifiedIntent
                     }
-                    param.args[4] = modifiedIntent
-                }
-            })
+                })
+        } catch (t: Throwable) {
+            logThrowable("Failed to hook Instrumentation.execStartActivity", t)
+        }
     }
 
     private fun hookLauncher3(lpparam: XC_LoadPackage.LoadPackageParam) {
@@ -488,8 +483,8 @@ class XposedInit : IXposedHookLoadPackage {
                     return
                 }
             }
-        } catch (e: Exception) {
-            log("Failed to hook Launcher3: ${e.message}")
+        } catch (t: Throwable) {
+            logThrowable("Failed to hook Launcher3", t)
         }
     }
 
@@ -548,8 +543,8 @@ class XposedInit : IXposedHookLoadPackage {
                     }
                 }
             }
-        } catch (e: Exception) {
-            log("Failed to hook custom class $hookClassName: ${e.message}")
+        } catch (t: Throwable) {
+            logThrowable("Failed to hook custom class $hookClassName", t)
         }
     }
 }
