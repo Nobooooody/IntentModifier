@@ -7,6 +7,7 @@ import android.content.UriMatcher
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
+import android.util.Base64
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 
 class RuleProvider : ContentProvider() {
@@ -57,18 +58,13 @@ class RuleProvider : ContentProvider() {
             }
             CODE_DEX -> {
                 val dex = repo.getSharedDex() ?: repo.getCompiledDex() ?: return null
-                val cursor = MatrixCursor(arrayOf("dex"))
-                cursor.addRow(arrayOf(dex))
-                cursor
+                buildDexCursor(dex, uri)
             }
             CODE_DEX_APP -> {
                 val pkg = uri.lastPathSegment ?: return null
                 val sanitized = repo.sanitizePackageName(pkg)
-                val dex = repo.getAppDex(sanitized)
-                if (dex == null) return null
-                val cursor = MatrixCursor(arrayOf("dex"))
-                cursor.addRow(arrayOf(dex))
-                cursor
+                val dex = repo.getAppDex(sanitized) ?: return null
+                buildDexCursor(dex, uri)
             }
             CODE_META -> {
                 val manifest = repo.getCompiledManifest() ?: return null
@@ -85,6 +81,37 @@ class RuleProvider : ContentProvider() {
         CODE_DEX, CODE_DEX_APP -> "vnd.android.cursor.item/string"
         CODE_META -> "vnd.android.cursor.item/json"
         else -> null
+    }
+
+    /**
+     * 无 offset/length 参数时保持旧行为：返回完整 Base64 字符串。
+     * 带参数时按解码后的 DEX 字节切片，返回 Base64(chunk) 与 totalSize 列；
+     * offset/length 的单位都是解码后的字节。
+     */
+    private fun buildDexCursor(dexBase64: String, uri: Uri): Cursor? {
+        val offsetParam = uri.getQueryParameter("offset")
+        val lengthParam = uri.getQueryParameter("length")
+        if (offsetParam == null && lengthParam == null) {
+            val cursor = MatrixCursor(arrayOf("dex"))
+            cursor.addRow(arrayOf(dexBase64))
+            return cursor
+        }
+
+        return try {
+            val bytes = Base64.decode(dexBase64, Base64.NO_WRAP)
+            val total = bytes.size
+            val offset = (offsetParam?.toLongOrNull() ?: 0L).coerceIn(0L, total.toLong())
+            val requestedLength = lengthParam?.toLongOrNull() ?: (total.toLong() - offset)
+            val length = requestedLength.coerceIn(0L, total.toLong() - offset)
+            val start = offset.toInt()
+            val end = (offset + length).toInt()
+            val chunk = bytes.copyOfRange(start, end)
+            val cursor = MatrixCursor(arrayOf("dex", "totalSize"))
+            cursor.addRow(arrayOf(Base64.encodeToString(chunk, Base64.NO_WRAP), total))
+            cursor
+        } catch (t: Throwable) {
+            null
+        }
     }
 
     override fun insert(uri: Uri, values: ContentValues?): Uri? = null

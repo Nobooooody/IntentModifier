@@ -19,6 +19,7 @@ import io.github.nobooooody.intent_modifier.data.DexGroupManifest
 import io.github.nobooooody.intent_modifier.data.RuleManifest
 import io.github.nobooooody.intent_modifier.ui.provider.RuleProvider
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.lang.reflect.Method
 
@@ -54,6 +55,7 @@ class XposedInit : IXposedHookLoadPackage {
         private const val LOG_INTENTS = false
         private const val BASE_RETRY_MS = 5_000L
         private const val MAX_RETRY_MS = 5 * 60_000L
+        private const val CHUNK_SIZE_BYTES = 256 * 1024
     }
 
     private fun log(msg: String) {
@@ -222,19 +224,6 @@ class XposedInit : IXposedHookLoadPackage {
 
             log("Need to update rules: remote=$remoteVersion, local=$localVersion")
 
-            // 下载 shared DEX
-            val sharedDexBase64 = tryGetRemoteDex(ctx)
-            if (sharedDexBase64.isNullOrEmpty()) {
-                log("No remote DEX available, falling back to local cached DEX")
-                if (!tryLoadLocalCached(lpparam, targetPkg)) {
-                    recordLoadFailure(now)
-                }
-                return
-            }
-
-            // 尝试下载 app-specific DEX
-            val appDexBase64 = tryGetRemoteAppDex(ctx, targetPkg)
-
             val remoteManifestRaw = tryGetRemoteManifest(ctx)
             val remoteManifest = if (remoteManifestRaw != null && remoteManifestRaw.version == remoteVersion) {
                 remoteManifestRaw
@@ -248,27 +237,33 @@ class XposedInit : IXposedHookLoadPackage {
                 log("No matching manifest, skipping SHA-256 verification for this download")
             }
 
-            val sharedBytes = Base64.decode(sharedDexBase64, Base64.NO_WRAP)
-            val appBytes = appDexBase64?.let { Base64.decode(it, Base64.NO_WRAP) }
+            val sanitizedPkg = targetPkg.replace('.', '_')
             val sharedGroup = remoteManifest?.groups?.get(RuleManifest.GROUP_SHARED)
+            val sharedBytes = tryGetRemoteDex(ctx, sharedGroup)
+            if (sharedBytes == null) {
+                log("No remote DEX available, falling back to local cached DEX")
+                if (!tryLoadLocalCached(lpparam, targetPkg)) {
+                    recordLoadFailure(now)
+                }
+                return
+            }
+
+            val appGroup = remoteManifest?.groups?.get(sanitizedPkg)
+            val appBytes = tryGetRemoteAppDex(ctx, targetPkg, appGroup)
+
             if (!verifyDexBytes("shared", sharedBytes, sharedGroup)) {
                 recordLoadFailure(now)
                 return
             }
             if (appBytes != null) {
-                val sanitizedPkg = targetPkg.replace('.', '_')
-                val appGroup = remoteManifest?.groups?.get(sanitizedPkg)
                 if (!verifyDexBytes("app_$targetPkg", appBytes, appGroup)) {
                     recordLoadFailure(now)
                     return
                 }
-            } else {
-                val expectedAppGroup = remoteManifest?.groups?.get(targetPkg.replace('.', '_'))
-                if (expectedAppGroup != null) {
-                    log("Manifest expects app DEX for $targetPkg but provider returned none")
-                    recordLoadFailure(now)
-                    return
-                }
+            } else if (appGroup != null) {
+                log("Manifest expects app DEX for $targetPkg but provider returned none")
+                recordLoadFailure(now)
+                return
             }
 
             // 写入缓存
@@ -555,58 +550,114 @@ class XposedInit : IXposedHookLoadPackage {
         return null
     }
 
-    private fun tryGetRemoteDex(ctx: Context?): String? {
+    private fun tryGetRemoteDex(ctx: Context?, group: DexGroupManifest?): ByteArray? {
         try {
             val dex = ModulePrefsReader.getString("shared_dex", null)
-            if (!dex.isNullOrEmpty()) return dex
-            log("XSharedPreferences shared_dex is empty")
-        } catch (e: Exception) {
-            log("XSharedPreferences shared_dex failed: ${e.message}")
-        }
-
-        try {
-            if (ctx == null) return null
-            log("Falling back to ContentProvider for shared DEX")
-            val cursor = ctx.contentResolver.query(RuleProvider.URI_DEX, null, null, null, null)
-            cursor?.use {
-                if (it.moveToFirst()) {
-                    val dex = it.getString(0)
-                    if (!dex.isNullOrEmpty()) return dex
-                }
+            if (!dex.isNullOrEmpty()) {
+                log("Got shared DEX via XSharedPreferences")
+                return Base64.decode(dex, Base64.NO_WRAP)
             }
-        } catch (e: Exception) {
-            log("ContentProvider dex failed: ${e.message}")
+            log("XSharedPreferences shared_dex is empty")
+        } catch (t: Throwable) {
+            logThrowable("XSharedPreferences shared_dex failed", t)
         }
 
-        return null
+        if (ctx == null) return null
+        log("Falling back to ContentProvider for shared DEX")
+        return fetchProviderDex(ctx, RuleProvider.URI_DEX, group)
     }
 
-    private fun tryGetRemoteAppDex(ctx: Context?, targetPkg: String): String? {
+    private fun tryGetRemoteAppDex(
+        ctx: Context?,
+        targetPkg: String,
+        group: DexGroupManifest?
+    ): ByteArray? {
         try {
             val sanitized = targetPkg.replace('.', '_')
             val dex = ModulePrefsReader.getString("app_dex_$sanitized", null)
-            if (!dex.isNullOrEmpty()) return dex
+            if (!dex.isNullOrEmpty()) {
+                log("Got app DEX for $targetPkg via XSharedPreferences")
+                return Base64.decode(dex, Base64.NO_WRAP)
+            }
             log("XSharedPreferences app_dex_$sanitized is empty")
-        } catch (e: Exception) {
-            log("XSharedPreferences app_dex failed: ${e.message}")
+        } catch (t: Throwable) {
+            logThrowable("XSharedPreferences app_dex failed", t)
         }
 
-        try {
-            if (ctx == null) return null
-            log("Falling back to ContentProvider for app DEX ($targetPkg)")
-            val uri = Uri.withAppendedPath(RuleProvider.URI_DEX, targetPkg)
-            val cursor = ctx.contentResolver.query(uri, null, null, null, null)
-            cursor?.use {
+        if (ctx == null) return null
+        log("Falling back to ContentProvider for app DEX ($targetPkg)")
+        val uri = Uri.withAppendedPath(RuleProvider.URI_DEX, targetPkg)
+        return fetchProviderDex(ctx, uri, group)
+    }
+
+    private fun fetchProviderDex(ctx: Context, uri: Uri, group: DexGroupManifest?): ByteArray? {
+        val knownSize = group?.size?.takeIf { it > 0L }
+        if (knownSize != null && knownSize > CHUNK_SIZE_BYTES) {
+            return fetchProviderDexChunked(ctx, uri, knownSize)
+        }
+
+        return try {
+            val cursor = ctx.contentResolver.query(uri, null, null, null, null) ?: return null
+            cursor.use {
                 if (it.moveToFirst()) {
                     val dex = it.getString(0)
-                    if (!dex.isNullOrEmpty()) return dex
+                    if (!dex.isNullOrEmpty()) {
+                        return Base64.decode(dex, Base64.NO_WRAP)
+                    }
                 }
             }
-        } catch (e: Exception) {
-            log("ContentProvider app_dex failed: ${e.message}")
+            null
+        } catch (t: Throwable) {
+            logThrowable("Provider full DEX query failed, retrying in chunks", t)
+            fetchProviderDexChunked(ctx, uri, knownSize)
         }
+    }
 
-        return null
+    private fun fetchProviderDexChunked(ctx: Context, baseUri: Uri, knownSize: Long?): ByteArray? {
+        try {
+            val output = ByteArrayOutputStream()
+            var offset = 0L
+            var total = knownSize
+
+            while (true) {
+                if (total != null && offset >= total) break
+
+                val chunkUri = baseUri.buildUpon()
+                    .appendQueryParameter("offset", offset.toString())
+                    .appendQueryParameter("length", CHUNK_SIZE_BYTES.toString())
+                    .build()
+                val cursor = ctx.contentResolver.query(chunkUri, null, null, null, null) ?: return null
+                var chunkBytes: ByteArray? = null
+                cursor.use {
+                    if (!it.moveToFirst()) return null
+                    val encoded = it.getString(0) ?: return null
+                    val totalIndex = it.getColumnIndex("totalSize")
+                    if (total == null && totalIndex >= 0) {
+                        val responseTotal = it.getLong(totalIndex)
+                        if (responseTotal > 0L) total = responseTotal
+                    }
+                    chunkBytes = Base64.decode(encoded, Base64.NO_WRAP)
+                }
+
+                val bytes = chunkBytes ?: return null
+                if (bytes.isEmpty()) break
+                output.write(bytes)
+                offset += bytes.size
+                if (total != null && offset >= total) break
+                if (total == null && bytes.size < CHUNK_SIZE_BYTES) break
+            }
+
+            val result = output.toByteArray()
+            if (total != null && result.size.toLong() != total) {
+                log("Chunked DEX size mismatch: expected=$total, actual=${result.size}")
+                return null
+            }
+            log("Fetched chunked DEX: ${result.size} bytes, chunks<=$CHUNK_SIZE_BYTES")
+            return result
+        } catch (t: Throwable) {
+            logThrowable("Provider chunked DEX query failed", t)
+            return null
+        }
     }
 
     // ─── 规则执行 ───────────────────────────────────────────────────────────────
