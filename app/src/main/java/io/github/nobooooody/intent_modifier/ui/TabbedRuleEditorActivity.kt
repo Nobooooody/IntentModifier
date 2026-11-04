@@ -93,9 +93,7 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                                 NormalRuleForm(
                                     editingRule = null,
                                     onSave = { rule ->
-                                        val currentRules = repo.getNormalRules().toMutableList()
-                                        currentRules.add(rule)
-                                        repo.saveNormalRules(currentRules)
+                                        repo.upsertNormalRule(rule)
                                     },
                                     saveTrigger = saveTrigger,
                                     testCompileTrigger = testCompileTrigger
@@ -105,9 +103,7 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                                 JavaCodeRuleForm(
                                     editingRule = null,
                                     onSave = { rule ->
-                                        val currentRules = repo.getJavaCodeRules().toMutableList()
-                                        currentRules.add(rule)
-                                        repo.saveJavaCodeRules(currentRules)
+                                        repo.upsertJavaCodeRule(rule)
                                     },
                                     saveTrigger = saveTrigger,
                                     testCompileTrigger = testCompileTrigger

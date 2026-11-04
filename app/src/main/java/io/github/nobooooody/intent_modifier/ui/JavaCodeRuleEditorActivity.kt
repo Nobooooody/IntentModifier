@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
+import java.util.UUID
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -134,14 +135,7 @@ class JavaCodeRuleEditorActivity : ComponentActivity() {
                     JavaCodeRuleForm(
                         editingRule = editingRule,
                         onSave = { rule ->
-                            val currentRules = repo.getJavaCodeRules().toMutableList()
-                            if (editingRule != null) {
-                                val idx = currentRules.indexOfFirst { it.name == editingRule!!.name }
-                                if (idx >= 0) currentRules[idx] = rule
-                            } else {
-                                currentRules.add(rule)
-                            }
-                            repo.saveJavaCodeRules(currentRules)
+                            repo.upsertJavaCodeRule(rule)
                         },
                         modifier = Modifier.padding(padding),
                         saveTrigger = saveTrigger,
@@ -184,6 +178,7 @@ fun JavaCodeRuleForm(
         }
         isSaving = true
         val rule = JavaCodeRule(
+            id = editingRule?.id ?: UUID.randomUUID().toString(),
             enabled = enabled,
             name = trimmedName,
             targetPackages = targetPackages,

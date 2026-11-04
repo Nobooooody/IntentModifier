@@ -146,14 +146,7 @@ class NormalRuleEditorActivity : ComponentActivity() {
                     NormalRuleForm(
                         editingRule = editingRule,
                         onSave = { rule ->
-                            val currentRules = repo.getNormalRules().toMutableList()
-                            if (editingRule != null) {
-                                val idx = currentRules.indexOfFirst { it.id == editingRule!!.id }
-                                if (idx >= 0) currentRules[idx] = rule
-                            } else {
-                                currentRules.add(rule)
-                            }
-                            repo.saveNormalRules(currentRules)
+                            repo.upsertNormalRule(rule)
                         },
                         modifier = Modifier.padding(padding),
                         saveTrigger = saveTrigger,

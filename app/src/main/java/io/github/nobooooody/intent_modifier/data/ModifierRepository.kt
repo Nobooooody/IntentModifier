@@ -118,6 +118,13 @@ class ModifierRepository(private val context: Context) {
         prefs.edit().putString(KEY_JAVA_CODE_RULES, json.toString()).apply()
     }
 
+    fun upsertJavaCodeRule(rule: JavaCodeRule) {
+        val rules = getJavaCodeRules().toMutableList()
+        val index = rules.indexOfFirst { it.id == rule.id }
+        if (index >= 0) rules[index] = rule else rules.add(rule)
+        saveJavaCodeRules(rules)
+    }
+
     // ─── NormalRule CRUD ───────────────────────────────────────────────────────
 
     fun getNormalRules(): List<NormalRule> {
@@ -209,6 +216,13 @@ class ModifierRepository(private val context: Context) {
             })
         }
         prefs.edit().putString(KEY_NORMAL_RULES, json.toString()).apply()
+    }
+
+    fun upsertNormalRule(rule: NormalRule) {
+        val rules = getNormalRules().toMutableList()
+        val index = rules.indexOfFirst { it.id == rule.id }
+        if (index >= 0) rules[index] = rule else rules.add(rule)
+        saveNormalRules(rules)
     }
 
     // ─── Compiled DEX ──────────────────────────────────────────────────────────
