@@ -402,39 +402,57 @@ class RuleCompilationManager(private val context: Context) {
 
             // 打包为 JAR -> D8
             val jarFile = File(cacheDir, "rules_$groupName.jar")
-            val jarOut = java.util.jar.JarOutputStream(java.io.FileOutputStream(jarFile))
-            classFiles.forEach { file ->
-                val entryName = file.relativeTo(classOutputDir).path.replace("\\", "/")
-                jarOut.putNextEntry(java.util.jar.JarEntry(entryName))
-                jarOut.write(file.readBytes())
-                jarOut.closeEntry()
+            java.util.jar.JarOutputStream(java.io.FileOutputStream(jarFile)).use { jarOut ->
+                classFiles.forEach { file ->
+                    val entryName = file.relativeTo(classOutputDir).path.replace("\\", "/")
+                    jarOut.putNextEntry(java.util.jar.JarEntry(entryName))
+                    jarOut.write(file.readBytes())
+                    jarOut.closeEntry()
+                }
             }
-            jarOut.close()
 
             log("Created JAR for $groupName: ${jarFile.length()} bytes, ${classFiles.size} classes")
 
             val dexOutputDir = File(cacheDir, "dex_$groupName").also { it.mkdirs() }
-            val dexFile = File(dexOutputDir, "classes.dex")
 
             val builder = D8Command.builder()
             builder.addProgramFiles(jarFile.toPath())
+            builder.setMinApiLevel(26)
             builder.setOutput(dexOutputDir.toPath(), OutputMode.DexIndexed)
             D8.run(builder.build())
 
             jarFile.delete()
 
-            if (!dexFile.exists()) {
-                log("D8 failed for $groupName. Files: ${dexOutputDir.listFiles()?.map { it.name }}")
-                return null
+            val dexFiles = dexOutputDir.listFiles { file ->
+                file.isFile && file.name.matches(Regex("classes(\\d*)?\\.dex"))
+            }?.sortedBy { dexPartIndex(it.name) } ?: emptyList()
+
+            if (dexFiles.isEmpty()) {
+                throw IllegalStateException(
+                    "D8 produced no classes*.dex for group $groupName; output=${dexOutputDir.listFiles()?.map { it.name }}"
+                )
+            }
+            if (dexFiles.size > 1) {
+                throw IllegalStateException(
+                    "D8 produced ${dexFiles.size} dex files for group $groupName " +
+                        "(${dexFiles.joinToString { it.name }}); " +
+                        "the current single-DEX transport cannot load multi-dex groups. " +
+                        "Reduce the rules compiled into this group or add multi-dex transport."
+                )
             }
 
-            log("DEX created for $groupName: ${dexFile.length()} bytes")
+            val dexFile = dexFiles.first()
+            log("DEX created for $groupName: ${dexFile.length()} bytes (${dexFile.name})")
             dexFile
         } catch (e: Exception) {
             log("D8 conversion failed for $groupName: ${e.message}")
-            e.printStackTrace()
-            null
+            throw e
         }
+    }
+
+    private fun dexPartIndex(name: String): Int {
+        if (name == "classes.dex") return 1
+        return name.removePrefix("classes").removeSuffix(".dex").toIntOrNull() ?: Int.MAX_VALUE
     }
 
     // ─── 模板生成 ───────────────────────────────────────────────────────────────
