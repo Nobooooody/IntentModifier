@@ -375,6 +375,7 @@ class XposedInit : IXposedHookLoadPackage {
             }
 
             ModulePrefsReader.refresh(now)
+            ctx?.let { maybeBootstrapCredential(it, targetPkg) }
             val remoteVersion = tryGetRemoteVersion()
             val state = rulesState
             if (state != null && remoteVersion != null && remoteVersion == state.version) {
@@ -693,12 +694,38 @@ class XposedInit : IXposedHookLoadPackage {
     private data class CachedCredential(val token: String, val packageName: String)
 
     /**
-     * enroll 防抖：每个进程生命周期最多一次；若缓存凭证被拒，允许再补一次，
-     * 避免 XSP 失效时每个请求都打 Provider，也避免失效凭证造成死循环。
+     * 进程级单次 enroll 闸门：bootstrap、刷新路径、凭证被拒后的重试共用，
+     * 保证每个进程生命周期最多一次真实 /enroll 请求。
      */
     private object EnrollmentGuard {
-        @Volatile var attempted = false
-        @Volatile var retriedAfterRejection = false
+        val attempted = java.util.concurrent.atomic.AtomicBoolean(false)
+    }
+
+    /** bootstrap 只检查一次，避免每次 load 都重复读 XSP/凭证。 */
+    private object CredentialBootstrapGuard {
+        val checked = java.util.concurrent.atomic.AtomicBoolean(false)
+    }
+
+    /**
+     * 凭证获取与版本刷新解耦：仅当 XSP 未给出有效版本、且本地没有凭证时，
+     * 独立尝试一次 /enroll。成功只保存凭证，不拉 manifest/DEX；
+     * 失败只由 tryEnroll 记录一次，不重试，也不影响后续刷新/降级。
+     */
+    private fun maybeBootstrapCredential(ctx: Context, targetPkg: String) {
+        if (!CredentialBootstrapGuard.checked.compareAndSet(false, true)) return
+        if (!shouldSkipXsp()) {
+            val xspVersion = try {
+                ModulePrefsReader.getLong(KEY_COMPILED_VERSION, 0L)
+            } catch (t: Throwable) {
+                0L
+            }
+            if (xspVersion > 0L) return
+        }
+        if (readCredential(ctx, targetPkg) != null) return
+        val token = tryEnroll(ctx, targetPkg)
+        if (token != null) {
+            log("Credential bootstrap: enrolled for $targetPkg")
+        }
     }
 
     /**
@@ -816,16 +843,8 @@ class XposedInit : IXposedHookLoadPackage {
         return providerToken() ?: readCredential(ctx, targetPkg)?.token
     }
 
-    private fun tryEnroll(ctx: Context, targetPkg: String, afterRejection: Boolean): String? {
-        synchronized(EnrollmentGuard) {
-            if (afterRejection) {
-                if (EnrollmentGuard.retriedAfterRejection) return null
-                EnrollmentGuard.retriedAfterRejection = true
-            } else {
-                if (EnrollmentGuard.attempted) return null
-                EnrollmentGuard.attempted = true
-            }
-        }
+    private fun tryEnroll(ctx: Context, targetPkg: String): String? {
+        if (!EnrollmentGuard.attempted.compareAndSet(false, true)) return null
         val uri = RuleProvider.URI_ENROLL.buildUpon()
             .appendQueryParameter("package", targetPkg)
             .build()
@@ -887,7 +906,7 @@ class XposedInit : IXposedHookLoadPackage {
             clearCredential(ctx)
         }
         if (!allowEnroll) return null
-        val token = tryEnroll(ctx, targetPkg, afterRejection = usedCredential)
+        val token = tryEnroll(ctx, targetPkg)
         if (token == null) {
             log("Enroll unavailable; falling back to local cache/default behavior")
         }
@@ -1044,6 +1063,10 @@ class XposedInit : IXposedHookLoadPackage {
         targetPkg: String,
         group: DexGroupManifest?
     ): ByteArray? {
+        if (group == null) {
+            log("No app DEX group for $targetPkg, skipping Provider app DEX")
+            return null
+        }
         if (!shouldSkipXsp()) {
             try {
                 val sanitized = targetPkg.replace('.', '_')
