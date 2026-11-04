@@ -131,14 +131,10 @@ class MainActivity : ComponentActivity() {
                 val repo = ModifierRepository(appContext)
                 val javaRules = repo.getJavaCodeRules()
                 val normalRules = repo.getNormalRules()
-                val hasCompiledRules =
-                    javaRules.any { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) } ||
-                        normalRules.any { it.enabled }
-                if (!hasCompiledRules) return@Thread
-
                 val currentHash = RuleHash.compute(javaRules, normalRules)
                 val manifest = repo.getCompiledManifest()?.let { RuleManifest.fromJson(it) }
                 if (manifest?.enabledRuleHash == currentHash) return@Thread
+                if (manifest == null && javaRules.isEmpty() && normalRules.isEmpty()) return@Thread
 
                 Log.i("IntentModifier", "Rule manifest hash mismatch, scheduling recompile")
                 RuleMutationCoordinator.get(appContext).mutate { it }
