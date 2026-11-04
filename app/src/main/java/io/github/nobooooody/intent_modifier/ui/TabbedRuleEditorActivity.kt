@@ -30,7 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import io.github.nobooooody.intent_modifier.R
-import io.github.nobooooody.intent_modifier.data.ModifierRepository
+import io.github.nobooooody.intent_modifier.engine.RuleMutationCoordinator
 
 class TabbedRuleEditorActivity : ComponentActivity() {
 
@@ -48,7 +48,7 @@ class TabbedRuleEditorActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repo = ModifierRepository(this)
+        val coordinator = RuleMutationCoordinator.get(this)
         setContent {
             @OptIn(ExperimentalMaterial3Api::class)
             IntentModifierTheme {
@@ -93,7 +93,7 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                                 NormalRuleForm(
                                     editingRule = null,
                                     onSave = { rule ->
-                                        repo.upsertNormalRule(rule)
+                                        coordinator.saveNormalRule(rule)
                                     },
                                     saveTrigger = saveTrigger,
                                     testCompileTrigger = testCompileTrigger
@@ -103,7 +103,7 @@ class TabbedRuleEditorActivity : ComponentActivity() {
                                 JavaCodeRuleForm(
                                     editingRule = null,
                                     onSave = { rule ->
-                                        repo.upsertJavaCodeRule(rule)
+                                        coordinator.saveJavaRule(rule)
                                     },
                                     saveTrigger = saveTrigger,
                                     testCompileTrigger = testCompileTrigger

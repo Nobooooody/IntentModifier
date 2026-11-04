@@ -88,10 +88,10 @@ import io.github.nobooooody.intent_modifier.data.JavaCodeRule
 import io.github.nobooooody.intent_modifier.data.LauncherHook
 import io.github.nobooooody.intent_modifier.data.NormalRule
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
-import io.github.nobooooody.intent_modifier.engine.RuleCompilationManager
-import kotlinx.coroutines.Dispatchers
+import io.github.nobooooody.intent_modifier.engine.MutationResult
+import io.github.nobooooody.intent_modifier.engine.RuleMutationCoordinator
+import io.github.nobooooody.intent_modifier.engine.RuleSnapshot
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -270,6 +270,24 @@ private fun RulesScreen() {
         normalRules = repo.getNormalRules()
         selectedDisplayIndices.clear()
         isSelectionMode = false
+    }
+
+    val coordinator = remember(ctx) { RuleMutationCoordinator.get(ctx) }
+
+    fun submitMutation(transform: (RuleSnapshot) -> RuleSnapshot) {
+        scope.launch {
+            val result = try {
+                coordinator.mutate(transform).await()
+            } catch (e: Exception) {
+                MutationResult.Failure(e.message ?: e.javaClass.simpleName)
+            }
+            if (result is MutationResult.Failure) {
+                val prefix = ctx.getString(R.string.compile_failed)
+                val ruleName = result.ruleName?.let { "$it: " } ?: ""
+                Toast.makeText(ctx, "$prefix\n$ruleName${result.message}", Toast.LENGTH_LONG).show()
+            }
+            refresh()
+        }
     }
 
     val editorLauncher = rememberLauncherForActivityResult(
@@ -515,11 +533,14 @@ private fun RulesScreen() {
                                         }
                                         if (!isSelectionMode) {
                                             Switch(checked = javaRule.enabled, onCheckedChange = { enabled ->
-                                                val updated = rules.toMutableList()
-                                                updated[displayItem.index] = updated[displayItem.index].copy(enabled = enabled)
-                                                repo.saveJavaCodeRules(updated)
-                                                rules = updated
-                                                scope.launch { recompileAll(ctx, repo) }
+                                                rules = rules.map {
+                                                    if (it.id == javaRule.id) it.copy(enabled = enabled) else it
+                                                }
+                                                submitMutation { snapshot ->
+                                                    snapshot.copy(javaRules = snapshot.javaRules.map {
+                                                        if (it.id == javaRule.id) it.copy(enabled = enabled) else it
+                                                    })
+                                                }
                                             })
                                         }
                                     }
@@ -589,11 +610,14 @@ private fun RulesScreen() {
                                         }
                                         if (!isSelectionMode) {
                                             Switch(checked = normalRule.enabled, onCheckedChange = { enabled ->
-                                                val updated = normalRules.toMutableList()
-                                                updated[displayItem.index] = updated[displayItem.index].copy(enabled = enabled)
-                                                repo.saveNormalRules(updated)
-                                                normalRules = updated
-                                                scope.launch { recompileAll(ctx, repo) }
+                                                normalRules = normalRules.map {
+                                                    if (it.id == normalRule.id) it.copy(enabled = enabled) else it
+                                                }
+                                                submitMutation { snapshot ->
+                                                    snapshot.copy(normalRules = snapshot.normalRules.map {
+                                                        if (it.id == normalRule.id) it.copy(enabled = enabled) else it
+                                                    })
+                                                }
                                             })
                                         }
                                     }
@@ -642,21 +666,14 @@ private fun RulesScreen() {
             confirmButton = {
                 TextButton(onClick = {
                     when (dr) {
-                        is DisplayRule.Java -> {
-                            val updated = rules.toMutableList()
-                            updated.removeAt(dr.index)
-                            repo.saveJavaCodeRules(updated)
-                            rules = updated
+                        is DisplayRule.Java -> submitMutation { snapshot ->
+                            snapshot.copy(javaRules = snapshot.javaRules.filterNot { it.id == dr.rule.id })
                         }
-                        is DisplayRule.Normal -> {
-                            val updated = normalRules.toMutableList()
-                            updated.removeAt(dr.index)
-                            repo.saveNormalRules(updated)
-                            normalRules = updated
+                        is DisplayRule.Normal -> submitMutation { snapshot ->
+                            snapshot.copy(normalRules = snapshot.normalRules.filterNot { it.id == dr.rule.id })
                         }
                     }
                     pendingDeleteRule = null
-                    scope.launch { recompileAll(ctx, repo) }
                 }) {
                     Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
@@ -678,28 +695,20 @@ private fun RulesScreen() {
             text = { Text(stringResource(R.string.batch_delete_confirm_message, count)) },
             confirmButton = {
                 TextButton(onClick = {
-                    val selectedJava = mutableListOf<Pair<Int, DisplayRule.Java>>()
-                    val selectedNormal = mutableListOf<Pair<Int, DisplayRule.Normal>>()
-                    selectedDisplayIndices.sorted().forEach { idx ->
-                        when (val dr = displayRules[idx]) {
-                            is DisplayRule.Java -> selectedJava.add(dr.index to dr)
-                            is DisplayRule.Normal -> selectedNormal.add(dr.index to dr)
-                        }
+                    val selectedRules = selectedDisplayIndices.sorted().map { displayRules[it] }
+                    val javaIds = selectedRules.filterIsInstance<DisplayRule.Java>()
+                        .map { it.rule.id }.toSet()
+                    val normalIds = selectedRules.filterIsInstance<DisplayRule.Normal>()
+                        .map { it.rule.id }.toSet()
+                    submitMutation { snapshot ->
+                        snapshot.copy(
+                            javaRules = snapshot.javaRules.filterNot { it.id in javaIds },
+                            normalRules = snapshot.normalRules.filterNot { it.id in normalIds }
+                        )
                     }
-                    selectedJava.sortByDescending { it.first }
-                    selectedNormal.sortByDescending { it.first }
-                    val javaUpdated = rules.toMutableList()
-                    selectedJava.forEach { (i, _) -> if (i < javaUpdated.size) javaUpdated.removeAt(i) }
-                    repo.saveJavaCodeRules(javaUpdated)
-                    rules = javaUpdated
-                    val normalUpdated = normalRules.toMutableList()
-                    selectedNormal.forEach { (i, _) -> if (i < normalUpdated.size) normalUpdated.removeAt(i) }
-                    repo.saveNormalRules(normalUpdated)
-                    normalRules = normalUpdated
                     showBatchDeleteDialog = false
                     selectedDisplayIndices.clear()
                     isSelectionMode = false
-                    scope.launch { recompileAll(ctx, repo) }
                 }) {
                     Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                 }
@@ -1110,19 +1119,6 @@ private fun LanguageDialog(currentLang: String, onDismiss: () -> Unit, onSelect:
         confirmButton = { TextButton(onClick = { onSelect(values[selected]) }) { Text(stringResource(R.string.confirm)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
-}
-
-// ─── Recompile helper ─────────────────────────────────────────────────────────
-
-private suspend fun recompileAll(ctx: Context, repo: ModifierRepository) {
-    val javaRules = repo.getJavaCodeRules()
-        .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
-        .sortedByDescending { it.priority }
-    val normalRules = repo.getNormalRules().filter { it.enabled }
-
-    withContext(Dispatchers.IO) {
-        RuleCompilationManager(ctx).compileAllRules(javaRules, normalRules)
-    }
 }
 
 // ─── Export helpers ───────────────────────────────────────────────────────────

@@ -81,7 +81,10 @@ import io.github.nobooooody.intent_modifier.data.ExtraItem
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import io.github.nobooooody.intent_modifier.data.NormalRule
 import io.github.nobooooody.intent_modifier.engine.CompileOutcome
+import io.github.nobooooody.intent_modifier.engine.MutationResult
 import io.github.nobooooody.intent_modifier.engine.RuleCompilationManager
+import io.github.nobooooody.intent_modifier.engine.RuleMutationCoordinator
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -90,6 +93,7 @@ import kotlinx.coroutines.withContext
 class NormalRuleEditorActivity : ComponentActivity() {
 
     private lateinit var repo: ModifierRepository
+    private lateinit var coordinator: RuleMutationCoordinator
     private var editingRule: NormalRule? = null
 
     companion object {
@@ -111,6 +115,7 @@ class NormalRuleEditorActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repo = ModifierRepository(this)
+        coordinator = RuleMutationCoordinator.get(this)
         val index = intent.getIntExtra(EXTRA_RULE_INDEX, -1)
         if (index >= 0) {
             val rules = repo.getNormalRules()
@@ -146,7 +151,7 @@ class NormalRuleEditorActivity : ComponentActivity() {
                     NormalRuleForm(
                         editingRule = editingRule,
                         onSave = { rule ->
-                            repo.upsertNormalRule(rule)
+                            coordinator.saveNormalRule(rule)
                         },
                         modifier = Modifier.padding(padding),
                         saveTrigger = saveTrigger,
@@ -162,7 +167,7 @@ class NormalRuleEditorActivity : ComponentActivity() {
 @Composable
 fun NormalRuleForm(
     editingRule: NormalRule?,
-    onSave: (NormalRule) -> Unit,
+    onSave: (NormalRule) -> Deferred<MutationResult>,
     modifier: Modifier = Modifier,
     saveTrigger: Int = 0,
     testCompileTrigger: Int = 0
@@ -199,6 +204,7 @@ fun NormalRuleForm(
     val scope = rememberCoroutineScope()
 
     fun doSave() {
+        if (isSaving) return
         val trimmedName = name.trim()
         if (trimmedName.isBlank()) {
             Toast.makeText(ctx, R.string.error_key_required, Toast.LENGTH_SHORT).show()
@@ -257,40 +263,32 @@ fun NormalRuleForm(
             replaceCategories = replaceCategories,
             replaceExtras = replaceExtras
         )
-        onSave(rule)
+        val deferred = onSave(rule)
         isSaving = true
+        Toast.makeText(ctx, R.string.compiling_all_rules, Toast.LENGTH_SHORT).show()
         scope.launch {
-            try {
-                val repo = ModifierRepository(ctx)
-                val javaRules = repo.getJavaCodeRules()
-                    .filter { it.enabled && (it.condition.isNotEmpty() || it.action.isNotEmpty()) }
-                    .sortedByDescending { it.priority }
-                val normalRules = repo.getNormalRules().filter { it.enabled }
-                if (javaRules.isEmpty() && normalRules.isEmpty()) {
-                    withContext(Dispatchers.Main) {
-                        errorDialogMessage = ctx.getString(R.string.no_rules_to_compile)
-                        delay(1500)
-                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
-                    }
-                } else {
-                    val manager = RuleCompilationManager(ctx)
-                    val result = withContext(Dispatchers.IO) { manager.compileAllRules(javaRules, normalRules) }
-                    withContext(Dispatchers.Main) {
-                        if (result.success) {
-                            Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${ctx.getString(R.string.compile_success)}", Toast.LENGTH_LONG).show()
-                        } else {
-                            val msg = result.errorMessage ?: ctx.getString(R.string.compile_failed)
-                            Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n$msg", Toast.LENGTH_LONG).show()
-                        }
-                        delay(1500)
-                        (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
+            val result = try {
+                deferred.await()
+            } catch (e: Exception) {
+                MutationResult.Failure(e.message ?: e.javaClass.simpleName)
+            }
+            when (result) {
+                is MutationResult.Success -> {
+                    Toast.makeText(
+                        ctx,
+                        "${ctx.getString(R.string.saved)}\n${ctx.getString(R.string.compile_success)}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    delay(1500)
+                    (ctx as? ComponentActivity)?.apply {
+                        setResult(Activity.RESULT_OK)
+                        finish()
                     }
                 }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(ctx, "${ctx.getString(R.string.saved)}\n${e.message}", Toast.LENGTH_LONG).show()
-                    delay(1500)
-                    (ctx as? ComponentActivity)?.apply { setResult(Activity.RESULT_OK); finish() }
+                is MutationResult.Failure -> {
+                    isSaving = false
+                    val msg = result.message
+                    errorDialogMessage = if (result.ruleName != null) "${result.ruleName}:\n$msg" else msg
                 }
             }
         }
