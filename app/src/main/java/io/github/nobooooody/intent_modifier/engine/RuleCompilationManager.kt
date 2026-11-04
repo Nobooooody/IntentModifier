@@ -528,11 +528,16 @@ class RuleCompilationManager(private val context: Context) {
 
                 public static boolean execute(Context ctx, Intent intent, Intent result) {
                     if (!CUSTOM_ACTION.isEmpty()) result.setAction(CUSTOM_ACTION);
-                    if (!CUSTOM_DATA.isEmpty()) result.setData(Uri.parse(CUSTOM_DATA));
+                    if (!CUSTOM_DATA.isEmpty() || !CUSTOM_TYPE.isEmpty()) {
+                        Uri data = !CUSTOM_DATA.isEmpty() ? Uri.parse(CUSTOM_DATA) : result.getData();
+                        String type = !CUSTOM_TYPE.isEmpty() ? CUSTOM_TYPE : result.getType();
+                        result.setDataAndType(data, type);
+                    }
                     if (!CUSTOM_PKG.isEmpty() && !CUSTOM_CLASS.isEmpty())
                         result.setClassName(CUSTOM_PKG, CUSTOM_CLASS);
+                    else if (!CUSTOM_PKG.isEmpty())
+                        result.setPackage(CUSTOM_PKG);
                     if (CUSTOM_FLAGS != 0) result.addFlags(CUSTOM_FLAGS);
-                    if (!CUSTOM_TYPE.isEmpty()) result.setType(CUSTOM_TYPE);
                     if (REPLACE_CATEGORIES) {
                         java.util.Set<String> existingCats = result.getCategories();
                         if (existingCats != null) {
