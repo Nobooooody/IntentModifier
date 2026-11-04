@@ -62,13 +62,13 @@ class RuleProvider : ContentProvider() {
             }
             CODE_DEX -> {
                 val dex = repo.getSharedDex() ?: repo.getCompiledDex() ?: return null
-                buildDexCursor(dex, uri)
+                buildDexCursor(dex, uri, repo.getCompiledVersion(), "shared")
             }
             CODE_DEX_APP -> {
                 val pkg = uri.lastPathSegment ?: return null
                 val sanitized = repo.sanitizePackageName(pkg)
                 val dex = repo.getAppDex(sanitized) ?: return null
-                buildDexCursor(dex, uri)
+                buildDexCursor(dex, uri, repo.getCompiledVersion(), sanitized)
             }
             CODE_META -> {
                 val manifest = repo.getCompiledManifest() ?: return null
@@ -103,7 +103,7 @@ class RuleProvider : ContentProvider() {
      * 带参数时按解码后的 DEX 字节切片，返回 Base64(chunk) 与 totalSize 列；
      * offset/length 的单位都是解码后的字节。
      */
-    private fun buildDexCursor(dexBase64: String, uri: Uri): Cursor? {
+    private fun buildDexCursor(dexBase64: String, uri: Uri, version: Long, group: String): Cursor? {
         val offsetParam = uri.getQueryParameter("offset")
         val lengthParam = uri.getQueryParameter("length")
         if (offsetParam == null && lengthParam == null) {
@@ -113,7 +113,9 @@ class RuleProvider : ContentProvider() {
         }
 
         return try {
-            val bytes = Base64.decode(dexBase64, Base64.NO_WRAP)
+            val bytes = DexDecodeCache.get(version, group) {
+                Base64.decode(dexBase64, Base64.NO_WRAP)
+            }
             val total = bytes.size
             val offset = (offsetParam?.toLongOrNull() ?: 0L).coerceIn(0L, total.toLong())
             val requestedLength = lengthParam?.toLongOrNull() ?: (total.toLong() - offset)
@@ -132,4 +134,44 @@ class RuleProvider : ContentProvider() {
     override fun insert(uri: Uri, values: ContentValues?): Uri? = null
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
     override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
+}
+
+/**
+ * Provider 进程内的 DEX 解码缓存，key 为 (compiled_version, group)。
+ * 版本变化时旧条目立即失效；最多 4 个条目、16 MB，超出后按 LRU 淘汰。
+ */
+private object DexDecodeCache {
+    private data class Key(val version: Long, val group: String)
+
+    private const val MAX_ENTRIES = 4
+    private const val MAX_TOTAL_BYTES = 16L * 1024 * 1024
+
+    private val cache = LinkedHashMap<Key, ByteArray>(8, 0.75f, true)
+    private var totalBytes = 0L
+
+    @Synchronized
+    fun get(version: Long, group: String, loader: () -> ByteArray): ByteArray {
+        cache.keys.filter { it.version != version }.forEach { key ->
+            cache.remove(key)?.let { totalBytes -= it.size }
+        }
+
+        val key = Key(version, group)
+        cache[key]?.let { return it }
+
+        val bytes = loader()
+        if (bytes.size <= MAX_TOTAL_BYTES) {
+            cache[key] = bytes
+            totalBytes += bytes.size
+            trim()
+        }
+        return bytes
+    }
+
+    private fun trim() {
+        while (cache.size > MAX_ENTRIES || totalBytes > MAX_TOTAL_BYTES) {
+            val eldestKey = cache.keys.firstOrNull() ?: return
+            val removed = cache.remove(eldestKey) ?: return
+            totalBytes -= removed.size
+        }
+    }
 }
