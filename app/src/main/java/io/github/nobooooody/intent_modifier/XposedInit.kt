@@ -7,8 +7,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Base64
-import android.util.Log
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
@@ -27,14 +27,16 @@ class XposedInit : IXposedHookLoadPackage {
     @Volatile
     private var rulesState: RulesState? = null
 
+    private var hasRuleChecked = false
+    private var lastRuleCheckAt = 0L
+
     private data class RulesState(val version: Long, val rules: CompiledRules)
 
     private companion object {
         private const val TAG = "IntentModifier"
-        private const val PREFS_NAME = "intent_modifier_config"
         private const val KEY_COMPILED_VERSION = "compiled_version"
-
-        private val MODULE_PACKAGE = "io.github.nobooooody.intent_modifier"
+        private const val RULE_VERSION_CHECK_INTERVAL_MS = 3_000L
+        private const val PREWARM_WAIT_MS = 1_000L
     }
 
     private fun log(msg: String) {
@@ -81,6 +83,31 @@ class XposedInit : IXposedHookLoadPackage {
             HOOK_INSTRUMENTATION -> hookInstrumentation(lpparam)
             else -> hookCustomClass(lpparam, hookType)
         }
+
+        prewarmRules(lpparam)
+    }
+
+    private fun prewarmRules(lpparam: XC_LoadPackage.LoadPackageParam) {
+        val thread = Thread({
+            try {
+                var waited = 0L
+                while (waited < PREWARM_WAIT_MS) {
+                    val app = AndroidAppHelper.currentApplication()
+                    if (app != null) {
+                        currentContext = app.applicationContext
+                        loadRulesIfNeeded(lpparam, currentContext)
+                        return@Thread
+                    }
+                    Thread.sleep(50)
+                    waited += 50
+                }
+                log("Rule prewarm skipped: application context unavailable")
+            } catch (t: Throwable) {
+                log("Rule prewarm failed: ${t.javaClass.simpleName}: ${t.message}")
+            }
+        }, "IntentModifier-prewarm")
+        thread.isDaemon = true
+        thread.start()
     }
 
     // ─── 规则加载 ───────────────────────────────────────────────────────────────
@@ -88,6 +115,11 @@ class XposedInit : IXposedHookLoadPackage {
     @Synchronized
     private fun loadRulesIfNeeded(lpparam: XC_LoadPackage.LoadPackageParam, ctx: Context?) {
         try {
+            val now = SystemClock.elapsedRealtime()
+            if (hasRuleChecked && now - lastRuleCheckAt < RULE_VERSION_CHECK_INTERVAL_MS) return
+            hasRuleChecked = true
+            lastRuleCheckAt = now
+
             val targetPkg = lpparam.packageName
             val cacheDir = ctx?.cacheDir ?: run {
                 log("Cannot load rules: currentContext is null")
@@ -95,7 +127,13 @@ class XposedInit : IXposedHookLoadPackage {
             }
             val rulesDir = File(cacheDir, "intent_modifier_rules")
 
-            val remoteVersion = tryGetRemoteVersion(lpparam)
+            ModulePrefsReader.refresh(now)
+            val remoteVersion = tryGetRemoteVersion()
+            val state = rulesState
+            if (state != null && remoteVersion != null && remoteVersion == state.version) {
+                // 版本未变：不读 meta.json，直接复用当前不可变快照。
+                return
+            }
 
             val localMetaFile = File(rulesDir, "meta.json")
             var localVersion = 0L
@@ -262,11 +300,9 @@ class XposedInit : IXposedHookLoadPackage {
 
     // ─── 远端读取 ───────────────────────────────────────────────────────────────
 
-    private fun tryGetRemoteVersion(lpparam: XC_LoadPackage.LoadPackageParam): Long? {
+    private fun tryGetRemoteVersion(): Long? {
         try {
-            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
-            xprefs.makeWorldReadable()
-            val version = xprefs.getLong(KEY_COMPILED_VERSION, 0L)
+            val version = ModulePrefsReader.getLong(KEY_COMPILED_VERSION, 0L)
             if (version > 0) {
                 log("Got remote version=$version via XSharedPreferences")
                 return version
@@ -298,9 +334,7 @@ class XposedInit : IXposedHookLoadPackage {
 
     private fun tryGetRemoteDex(ctx: Context?): String? {
         try {
-            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
-            xprefs.makeWorldReadable()
-            val dex = xprefs.getString("shared_dex", null)
+            val dex = ModulePrefsReader.getString("shared_dex", null)
             if (!dex.isNullOrEmpty()) return dex
             log("XSharedPreferences shared_dex is empty")
         } catch (e: Exception) {
@@ -327,9 +361,7 @@ class XposedInit : IXposedHookLoadPackage {
     private fun tryGetRemoteAppDex(ctx: Context?, targetPkg: String): String? {
         try {
             val sanitized = targetPkg.replace('.', '_')
-            val xprefs = XSharedPreferences("io.github.nobooooody.intent_modifier", PREFS_NAME)
-            xprefs.makeWorldReadable()
-            val dex = xprefs.getString("app_dex_$sanitized", null)
+            val dex = ModulePrefsReader.getString("app_dex_$sanitized", null)
             if (!dex.isNullOrEmpty()) return dex
             log("XSharedPreferences app_dex_$sanitized is empty")
         } catch (e: Exception) {
@@ -490,6 +522,43 @@ class XposedInit : IXposedHookLoadPackage {
             log("Failed to hook custom class $hookClassName: ${e.message}")
         }
     }
+}
+
+/**
+ * 进程级 XSharedPreferences 读取器：避免每次 hook 都重新解析整份
+ * 含 Base64 DEX 的 XML；reload 按 3 秒窗口节流。
+ */
+private object ModulePrefsReader {
+    private const val MODULE_PACKAGE = "io.github.nobooooody.intent_modifier"
+    private const val PREFS_NAME = "intent_modifier_config"
+    private const val RELOAD_INTERVAL_MS = 3_000L
+
+    private val prefs: XSharedPreferences by lazy {
+        XSharedPreferences(MODULE_PACKAGE, PREFS_NAME).also { it.makeWorldReadable() }
+    }
+
+    private var loadedOnce = false
+    private var lastReloadAt = 0L
+
+    @Synchronized
+    fun refresh(now: Long = SystemClock.elapsedRealtime(), force: Boolean = false) {
+        if (!loadedOnce) {
+            // 构造函数已经触发首次加载，这里只记录窗口起点。
+            loadedOnce = true
+            lastReloadAt = now
+            return
+        }
+        if (force || now - lastReloadAt >= RELOAD_INTERVAL_MS) {
+            prefs.reload()
+            lastReloadAt = now
+        }
+    }
+
+    fun getLong(key: String, default: Long): Long = prefs.getLong(key, default)
+
+    fun getString(key: String, default: String?): String? = prefs.getString(key, default)
+
+    fun all(): Map<String, *> = prefs.all
 }
 
 data class LoadedRule(
