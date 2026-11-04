@@ -222,8 +222,12 @@ fun JavaCodeRuleForm(
                 }
                 is MutationResult.Failure -> {
                     isSaving = false
-                    val msg = result.message
-                    errorDialogMessage = if (result.ruleName != null) "${result.ruleName}:\n$msg" else msg
+                    errorDialogMessage = formatCompileFailure(
+                        prefix = ctx.getString(R.string.compile_failed),
+                        message = result.message,
+                        ruleName = result.ruleName,
+                        line = result.line
+                    )
                 }
             }
         }
@@ -258,10 +262,13 @@ fun JavaCodeRuleForm(
                             Toast.makeText(ctx, R.string.compile_success, Toast.LENGTH_SHORT).show()
                         }
                         is CompileOutcome.Failure -> {
-                            val msg = outcome.message
-                            val displayMsg = if (outcome.ruleName != null) "${outcome.ruleName}:\n$msg" else msg
                             Toast.makeText(ctx, R.string.compile_failed, Toast.LENGTH_SHORT).show()
-                            errorDialogMessage = displayMsg
+                            errorDialogMessage = formatCompileFailure(
+                                prefix = ctx.getString(R.string.compile_failed),
+                                message = outcome.message,
+                                ruleName = outcome.ruleName,
+                                line = outcome.line
+                            )
                         }
                     }
                 }

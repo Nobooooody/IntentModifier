@@ -310,8 +310,11 @@ private fun RulesScreen() {
             }
             if (result is MutationResult.Failure) {
                 val prefix = ctx.getString(R.string.compile_failed)
-                val ruleName = result.ruleName?.let { "$it: " } ?: ""
-                Toast.makeText(ctx, "$prefix\n$ruleName${result.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    ctx,
+                    formatCompileFailure(prefix, result.message, result.ruleName, result.line),
+                    Toast.LENGTH_LONG
+                ).show()
             }
             refresh()
         }
@@ -341,8 +344,11 @@ private fun RulesScreen() {
                 }
                 is MutationResult.Failure -> {
                     val prefix = ctx.getString(R.string.compile_failed)
-                    val ruleName = result.ruleName?.let { "$it: " } ?: ""
-                    Toast.makeText(ctx, "$prefix\n$ruleName${result.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        ctx,
+                        formatCompileFailure(prefix, result.message, result.ruleName, result.line),
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
             refresh()

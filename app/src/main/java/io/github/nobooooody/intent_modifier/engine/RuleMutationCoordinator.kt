@@ -21,7 +21,13 @@ data class RuleSnapshot(
 
 sealed interface MutationResult {
     data object Success : MutationResult
-    data class Failure(val message: String, val ruleName: String? = null) : MutationResult
+    data class Failure(
+        val message: String,
+        val ruleName: String? = null,
+        val ruleId: String? = null,
+        val sourceFile: String? = null,
+        val line: Int? = null
+    ) : MutationResult
 }
 
 /**
@@ -113,7 +119,13 @@ class RuleMutationCoordinator private constructor(context: Context) {
         val outcome = compiler.compile(javaRules, normalRules)
         val artifact = when (outcome) {
             is CompileOutcome.Failure -> {
-                return MutationResult.Failure(outcome.message, outcome.ruleName)
+                return MutationResult.Failure(
+                    message = outcome.message,
+                    ruleName = outcome.ruleName,
+                    ruleId = outcome.ruleId,
+                    sourceFile = outcome.sourceFile,
+                    line = outcome.line
+                )
             }
             is CompileOutcome.Success -> outcome.artifact
         }

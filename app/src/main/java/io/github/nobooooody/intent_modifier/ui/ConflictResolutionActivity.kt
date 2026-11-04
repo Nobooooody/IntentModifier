@@ -120,10 +120,9 @@ class ConflictResolutionActivity : ComponentActivity() {
                                 }
                                 is MutationResult.Failure -> {
                                     val prefix = getString(R.string.compile_failed)
-                                    val ruleName = result.ruleName?.let { "$it: " } ?: ""
                                     Toast.makeText(
                                         this@ConflictResolutionActivity,
-                                        "$prefix\n$ruleName${result.message}",
+                                        formatCompileFailure(prefix, result.message, result.ruleName, result.line),
                                         Toast.LENGTH_LONG
                                     ).show()
                                 }

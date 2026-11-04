@@ -35,7 +35,10 @@ data class RuleSource(
 data class CompilationResult(
     val success: Boolean,
     val errorMessage: String? = null,
-    val errorRuleName: String? = null
+    val errorRuleName: String? = null,
+    val errorRuleId: String? = null,
+    val errorSourceFile: String? = null,
+    val errorLine: Int? = null
 )
 
 data class CompiledArtifact(
@@ -53,7 +56,13 @@ data class CompiledArtifact(
 
 sealed interface CompileOutcome {
     data class Success(val artifact: CompiledArtifact) : CompileOutcome
-    data class Failure(val message: String, val ruleName: String? = null) : CompileOutcome
+    data class Failure(
+        val message: String,
+        val ruleName: String? = null,
+        val ruleId: String? = null,
+        val sourceFile: String? = null,
+        val line: Int? = null
+    ) : CompileOutcome
 }
 
 class RuleCompilationManager(private val context: Context) {
@@ -92,10 +101,16 @@ class RuleCompilationManager(private val context: Context) {
         cleanupCompileRuns(runsDir)
         val runDir = File(runsDir, UUID.randomUUID().toString()).also { it.mkdirs() }
 
-        fun fail(message: String, ruleName: String? = null): CompileOutcome {
+        fun fail(
+            message: String,
+            ruleName: String? = null,
+            ruleId: String? = null,
+            sourceFile: String? = null,
+            line: Int? = null
+        ): CompileOutcome {
             log(message)
             discardRun(runDir)
-            return CompileOutcome.Failure(message, ruleName)
+            return CompileOutcome.Failure(message, ruleName, ruleId, sourceFile, line)
         }
 
         try {
@@ -121,12 +136,23 @@ class RuleCompilationManager(private val context: Context) {
                 if (!compileSingleSource(sourceFile, ruleName, classOutputDir, runDir)) {
                     val errorLog = readCompileLog(runDir, ruleName)
                     log("Compilation failed for $ruleName:\n$errorLog")
-                    return fail(errorLog, ruleName)
+                    return fail(
+                        message = errorLog,
+                        ruleName = rule.name,
+                        ruleId = rule.id,
+                        sourceFile = sourceFile.absolutePath,
+                        line = parseEcjLine(errorLog)
+                    )
                 }
 
                 val classFile = findClassFile(classOutputDir, ruleName)
                 if (classFile == null) {
-                    return fail("Class file not found for $ruleName", ruleName)
+                    return fail(
+                        message = "Class file not found for $ruleName",
+                        ruleName = rule.name,
+                        ruleId = rule.id,
+                        sourceFile = sourceFile.absolutePath
+                    )
                 }
 
                 ruleEntries.add(RuleEntry(rule.id, rule.name, ruleName, classFile, rule.targetPackages, rule.priority))
@@ -145,12 +171,23 @@ class RuleCompilationManager(private val context: Context) {
                 if (!compileSingleSource(sourceFile, ruleName, classOutputDir, runDir)) {
                     val errorLog = readCompileLog(runDir, ruleName)
                     log("Compilation failed for $ruleName:\n$errorLog")
-                    return fail(errorLog, ruleName)
+                    return fail(
+                        message = errorLog,
+                        ruleName = rule.name,
+                        ruleId = rule.id,
+                        sourceFile = sourceFile.absolutePath,
+                        line = parseEcjLine(errorLog)
+                    )
                 }
 
                 val classFile = findClassFile(classOutputDir, ruleName)
                 if (classFile == null) {
-                    return fail("Class file not found for $ruleName", ruleName)
+                    return fail(
+                        message = "Class file not found for $ruleName",
+                        ruleName = rule.name,
+                        ruleId = rule.id,
+                        sourceFile = sourceFile.absolutePath
+                    )
                 }
 
                 ruleEntries.add(RuleEntry(rule.id, rule.name, ruleName, classFile, rule.targetPackages, rule.priority))
@@ -290,7 +327,14 @@ class RuleCompilationManager(private val context: Context) {
         onProgress: ((String) -> Unit)? = null
     ): CompilationResult = synchronized(GLOBAL_COMPILE_LOCK) {
         when (val outcome = compileUnlocked(javaRules, normalRules, onProgress)) {
-            is CompileOutcome.Failure -> CompilationResult(false, outcome.message, outcome.ruleName)
+            is CompileOutcome.Failure -> CompilationResult(
+                success = false,
+                errorMessage = outcome.message,
+                errorRuleName = outcome.ruleName,
+                errorRuleId = outcome.ruleId,
+                errorSourceFile = outcome.sourceFile,
+                errorLine = outcome.line
+            )
             is CompileOutcome.Success -> publishUnlocked(outcome.artifact)
         }
     }
@@ -319,6 +363,17 @@ class RuleCompilationManager(private val context: Context) {
             .takeIf { it.exists() }
             ?.readText()
             ?: "Compilation failed for $ruleName"
+    }
+
+    private fun parseEcjLine(logText: String): Int? {
+        val patterns = listOf(
+            Regex("""\(at line (\d+)\)"""),
+            Regex(""".*\.java:(\d+):""")
+        )
+        for (pattern in patterns) {
+            pattern.find(logText)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
+        }
+        return null
     }
 
     private fun cleanupCompileRuns(runsDir: File) {
