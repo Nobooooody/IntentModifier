@@ -22,16 +22,19 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // CI release signing: enabled only when RELEASE_STORE_FILE is provided.
-            // Without it the release APK stays unsigned (app-release-unsigned.apk).
+            // CI release signing: use RELEASE_STORE_FILE when provided,
+            // otherwise fall back to the debug keystore so the release APK
+            // is always installable (replace with a real key for production).
             val storeFilePath = System.getenv("RELEASE_STORE_FILE")
-            if (!storeFilePath.isNullOrEmpty() && file(storeFilePath).exists()) {
-                signingConfig = signingConfigs.create("ciRelease") {
+            signingConfig = if (!storeFilePath.isNullOrEmpty() && file(storeFilePath).exists()) {
+                signingConfigs.create("ciRelease") {
                     storeFile = file(storeFilePath)
                     storePassword = System.getenv("RELEASE_STORE_PASSWORD")
                     keyAlias = System.getenv("RELEASE_KEY_ALIAS")
                     keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
                 }
+            } else {
+                signingConfigs.getByName("debug")
             }
         }
     }
