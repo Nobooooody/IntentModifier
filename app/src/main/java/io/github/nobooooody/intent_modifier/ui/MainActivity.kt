@@ -70,6 +70,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -87,6 +88,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.draw.alpha
 import io.github.nobooooody.intent_modifier.R
 import io.github.nobooooody.intent_modifier.data.HOOK_INSTRUMENTATION
@@ -323,6 +327,17 @@ private fun RulesScreen() {
         normalRules = repo.getNormalRules()
         selectedDisplayIndices.clear()
         isSelectionMode = false
+    }
+
+    // 回到前台时重读 prefs：后台一致性重编译、其他入口写入或进程被回收重建后，
+    // remember 里的旧快照可能已过时（表现为列表空/旧数据），ON_RESUME 兜底刷新。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val coordinator = remember(ctx) { RuleMutationCoordinator.get(ctx) }
