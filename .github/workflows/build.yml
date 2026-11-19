@@ -7,6 +7,12 @@ on:
   pull_request:
     branches: [ main, java_engine ]
   workflow_dispatch:
+    inputs:
+      app_id:
+        description: '自定义包名 applicationId（留空使用默认 io.github.nobooooody.intent_modifier）'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -36,8 +42,22 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Resolve IM_APP_ID
+        env:
+          APP_ID_INPUT: ${{ inputs.app_id }}
+        run: |
+          if [ -n "$APP_ID_INPUT" ]; then
+            if ! echo "$APP_ID_INPUT" | grep -qE '^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$'; then
+              echo "::error::Invalid applicationId: $APP_ID_INPUT"
+              exit 1
+            fi
+            echo "GRADLE_APP_ID_FLAG=-PIM_APP_ID=$APP_ID_INPUT" >> "$GITHUB_ENV"
+          else
+            echo "GRADLE_APP_ID_FLAG=" >> "$GITHUB_ENV"
+          fi
+
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon $GRADLE_APP_ID_FLAG
 
       - name: Decode release keystore
         env:
@@ -53,7 +73,7 @@ jobs:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon $GRADLE_APP_ID_FLAG
 
       - name: Collect and rename APKs
         run: |

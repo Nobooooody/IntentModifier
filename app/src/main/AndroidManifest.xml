@@ -53,7 +53,7 @@
 
         <provider
             android:name=".ui.provider.RuleProvider"
-            android:authorities="io.github.nobooooody.intent_modifier.provider"
+            android:authorities="${providerAuthority}"
             android:exported="true"
             android:enabled="true" />
 

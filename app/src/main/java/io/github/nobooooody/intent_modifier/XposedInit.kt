@@ -17,6 +17,7 @@ import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.XSharedPreferences
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import io.github.nobooooody.intent_modifier.BuildConfig
 import io.github.nobooooody.intent_modifier.data.DexGroupManifest
 import io.github.nobooooody.intent_modifier.data.RuleManifest
 import io.github.nobooooody.intent_modifier.ui.provider.RuleProvider
@@ -134,7 +135,7 @@ class XposedInit : IXposedHookLoadPackage {
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         val currentPkg = lpparam.packageName
 
-        if (currentPkg == "io.github.nobooooody.intent_modifier") {
+        if (currentPkg == BuildConfig.MODULE_PACKAGE) {
             return
         }
 
@@ -1373,7 +1374,7 @@ class XposedInit : IXposedHookLoadPackage {
  * 含 Base64 DEX 的 XML；reload 按 3 秒窗口节流。
  */
 private object ModulePrefsReader {
-    private const val MODULE_PACKAGE = "io.github.nobooooody.intent_modifier"
+    private const val MODULE_PACKAGE = BuildConfig.MODULE_PACKAGE
     private const val PREFS_NAME = "intent_modifier_config"
     private const val RELOAD_INTERVAL_MS = 3_000L
 

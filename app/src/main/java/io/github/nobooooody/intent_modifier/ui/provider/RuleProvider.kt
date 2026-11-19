@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Binder
 import android.util.Base64
 import android.util.Log
+import io.github.nobooooody.intent_modifier.BuildConfig
 import io.github.nobooooody.intent_modifier.data.ModifierRepository
 import java.security.MessageDigest
 
@@ -17,7 +18,7 @@ class RuleProvider : ContentProvider() {
 
     companion object {
         private const val TAG = "RuleProvider"
-        const val AUTHORITY = "io.github.nobooooody.intent_modifier.provider"
+        const val AUTHORITY = BuildConfig.PROVIDER_AUTHORITY
 
         const val PATH_VERSION = "version"
         const val PATH_DEX = "dex"

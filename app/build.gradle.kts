@@ -8,11 +8,22 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "io.github.nobooooody.intent_modifier"
+        // Custom package name: override with -PIM_APP_ID=com.example.app
+        // (same convention as InstallerX-Revived / fcitx5-android's APP_ID,
+        // but project-scoped so a global ~/.gradle APP_ID for other projects
+        // cannot leak into this build).
+        applicationId = project.findProperty("IM_APP_ID") as String?
+            ?: "io.github.nobooooody.intent_modifier"
         minSdk = 26
         targetSdk = 36
         versionCode = 2
         versionName = "2.0"
+
+        // Provider authority follows the applicationId so custom builds
+        // can coexist with the official package.
+        manifestPlaceholders["providerAuthority"] = "$applicationId.provider"
+        buildConfigField("String", "MODULE_PACKAGE", "\"$applicationId\"")
+        buildConfigField("String", "PROVIDER_AUTHORITY", "\"$applicationId.provider\"")
     }
 
     buildTypes {
